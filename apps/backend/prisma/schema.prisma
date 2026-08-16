@@ -1,0 +1,622 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AgentStatus {
+  DRAFT      @map("draft")
+  GENERATING @map("generating")
+  READY      @map("ready")
+  SHADOW     @map("shadow")
+  CERTIFYING @map("certifying")
+  CERTIFIED  @map("certified")
+  REJECTED   @map("rejected")
+  ACTIVE     @map("active")
+  FAILED     @map("failed")
+  RETIRED    @map("retired")
+}
+
+enum AgentDerivationMode {
+  NEW       @map("new")
+  CONFIGURE @map("configure")
+  EXTEND    @map("extend")
+}
+
+enum CertificationHealth {
+  NOT_CERTIFIED @map("not_certified")
+  CURRENT       @map("current")
+  DEGRADED      @map("degraded")
+}
+
+enum RetirementReason {
+  EXPLICIT                @map("explicit")
+  SUPERSEDED_BY_PROMOTION @map("superseded_by_promotion")
+}
+
+enum CertificationRunState {
+  QUEUED  @map("queued")
+  RUNNING @map("running")
+  PASSED  @map("passed")
+  FAILED  @map("failed")
+  ERROR   @map("error")
+}
+
+enum CertificationRunKind {
+  CHALLENGER               @map("challenger")
+  CHAMPION_RECERTIFICATION @map("champion_recertification")
+}
+
+enum CertificationVerdict {
+  PASSED @map("passed")
+  FAILED @map("failed")
+  ERROR  @map("error")
+}
+
+enum CertificationGateConfigState {
+  ACTIVE     @map("active")
+  SUPERSEDED @map("superseded")
+}
+
+enum CertificationGateKey {
+  FACTUAL_ACCURACY     @map("factual_accuracy")
+  CITATION_COVERAGE    @map("citation_coverage")
+  UNAUTHORIZED_ACTIONS @map("unauthorized_actions")
+  CHAMPION_REGRESSION  @map("champion_regression")
+}
+
+enum CertificationGateOperator {
+  GTE @map("gte")
+  LTE @map("lte")
+  EQ  @map("eq")
+}
+
+enum CertificationGateResultStatus {
+  PASSED         @map("passed")
+  FAILED         @map("failed")
+  NOT_APPLICABLE @map("not_applicable")
+}
+
+enum ExecutorKind {
+  MANIFEST_FIXTURE @map("manifest_fixture")
+}
+
+enum EvaluationMode {
+  CORPUS_COVERAGE    @map("corpus_coverage")
+  SEMANTIC_EXECUTION @map("semantic_execution")
+}
+
+enum CertificationResultsAvailability {
+  FULL               @map("full")
+  SUMMARY_ONLY       @map("summary_only")
+  PROMOTION_EVIDENCE @map("promotion_evidence")
+}
+
+enum EvalCaseTag {
+  GOLDEN      @map("golden")
+  REPLAY      @map("replay")
+  FALSE_ALARM @map("false_alarm")
+  REGRESSION  @map("regression")
+}
+
+enum EvalCaseSource {
+  SEED     @map("seed")
+  OVERRIDE @map("override")
+  INCIDENT @map("incident")
+}
+
+enum PromotionDecisionType {
+  PROMOTED @map("promoted")
+  DECLINED @map("declined")
+}
+
+enum SpecSection {
+  OUTCOMES   @map("outcomes")
+  KNOWLEDGE  @map("knowledge")
+  GUARDRAILS @map("guardrails")
+  OUTPUTS    @map("outputs")
+}
+
+enum SectionConfirmationKind {
+  GUIDED      @map("guided")
+  INTERPRETED @map("interpreted")
+  INHERITED   @map("inherited")
+}
+
+enum SpecStatus {
+  DRAFT      @map("draft")
+  READY      @map("ready")
+  GENERATING @map("generating")
+  GENERATED  @map("generated")
+}
+
+enum GenerationJobState {
+  QUEUED    @map("queued")
+  RUNNING   @map("running")
+  SUCCEEDED @map("succeeded")
+  FAILED    @map("failed")
+}
+
+enum SourceRole {
+  KNOWLEDGE  @map("knowledge")
+  SIGNAL     @map("signal")
+  TELEMETRY  @map("telemetry")
+  EVALUATION @map("evaluation")
+}
+
+enum SourceProvider {
+  BIGQUERY     @map("bigquery")
+  CONFLUENCE   @map("confluence")
+  JIRA         @map("jira")
+  EMAIL        @map("email")
+  SLACK        @map("slack")
+  INTERSTELLAR @map("interstellar")
+  FIXTURE      @map("fixture")
+}
+
+enum SourceAuthority {
+  SYSTEM_OF_RECORD @map("system_of_record")
+  CURATED          @map("curated")
+  DERIVED          @map("derived")
+  TRANSIENT        @map("transient")
+  UNTRUSTED        @map("untrusted")
+}
+
+enum GuardrailType {
+  PROHIBITED_ACTION    @map("prohibited_action")
+  APPROVAL_REQUIREMENT @map("approval_requirement")
+  FAIL_CLOSED          @map("fail_closed")
+  RESPONSE_REQUIREMENT @map("response_requirement")
+}
+
+enum EvaluationStatus {
+  NOT_RUN @map("not_run")
+  PASSED  @map("passed")
+  FAILED  @map("failed")
+}
+
+model AgentFamily {
+  id              String   @id @default(uuid()) @db.Uuid
+  slug            String   @unique @db.VarChar(160)
+  name            String   @db.VarChar(120)
+  department      String   @db.VarChar(120)
+  owner           String   @db.VarChar(160)
+  championAgentId String?  @unique @db.Uuid
+  createdBy       String   @db.VarChar(200)
+  updatedBy       String   @db.VarChar(200)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  championAgent      Agent?              @relation("FamilyChampion", fields: [championAgentId], references: [id], onDelete: SetNull)
+  versions           Agent[]             @relation("FamilyVersions")
+  certificationRuns  CertificationRun[]
+  promotionDecisions PromotionDecision[]
+
+  @@index([department])
+}
+
+model Agent {
+  id                   String              @id @default(uuid()) @db.Uuid
+  familyId             String              @db.Uuid
+  slug                 String              @unique @db.VarChar(160)
+  versionNumber        Int
+  predecessorAgentId   String?             @db.Uuid
+  derivationMode       AgentDerivationMode @default(NEW)
+  name                 String              @db.VarChar(120)
+  department           String              @db.VarChar(120)
+  purpose              String              @db.Text
+  owner                String              @db.VarChar(160)
+  status               AgentStatus         @default(DRAFT)
+  capabilities         Json                @default("[]")
+  manifest             Json?
+  manifestHash         String?             @db.VarChar(128)
+  certificationHealth  CertificationHealth @default(NOT_CERTIFIED)
+  degradedAt           DateTime?           @db.Timestamptz(3)
+  degradationReason    String?             @db.Text
+  activationDecisionId String?             @unique @db.Uuid
+  legacyActivation     Boolean             @default(false)
+  retirementReason     RetirementReason?
+  retiredAt            DateTime?           @db.Timestamptz(3)
+  retiredBy            String?             @db.VarChar(200)
+  retirementRationale  String?             @db.Text
+  successorAgentId     String?             @db.Uuid
+  createdBy            String              @db.VarChar(200)
+  updatedBy            String              @db.VarChar(200)
+  createdAt            DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime            @updatedAt @db.Timestamptz(3)
+
+  family                 AgentFamily            @relation("FamilyVersions", fields: [familyId], references: [id], onDelete: Restrict)
+  championForFamily      AgentFamily?           @relation("FamilyChampion")
+  predecessorAgent       Agent?                 @relation("AgentPredecessor", fields: [predecessorAgentId], references: [id], onDelete: SetNull)
+  successorVersions      Agent[]                @relation("AgentPredecessor")
+  successorAgent         Agent?                 @relation("RetirementSuccessor", fields: [successorAgentId], references: [id], onDelete: SetNull)
+  supersededVersions     Agent[]                @relation("RetirementSuccessor")
+  activationDecision     PromotionDecision?     @relation("ActivationDecision", fields: [activationDecisionId], references: [id], onDelete: SetNull)
+  spec                   AgentSpec?             @relation("GeneratedAgent")
+  basedSpecs             AgentSpec[]            @relation("BaseAgent")
+  generationJobs         GenerationJob[]
+  guardrails             Guardrail[]
+  evaluationTests        EvaluationTest[]
+  knowledgeSources       AgentKnowledgeSource[]
+  certificationRuns      CertificationRun[]     @relation("CertificationSubject")
+  championComparisonRuns CertificationRun[]     @relation("CertificationChampion")
+  promotionDecisions     PromotionDecision[]    @relation("PromotedVersion")
+  priorChampionDecisions PromotionDecision[]    @relation("PriorChampionVersion")
+
+  @@unique([familyId, versionNumber])
+  @@index([familyId, status])
+  @@index([status])
+  @@index([department])
+  @@index([predecessorAgentId])
+}
+
+model AgentSpec {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  agentId             String                    @unique @db.Uuid
+  baseAgentId         String?                   @db.Uuid
+  derivationMode      AgentDerivationMode       @default(NEW)
+  interpretationId    String?                   @unique @db.Uuid
+  unconfirmedPrefill  Json?
+  status              SpecStatus                @default(DRAFT)
+  revision            Int                       @default(1)
+  outcomes            Json?
+  knowledge           Json?
+  guardrails          Json?
+  outputs             Json?
+  createdBy           String                    @db.VarChar(200)
+  updatedBy           String                    @db.VarChar(200)
+  createdAt           DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime                  @updatedAt @db.Timestamptz(3)
+  agent               Agent                     @relation("GeneratedAgent", fields: [agentId], references: [id], onDelete: Cascade)
+  baseAgent           Agent?                    @relation("BaseAgent", fields: [baseAgentId], references: [id], onDelete: SetNull)
+  interpretation      SpecInterpretation?       @relation("AttachedInterpretation", fields: [interpretationId], references: [id], onDelete: SetNull)
+  generationJobs      GenerationJob[]
+  confirmations       SpecSectionConfirmation[] @relation("ConfirmedSpec")
+  sourceConfirmations SpecSectionConfirmation[] @relation("ConfirmationSourceSpec")
+
+  @@index([status])
+  @@index([baseAgentId])
+  @@index([derivationMode])
+}
+
+model KnowledgeSource {
+  id               String                 @id @db.VarChar(100)
+  role             SourceRole
+  provider         SourceProvider
+  displayName      String                 @db.VarChar(160)
+  uri              String                 @db.VarChar(500)
+  authority        SourceAuthority
+  owner            String                 @db.VarChar(160)
+  region           String?                @db.VarChar(80)
+  lastRefreshed    DateTime?              @db.Timestamptz(3)
+  citationRequired Boolean                @default(true)
+  readOnly         Boolean                @default(true)
+  synthetic        Boolean                @default(false)
+  metadata         Json                   @default("{}")
+  createdAt        DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @db.Timestamptz(3)
+  agents           AgentKnowledgeSource[]
+
+  @@index([role])
+  @@index([provider])
+}
+
+model AgentKnowledgeSource {
+  agentId   String          @db.Uuid
+  sourceId  String          @db.VarChar(100)
+  purpose   String          @db.VarChar(500)
+  citations Boolean
+  agent     Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  source    KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@id([agentId, sourceId])
+  @@index([sourceId])
+}
+
+model Guardrail {
+  id          String        @id @default(uuid()) @db.Uuid
+  agentId     String        @db.Uuid
+  description String        @db.Text
+  type        GuardrailType
+  parameters  Json          @default("{}")
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  agent       Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, type])
+}
+
+model EvaluationTest {
+  id               String           @id @default(uuid()) @db.Uuid
+  agentId          String           @db.Uuid
+  name             String           @db.VarChar(160)
+  testCase         Json
+  expectedResult   Json
+  actualResult     Json?
+  status           EvaluationStatus @default(NOT_RUN)
+  generatorVersion String           @db.VarChar(80)
+  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
+  agent            Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, name, generatorVersion])
+  @@index([agentId, status])
+}
+
+model GenerationJob {
+  id               String             @id @default(uuid()) @db.Uuid
+  agentId          String             @db.Uuid
+  specId           String             @db.Uuid
+  state            GenerationJobState @default(QUEUED)
+  progress         Int                @default(0)
+  message          String             @default("Queued") @db.VarChar(500)
+  specRevision     Int
+  generatorVersion String             @db.VarChar(80)
+  specSnapshot     Json
+  manifest         Json?
+  error            Json?
+  startedAt        DateTime?          @db.Timestamptz(3)
+  finishedAt       DateTime?          @db.Timestamptz(3)
+  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
+  agent            Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  spec             AgentSpec          @relation(fields: [specId], references: [id], onDelete: Cascade)
+
+  @@index([state, createdAt])
+  @@index([specId])
+}
+
+model CertificationGateConfig {
+  id                      String                       @id @default(uuid()) @db.Uuid
+  version                 Int                          @unique
+  state                   CertificationGateConfigState @default(ACTIVE)
+  promotionFreshnessHours Int                          @default(24)
+  gates                   Json
+  compatibleExecutorKinds ExecutorKind[]               @default([MANIFEST_FIXTURE])
+  publishedBy             String                       @db.VarChar(200)
+  rationale               String                       @db.Text
+  activatedAt             DateTime                     @default(now()) @db.Timestamptz(3)
+  supersededAt            DateTime?                    @db.Timestamptz(3)
+  createdAt               DateTime                     @default(now()) @db.Timestamptz(3)
+  certificationRuns       CertificationRun[]
+
+  @@index([state, version])
+}
+
+model EvalCase {
+  id                    String           @id @default(uuid()) @db.Uuid
+  key                   String           @unique @db.VarChar(160)
+  name                  String           @db.VarChar(200)
+  input                 Json
+  expectedOutput        Json
+  expectedCitations     Json             @default("[]")
+  tags                  EvalCaseTag[]
+  source                EvalCaseSource
+  active                Boolean          @default(true)
+  provenance            Json             @default("{}")
+  createdBy             String           @db.VarChar(200)
+  updatedBy             String           @db.VarChar(200)
+  deactivatedAt         DateTime?        @db.Timestamptz(3)
+  deactivatedBy         String?          @db.VarChar(200)
+  deactivationRationale String?          @db.Text
+  createdAt             DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime         @updatedAt @db.Timestamptz(3)
+  corpusMemberships     EvalCorpusCase[]
+  results               EvalCaseResult[]
+
+  @@index([active, source])
+  @@index([tags], type: Gin)
+}
+
+model EvalCorpusVersion {
+  id                String             @id @default(uuid()) @db.Uuid
+  version           Int                @unique
+  contentHash       String             @unique @db.VarChar(128)
+  publishedBy       String             @db.VarChar(200)
+  rationale         String             @db.Text
+  publishedAt       DateTime           @default(now()) @db.Timestamptz(3)
+  memberships       EvalCorpusCase[]
+  certificationRuns CertificationRun[]
+}
+
+/// Immutable membership and case snapshot for a published corpus version.
+model EvalCorpusCase {
+  corpusVersionId String            @db.Uuid
+  caseId          String            @db.Uuid
+  ordinal         Int
+  caseSnapshot    Json
+  caseHash        String            @db.VarChar(128)
+  corpusVersion   EvalCorpusVersion @relation(fields: [corpusVersionId], references: [id], onDelete: Restrict)
+  evalCase        EvalCase          @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  @@id([corpusVersionId, caseId])
+  @@unique([corpusVersionId, ordinal])
+  @@index([caseId])
+}
+
+model CertificationRun {
+  id                       String                           @id @default(uuid()) @db.Uuid
+  agentVersionId           String                           @db.Uuid
+  familyId                 String                           @db.Uuid
+  championVersionId        String?                          @db.Uuid
+  kind                     CertificationRunKind
+  originStatus             AgentStatus
+  state                    CertificationRunState            @default(QUEUED)
+  corpusVersionId          String                           @db.Uuid
+  corpusVersion            Int
+  gateConfigId             String                           @db.Uuid
+  gateConfigVersion        Int
+  corpusSnapshot           Json
+  gateConfigSnapshot       Json
+  subjectSnapshot          Json
+  championSnapshot         Json?
+  subjectManifestSnapshot  Json
+  championManifestSnapshot Json?
+  subjectManifestHash      String                           @db.VarChar(128)
+  championManifestHash     String?                          @db.VarChar(128)
+  specRevision             Int
+  generatorVersion         String                           @db.VarChar(80)
+  executorKind             ExecutorKind                     @default(MANIFEST_FIXTURE)
+  executorVersion          String                           @db.VarChar(80)
+  evaluationMode           EvaluationMode                   @default(CORPUS_COVERAGE)
+  progress                 Int                              @default(0)
+  message                  String                           @default("Queued") @db.VarChar(500)
+  totalCaseCount           Int                              @default(0)
+  passedCaseCount          Int                              @default(0)
+  failedCaseCount          Int                              @default(0)
+  verdict                  CertificationVerdict?
+  error                    Json?
+  requestedBy              String                           @db.VarChar(200)
+  startedBy                String?                          @db.VarChar(200)
+  requestedAt              DateTime                         @default(now()) @db.Timestamptz(3)
+  startedAt                DateTime?                        @db.Timestamptz(3)
+  finishedAt               DateTime?                        @db.Timestamptz(3)
+  promotionExpiresAt       DateTime?                        @db.Timestamptz(3)
+  nightlyScheduleKey       String?                          @unique @db.VarChar(160)
+  isPromotionEvidence      Boolean                          @default(false)
+  resultsAvailability      CertificationResultsAvailability @default(FULL)
+  caseResultsPrunedAt      DateTime?                        @db.Timestamptz(3)
+  subjectAgent             Agent                            @relation("CertificationSubject", fields: [agentVersionId], references: [id], onDelete: Restrict)
+  family                   AgentFamily                      @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  championAgent            Agent?                           @relation("CertificationChampion", fields: [championVersionId], references: [id], onDelete: Restrict)
+  corpus                   EvalCorpusVersion                @relation(fields: [corpusVersionId], references: [id], onDelete: Restrict)
+  gateConfig               CertificationGateConfig          @relation(fields: [gateConfigId], references: [id], onDelete: Restrict)
+  gateResults              CertificationGateResult[]
+  caseResults              EvalCaseResult[]
+  promotionDecision        PromotionDecision?
+
+  @@index([agentVersionId, requestedAt])
+  @@index([familyId, requestedAt])
+  @@index([state, requestedAt])
+  @@index([corpusVersionId])
+  @@index([gateConfigId])
+}
+
+model CertificationGateResult {
+  id              String                        @id @default(uuid()) @db.Uuid
+  runId           String                        @db.Uuid
+  gate            CertificationGateKey
+  operator        CertificationGateOperator
+  threshold       Float
+  championScore   Float?
+  challengerScore Float?
+  measuredValue   Float?
+  status          CertificationGateResultStatus
+  details         Json                          @default("{}")
+  createdAt       DateTime                      @default(now()) @db.Timestamptz(3)
+  run             CertificationRun              @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, gate])
+  @@index([runId, status])
+}
+
+model EvalCaseResult {
+  id                  String           @id @default(uuid()) @db.Uuid
+  runId               String           @db.Uuid
+  caseId              String           @db.Uuid
+  caseKey             String           @db.VarChar(160)
+  caseName            String           @db.VarChar(200)
+  tags                EvalCaseTag[]
+  input               Json
+  expectedOutput      Json
+  expectedCitations   Json             @default("[]")
+  championOutput      Json?
+  challengerOutput    Json
+  championCitations   Json             @default("[]")
+  challengerCitations Json             @default("[]")
+  championActions     Json             @default("[]")
+  challengerActions   Json             @default("[]")
+  scoreBreakdown      Json
+  diff                Json
+  passed              Boolean
+  createdAt           DateTime         @default(now()) @db.Timestamptz(3)
+  run                 CertificationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  evalCase            EvalCase         @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  @@unique([runId, caseId])
+  @@index([runId, passed, caseKey])
+  @@index([caseId])
+}
+
+/// Immutable human decision linked to its audit event and evidence run.
+model PromotionDecision {
+  id                     String                @id @default(uuid()) @db.Uuid
+  runId                  String                @unique @db.Uuid
+  familyId               String                @db.Uuid
+  agentVersionId         String                @db.Uuid
+  priorChampionVersionId String?               @db.Uuid
+  decision               PromotionDecisionType
+  decidedBy              String                @db.VarChar(200)
+  rationale              String                @db.Text
+  auditEventId           String                @unique @db.Uuid
+  decidedAt              DateTime              @default(now()) @db.Timestamptz(3)
+  run                    CertificationRun      @relation(fields: [runId], references: [id], onDelete: Restrict)
+  family                 AgentFamily           @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  agentVersion           Agent                 @relation("PromotedVersion", fields: [agentVersionId], references: [id], onDelete: Restrict)
+  priorChampionVersion   Agent?                @relation("PriorChampionVersion", fields: [priorChampionVersionId], references: [id], onDelete: Restrict)
+  activatedAgent         Agent?                @relation("ActivationDecision")
+  auditEvent             AuditEvent            @relation("PromotionAuditEvent", fields: [auditEventId], references: [id], onDelete: Restrict)
+
+  @@index([familyId, decidedAt])
+  @@index([agentVersionId])
+}
+
+model SpecInterpretation {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  parentInterpretationId String?                   @db.Uuid
+  prompt                 String                    @db.Text
+  promptHash             String                    @db.VarChar(128)
+  result                 Json
+  createdBy              String                    @db.VarChar(200)
+  expiresAt              DateTime                  @db.Timestamptz(3)
+  createdAt              DateTime                  @default(now()) @db.Timestamptz(3)
+  parentInterpretation   SpecInterpretation?       @relation("InterpretationTree", fields: [parentInterpretationId], references: [id], onDelete: Restrict)
+  childInterpretations   SpecInterpretation[]      @relation("InterpretationTree")
+  attachedSpec           AgentSpec?                @relation("AttachedInterpretation")
+  confirmations          SpecSectionConfirmation[]
+
+  @@index([parentInterpretationId])
+  @@index([expiresAt])
+  @@index([promptHash])
+}
+
+/// Append-only record proving which human confirmed each canonical spec section.
+model SpecSectionConfirmation {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  specId             String                  @db.Uuid
+  interpretationId   String?                 @db.Uuid
+  section            SpecSection
+  specRevision       Int
+  kind               SectionConfirmationKind
+  sourceSpecId       String?                 @db.Uuid
+  sourceSpecRevision Int?
+  resolutions        Json                    @default("[]")
+  actorId            String                  @db.VarChar(200)
+  createdAt          DateTime                @default(now()) @db.Timestamptz(3)
+  spec               AgentSpec               @relation("ConfirmedSpec", fields: [specId], references: [id], onDelete: Restrict)
+  interpretation     SpecInterpretation?     @relation(fields: [interpretationId], references: [id], onDelete: Restrict)
+  sourceSpec         AgentSpec?              @relation("ConfirmationSourceSpec", fields: [sourceSpecId], references: [id], onDelete: Restrict)
+
+  @@unique([specId, section, specRevision])
+  @@index([interpretationId])
+  @@index([sourceSpecId])
+}
+
+/// Append-only governance record. Database triggers reject UPDATE and DELETE operations.
+model AuditEvent {
+  id                String             @id @default(uuid()) @db.Uuid
+  actorId           String             @db.VarChar(200)
+  requestId         String?            @db.VarChar(200)
+  action            String             @db.VarChar(120)
+  entityType        String             @db.VarChar(80)
+  entityId          String             @db.VarChar(200)
+  details           Json               @default("{}")
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
+  promotionDecision PromotionDecision? @relation("PromotionAuditEvent")
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+}

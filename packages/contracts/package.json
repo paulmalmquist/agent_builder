@@ -1,0 +1,27 @@
+{
+  "name": "@agent-builder/contracts",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./openapi": {
+      "types": "./dist/openapi.d.ts",
+      "import": "./dist/openapi.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "clean": "tsc -b --clean"
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "7.3.0",
+    "zod": "3.24.2"
+  }
+}
