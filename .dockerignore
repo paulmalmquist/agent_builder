@@ -3,7 +3,13 @@ node_modules
 **/dist
 **/coverage
 .git
+.local
+.runtime
+.claude
 .env
 .env.*
 !.env.example
 npm-debug.log*
+playwright-report
+test-results
+**/*.tsbuildinfo

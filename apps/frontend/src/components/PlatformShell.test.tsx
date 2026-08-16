@@ -5,6 +5,25 @@ import { PlatformShell } from './PlatformShell';
 import { renderWithClient } from '../test/render';
 
 describe('platform search', () => {
+  it('uses Paul OS identity and exposes the five consolidated surfaces', () => {
+    renderWithClient(
+      <Routes>
+        <Route element={<PlatformShell />} path="/">
+          <Route index element={<div>Builder route</div>} />
+        </Route>
+      </Routes>,
+    );
+
+    expect(screen.getByText('PAUL OS')).toBeInTheDocument();
+    const navigation = screen.getByRole('navigation', { name: 'Paul OS' });
+    expect(within(navigation).getAllByRole('link')).toHaveLength(5);
+    expect(within(navigation).getByRole('link', { name: /BUILD/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByText('GOVERNED AGENT PLATFORM')).toBeInTheDocument();
+  });
+
   it('supports the command shortcut, debounced results, keyboard selection, and focus return', async () => {
     const user = userEvent.setup();
     renderWithClient(

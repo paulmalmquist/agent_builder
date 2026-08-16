@@ -1,0 +1,36 @@
+apiVersion: paul-os/v1
+kind: EvaluationSuite
+metadata:
+  id: 90000000-0000-4000-8000-000000000001
+  slug: daily-brief-contract
+  version: 1.0.0
+  owner: local-user
+  purpose: Verify daily-brief schema conformance, citations, authority, and bounded output.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: 20000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  subject: daily-brief@1.0.0
+  executorKind: deterministic_contract
+  evaluationMode: contract_validation
+  corpusVersion: 1
+  cases:
+    - key: two-overlapping-items
+      fixture: synthetic
+      assertions:
+        - output_schema_valid
+        - schedule_risk_present
+        - citations_resolve_to_supplied_calendar_items
+        - no_attempted_actions
+  gates:
+    schemaConformance: 1.0
+    citationCoverage: 1.0
+    unauthorizedActions: 0
+    historical:
+      maxMeanCostUsd: 0.25
+      maxP95LatencyMs: 5000
+      minMeanOutcomeQuality: 0.85
+      minSampleSize: 3
+      historyWindow: 20

@@ -46,6 +46,12 @@ import type {
 import type { z } from 'zod';
 import type { CertificationDispatcherApi } from '../certification/dispatcher.js';
 import type { MaintenanceSchedulerApi } from '../maintenance/scheduler.js';
+import type { ExecutionDispatcherApi } from '../execution/dispatcher.js';
+import type { ExecutionService } from './execution-service.js';
+import type { RegistryService } from './registry-service.js';
+import type { AutomationLearningService } from './automation-learning-service.js';
+import type { ReleaseGovernanceService } from './release-governance-service.js';
+import type { AutomationSchedulerApi } from '../automation/scheduler.js';
 
 export interface CatalogApi {
   list(query: AgentCatalogQuery): Promise<AgentCatalogResponse>;
@@ -157,4 +163,19 @@ export interface ServiceBundle {
   dispatcher: DispatcherApi;
   certificationDispatcher: CertificationDispatcherApi;
   maintenance: MaintenanceSchedulerApi;
+  automationScheduler: AutomationSchedulerApi;
+  platform?: PlatformServices;
+}
+
+export interface PlatformServices {
+  registry: RegistryService;
+  releaseGovernance: ReleaseGovernanceService;
+  execution: ExecutionService;
+  automationLearning: AutomationLearningService;
+  executionDispatcher: ExecutionDispatcherApi;
+  dispatchMode: 'in_process' | 'external';
+}
+
+export interface CompleteServiceBundle extends ServiceBundle {
+  platform: PlatformServices;
 }

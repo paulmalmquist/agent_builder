@@ -12,6 +12,19 @@ export const certificationRunId = '66666666-6666-4666-8666-666666666666';
 const corpusVersionId = '77777777-7777-4777-8777-777777777777';
 const gateConfigId = '88888888-8888-4888-8888-888888888888';
 export const interpretationId = '99999999-9999-4999-8999-999999999999';
+export const platformResourceId = '12121212-1212-4121-8121-121212121212';
+const platformFamilyId = '13131313-1313-4131-8131-131313131313';
+export const executionRunId = '14141414-1414-4141-8141-141414141414';
+export const authorityGrantId = '15151515-1515-4151-8151-151515151515';
+const releaseId = '16161616-1616-4161-8161-161616161616';
+const outcomeId = '17171717-1717-4171-8171-171717171717';
+const metricId = '18181818-1818-4181-8181-181818181818';
+export const automationScheduleId = '19191919-1919-4191-8191-191919191919';
+export const releaseEvaluationId = '20202020-2020-4202-8202-202020202020';
+const evaluationSuiteVersionId = '21212121-2121-4212-8212-212121212121';
+const observationId = '23232323-2323-4232-8232-232323232323';
+export const improvementCandidateId = '24242424-2424-4242-8242-242424242424';
+export const memoryCandidateId = '25252525-2525-4252-8252-252525252525';
 const now = '2026-07-31T14:00:00.000Z';
 type TestInterpretationConfirmation = InterpretationConfirmation;
 export let lastOutcomesConfirmation: TestInterpretationConfirmation | null = null;
@@ -63,11 +76,11 @@ const outputs = {
 };
 
 const source = {
-  id: 'relativity-mes-genealogy',
+  id: 'demo-build-genealogy',
   role: 'knowledge' as const,
   provider: 'bigquery' as const,
   displayName: 'Build genealogy',
-  uri: 'bigquery://agent-builder-demo/relativity_mes/gold_genealogy',
+  uri: 'fixture://paul-os/build-genealogy',
   authority: 'system_of_record' as const,
   owner: 'Manufacturing Data',
   region: 'US',
@@ -249,11 +262,342 @@ type SpecFixture = {
 };
 
 let specFixture: SpecFixture | null = null;
+let platformRunState:
+  | 'awaiting_approval'
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'paused_budget' = 'awaiting_approval';
+let grantState: 'active' | 'revoked' | 'exhausted' | 'expired' = 'active';
+let automationScheduleState: 'active' | 'paused' = 'active';
+let improvementCandidateState: 'proposed' | 'incubating' | 'rejected' = 'proposed';
+let memoryCandidateState: 'staged' | 'accepted' | 'rejected' = 'staged';
 
 export function resetFixtures() {
   specFixture = null;
   lastOutcomesConfirmation = null;
   lastKnowledgeConfirmation = null;
+  platformRunState = 'awaiting_approval';
+  grantState = 'active';
+  automationScheduleState = 'active';
+  improvementCandidateState = 'proposed';
+  memoryCandidateState = 'staged';
+}
+
+const platformResource = {
+  id: platformResourceId,
+  familyId: platformFamilyId,
+  kind: 'Skill' as const,
+  slug: 'daily-brief',
+  name: 'Daily Brief',
+  version: '1.0.0',
+  owner: 'Personal Operations',
+  purpose: 'Create a bounded daily briefing from synthetic priorities, tasks, and calendar items.',
+  lifecycle: 'candidate' as const,
+  digest: 'a'.repeat(64),
+  sourceCommit: 'test-commit',
+  provenance: { source: 'synthetic-test' },
+  dependencyPins: [],
+  definition: {
+    apiVersion: 'paul-os/v1' as const,
+    kind: 'Skill' as const,
+    metadata: {
+      id: platformFamilyId,
+      slug: 'daily-brief',
+      version: '1.0.0',
+      name: 'Daily Brief',
+      owner: 'Personal Operations',
+      purpose:
+        'Create a bounded daily briefing from synthetic priorities, tasks, and calendar items.',
+      lifecycle: 'candidate' as const,
+      provenance: { source: 'synthetic-test' },
+    },
+    dependencies: [],
+    spec: {},
+  },
+  revision: 1,
+  frozenAt: now,
+  createdAt: now,
+  updatedAt: now,
+};
+
+function platformRun() {
+  return {
+    id: executionRunId,
+    releaseId,
+    releaseDigest: 'b'.repeat(64),
+    contextDigest: 'd'.repeat(64),
+    contextProvenance: [
+      { source: 'core' as const, classification: 'public' as const, tokenContribution: 24 },
+    ],
+    contextClassification: 'public' as const,
+    contextEstimatedTokens: 24,
+    projectId: 'daily-operations',
+    authorityGrantId: platformRunState === 'awaiting_approval' ? null : authorityGrantId,
+    state: platformRunState,
+    input: { date: '2026-07-31' },
+    requiredToolScopes: ['read:calendar'],
+    providerKind: 'deterministic' as const,
+    developmentDraft: false,
+    providerVersion: '1.0.0',
+    model: 'daily-brief-fixture',
+    maxInputTokens: 8_000,
+    maxOutputTokens: 2_000,
+    maxEstimatedCostUsd: 0.25,
+    estimatedUpperCostUsd: 0.12,
+    actualCostUsd: null,
+    pricingVersion: 'test-pricing-v1',
+    approvalReasons:
+      platformRunState === 'awaiting_approval'
+        ? ['First run of this immutable release requires human approval.']
+        : [],
+    progress: platformRunState === 'awaiting_approval' ? 0 : 10,
+    message:
+      platformRunState === 'awaiting_approval'
+        ? 'Awaiting a bounded authority envelope'
+        : 'Execution queued',
+    attempts: 0,
+    error: null,
+    requestedBy: 'test-operator',
+    startedAt: null,
+    finishedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function authorityGrant() {
+  return {
+    id: authorityGrantId,
+    releaseId,
+    releaseDigest: 'b'.repeat(64),
+    contextDigest: 'd'.repeat(64),
+    projectId: 'daily-operations',
+    inputConstraints: {},
+    toolScopes: ['read:calendar'],
+    validFrom: now,
+    validUntil: '2027-08-01T14:00:00.000Z',
+    maxRuns: 10,
+    usedRuns: 1,
+    maxEstimatedCostPerRunUsd: 0.25,
+    totalCostBudgetUsd: 2.5,
+    spentCostUsd: 0.1,
+    reservedCostUsd: 0,
+    state: grantState,
+    actorId: 'test-operator',
+    rationale: 'Permit bounded synthetic daily briefing executions.',
+    revokedAt: grantState === 'revoked' ? now : null,
+    createdAt: now,
+  };
+}
+
+function automationSchedule() {
+  return {
+    id: automationScheduleId,
+    name: 'Daily operations briefing',
+    channelKey: 'daily-operations',
+    releaseId,
+    releaseDigest: 'b'.repeat(64),
+    projectId: 'daily-operations',
+    authorityGrantId,
+    timezone: 'America/New_York',
+    intervalSeconds: 86_400,
+    nextRunAt: '2026-08-01T11:00:00.000Z',
+    inputTemplate: { date: '{{date}}', priorities: [] },
+    inputConstraints: { date: { format: 'date' } },
+    catchUpPolicy: 'latest_only' as const,
+    maxCatchUpRuns: 1,
+    deduplicationWindowSeconds: 3_600,
+    retry: { maximumAttempts: 3, backoff: 'exponential' as const },
+    cost: {
+      maxInputTokens: 8_000,
+      maxOutputTokens: 2_000,
+      maxEstimatedCostUsd: 0.25,
+    },
+    outcomeExpectations: { unresolvedItems: 0 },
+    state: automationScheduleState,
+    lastScheduledAt: null,
+    createdBy: 'test-operator',
+    updatedBy: 'test-operator',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function productionChannel() {
+  return {
+    key: 'daily-operations',
+    projectId: 'daily-operations',
+    currentReleaseId: releaseId,
+    currentReleaseDigest: 'b'.repeat(64),
+    priorReleaseId: null,
+    promotedBy: 'test-approver',
+    promotedAt: now,
+    updatedAt: now,
+  };
+}
+
+function releaseEvaluation() {
+  const gateResults = [
+    {
+      key: 'schema_conformance' as const,
+      category: 'contract' as const,
+      operator: 'gte' as const,
+      threshold: 1,
+      measuredValue: 1,
+      status: 'passed' as const,
+      sampleSize: 1,
+      evidenceSource: 'manifest_declaration' as const,
+      detail: 'Measured from deterministic assertions.',
+    },
+    {
+      key: 'citation_coverage' as const,
+      category: 'contract' as const,
+      operator: 'gte' as const,
+      threshold: 1,
+      measuredValue: 1,
+      status: 'passed' as const,
+      sampleSize: 1,
+      evidenceSource: 'manifest_declaration' as const,
+      detail: 'Measured from deterministic assertions.',
+    },
+    {
+      key: 'unauthorized_actions' as const,
+      category: 'contract' as const,
+      operator: 'lte' as const,
+      threshold: 0,
+      measuredValue: 0,
+      status: 'passed' as const,
+      sampleSize: 1,
+      evidenceSource: 'manifest_declaration' as const,
+      detail: 'Measured from deterministic assertions.',
+    },
+    ...(['mean_cost_usd', 'p95_latency_ms', 'mean_outcome_quality'] as const).map((key) => ({
+      key,
+      category:
+        key === 'mean_cost_usd'
+          ? ('cost' as const)
+          : key === 'p95_latency_ms'
+            ? ('latency' as const)
+            : ('outcome_history' as const),
+      operator: key === 'mean_outcome_quality' ? ('gte' as const) : ('lte' as const),
+      threshold: key === 'mean_cost_usd' ? 0.25 : key === 'p95_latency_ms' ? 5_000 : 0.85,
+      measuredValue: null,
+      status: 'not_applicable' as const,
+      sampleSize: 0,
+      evidenceSource: 'execution_history' as const,
+      detail: 'Requires 3 production samples; 0 are available.',
+    })),
+  ];
+  return {
+    id: releaseEvaluationId,
+    releaseId,
+    releaseDigest: 'b'.repeat(64),
+    suiteVersionId: evaluationSuiteVersionId,
+    suiteDigest: 'c'.repeat(64),
+    executorKind: 'deterministic_contract' as const,
+    executorVersion: '1.0.0' as const,
+    evaluationMode: 'contract_validation' as const,
+    historySnapshotDigest: '0'.repeat(64),
+    corpusVersion: 1,
+    verdict: 'passed' as const,
+    results: [
+      {
+        caseKey: 'synthetic-daily-brief',
+        assertions: [
+          {
+            key: 'output_schema_valid' as const,
+            passed: true,
+            detail: 'The deterministic fixture satisfied the declared output contract.',
+          },
+          {
+            key: 'citations_resolve_to_supplied_calendar_items' as const,
+            passed: true,
+            detail: 'Every fixture citation resolved to a supplied synthetic calendar item.',
+          },
+        ],
+        passed: true,
+      },
+    ],
+    gateScores: {
+      schemaConformance: 1,
+      citationCoverage: 1,
+      unauthorizedActions: 0,
+    },
+    gateResults,
+    disclaimer:
+      'Deterministic contract evidence validates declared fixtures and release composition; it does not measure semantic model quality.' as const,
+    evidence: {
+      schemaVersion: 1 as const,
+      historySnapshotDigest: '0'.repeat(64),
+      historyRunIds: [],
+      suiteCaseCount: 1,
+      assertionCount: 2,
+      subjectPresent: true,
+      subjectDigest: 'a'.repeat(64),
+      gateResults,
+    },
+    requestedBy: 'test-operator',
+    createdAt: now,
+    finishedAt: now,
+  };
+}
+
+function observation() {
+  return {
+    id: observationId,
+    signalKey: 'briefing-unresolved-priority',
+    signalType: 'outcome_review',
+    summary: 'A synthetic briefing left one priority without a supporting schedule reference.',
+    evidence: { controlledReference: 'fixture://observation/priority' },
+    provenance: { source: 'synthetic-test' },
+    sourceRunId: executionRunId,
+    sourceOutcomeId: outcomeId,
+    observedBy: 'test-operator',
+    observedAt: now,
+  };
+}
+
+function improvementCandidate() {
+  return {
+    id: improvementCandidateId,
+    observationId,
+    title: 'Require a schedule reference for time-bound priorities',
+    proposedTarget: 'daily-brief@next',
+    proposedChange: 'Add a bounded validation rule before a time-bound priority is emitted.',
+    evidenceRefs: [`observation:${observationId}`],
+    state: improvementCandidateState,
+    createdBy: 'test-operator',
+    reviewedBy: improvementCandidateState === 'proposed' ? null : 'test-operator',
+    reviewRationale:
+      improvementCandidateState === 'proposed'
+        ? null
+        : 'Human review confirmed the candidate disposition and retained its lineage.',
+    createdAt: now,
+    reviewedAt: improvementCandidateState === 'proposed' ? null : now,
+  };
+}
+
+function memoryCandidate() {
+  return {
+    id: memoryCandidateId,
+    sourceRunId: executionRunId,
+    namespace: 'preferences.briefing',
+    proposedValue: { ordering: 'schedule-risk-first' },
+    acceptedValue: memoryCandidateState === 'accepted' ? { ordering: 'schedule-risk-first' } : null,
+    provenance: { source: 'synthetic-test' },
+    state: memoryCandidateState,
+    stagedBy: 'test-operator',
+    reviewedBy: memoryCandidateState === 'staged' ? null : 'test-operator',
+    reviewRationale:
+      memoryCandidateState === 'staged'
+        ? null
+        : 'Human review recorded a bounded durable-memory decision.',
+    stagedAt: now,
+    reviewedAt: memoryCandidateState === 'staged' ? null : now,
+  };
 }
 
 function requireSpec() {
@@ -262,6 +606,143 @@ function requireSpec() {
 }
 
 export const handlers = [
+  http.get('http://localhost/v1/resources', () => HttpResponse.json({ items: [platformResource] })),
+
+  http.get('http://localhost/v1/execution-runs', () =>
+    HttpResponse.json({ items: [platformRun()] }),
+  ),
+
+  http.post(`http://localhost/v1/execution-runs/${executionRunId}/approve`, async ({ request }) => {
+    const body = (await request.json()) as {
+      projectId?: unknown;
+      inputConstraints?: unknown;
+      toolScopes?: unknown;
+    };
+    if (
+      body.projectId !== 'daily-operations' ||
+      JSON.stringify(body.inputConstraints) !== JSON.stringify(platformRun().input) ||
+      JSON.stringify(body.toolScopes) !== JSON.stringify(['read:calendar'])
+    ) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'AUTHORITY_ENVELOPE_INSUFFICIENT',
+            message: 'Approval did not bind the server-derived project, input, and tool scopes.',
+            requestId: 'test-request',
+          },
+        },
+        { status: 422 },
+      );
+    }
+    platformRunState = 'queued';
+    return HttpResponse.json({ grant: authorityGrant(), run: platformRun() });
+  }),
+
+  http.post(`http://localhost/v1/execution-runs/${executionRunId}/cancel`, () => {
+    platformRunState = 'cancelled';
+    return HttpResponse.json(platformRun());
+  }),
+
+  http.get('http://localhost/v1/authority-grants', () =>
+    HttpResponse.json({ items: [authorityGrant()] }),
+  ),
+
+  http.post(`http://localhost/v1/authority-grants/${authorityGrantId}/revoke`, () => {
+    grantState = 'revoked';
+    return HttpResponse.json(authorityGrant());
+  }),
+
+  http.get('http://localhost/v1/automation-schedules', () =>
+    HttpResponse.json({ items: [automationSchedule()] }),
+  ),
+
+  http.post(
+    `http://localhost/v1/automation-schedules/${automationScheduleId}/state`,
+    async ({ request }) => {
+      const body = (await request.json()) as { state: 'active' | 'paused' };
+      automationScheduleState = body.state;
+      return HttpResponse.json(automationSchedule());
+    },
+  ),
+
+  http.get('http://localhost/v1/production-channels/daily-operations', () =>
+    HttpResponse.json(productionChannel()),
+  ),
+
+  http.get(`http://localhost/v1/release-evaluations/${releaseEvaluationId}`, () =>
+    HttpResponse.json(releaseEvaluation()),
+  ),
+
+  http.get('http://localhost/v1/observations', () => HttpResponse.json({ items: [observation()] })),
+
+  http.get('http://localhost/v1/improvement-candidates', () =>
+    HttpResponse.json({ items: [improvementCandidate()] }),
+  ),
+
+  http.post(
+    `http://localhost/v1/improvement-candidates/${improvementCandidateId}/review`,
+    async ({ request }) => {
+      const body = (await request.json()) as { decision: 'incubate' | 'reject' };
+      improvementCandidateState = body.decision === 'incubate' ? 'incubating' : 'rejected';
+      return HttpResponse.json(improvementCandidate());
+    },
+  ),
+
+  http.get('http://localhost/v1/memory-candidates', () =>
+    HttpResponse.json({ items: [memoryCandidate()] }),
+  ),
+
+  http.post(
+    `http://localhost/v1/memory-candidates/${memoryCandidateId}/review`,
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        decision: 'accept' | 'edit_accept' | 'reject';
+        editedValue?: Record<string, unknown>;
+      };
+      memoryCandidateState = body.decision === 'reject' ? 'rejected' : 'accepted';
+      return HttpResponse.json({
+        ...memoryCandidate(),
+        acceptedValue:
+          body.decision === 'edit_accept'
+            ? (body.editedValue ?? null)
+            : memoryCandidate().acceptedValue,
+      });
+    },
+  ),
+
+  http.get('http://localhost/v1/outcomes', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: outcomeId,
+          runId: executionRunId,
+          output: { topPriorities: ['Protect the focus block'] },
+          confidence: 0.92,
+          citations: ['calendar:item-1'],
+          unresolvedItems: [],
+          qualityScore: 1,
+          createdAt: now,
+        },
+      ],
+    }),
+  ),
+
+  http.get('http://localhost/v1/metrics', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: metricId,
+          runId: executionRunId,
+          name: 'provider_cost_usd',
+          value: 0.0032,
+          unit: 'usd',
+          metadata: { provider: 'deterministic' },
+          observedAt: now,
+        },
+      ],
+    }),
+  ),
+
   http.get('http://localhost/agents', ({ request }) => {
     const params = new URL(request.url).searchParams;
     const query = params.get('query') ?? '';

@@ -17,7 +17,18 @@ import type {
   SourceDescriptor,
   UpdateKnowledgeRequest,
 } from '@agent-builder/contracts';
-import { agentApi, ApiError, type CatalogFilters } from './client';
+import {
+  agentApi,
+  ApiError,
+  platformApi,
+  type ApproveRunInput,
+  type CatalogFilters,
+  type GrantFilters,
+  type ResourceFilters,
+  type ReviewImprovementInput,
+  type ReviewMemoryInput,
+  type RunFilters,
+} from './client';
 
 type InterpretationConfirmation = NonNullable<UpdateKnowledgeRequest['interpretationConfirmation']>;
 
@@ -33,6 +44,17 @@ export const queryKeys = {
   evaluation: (agentId: string | null) => ['evaluation', agentId] as const,
   certificationRun: (runId: string | null) => ['certification-run', runId] as const,
   certificationRuns: (agentId: string | null) => ['certification-runs', agentId] as const,
+  platformResources: (filters: ResourceFilters) => ['platform-resources', filters] as const,
+  executionRuns: (filters: RunFilters) => ['execution-runs', filters] as const,
+  authorityGrants: (filters: GrantFilters) => ['authority-grants', filters] as const,
+  outcomes: (runId?: string) => ['outcomes', runId ?? 'all'] as const,
+  metrics: (runId?: string) => ['metrics', runId ?? 'all'] as const,
+  automationSchedules: ['automation-schedules'] as const,
+  productionChannel: (channelKey: string) => ['production-channel', channelKey] as const,
+  releaseEvaluation: (evaluationId: string | null) => ['release-evaluation', evaluationId] as const,
+  observations: ['observations'] as const,
+  improvementCandidates: ['improvement-candidates'] as const,
+  memoryCandidates: ['memory-candidates'] as const,
 };
 
 export function useAgentSearch(query: string, enabled = true, retainPreviousData = true) {
@@ -41,6 +63,156 @@ export function useAgentSearch(query: string, enabled = true, retainPreviousData
     queryFn: () => agentApi.search(query),
     ...(retainPreviousData ? { placeholderData: keepPreviousData } : {}),
     enabled,
+  });
+}
+
+export function usePlatformResources(filters: ResourceFilters) {
+  return useQuery({
+    queryKey: queryKeys.platformResources(filters),
+    queryFn: () => platformApi.listResources(filters),
+  });
+}
+
+export function useExecutionRuns(filters: RunFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.executionRuns(filters),
+    queryFn: () => platformApi.listExecutionRuns(filters),
+    refetchInterval: (query) => {
+      const hasOpenWork = query.state.data?.items.some(
+        (run) =>
+          run.state === 'awaiting_approval' || run.state === 'queued' || run.state === 'running',
+      );
+      return hasOpenWork ? 2_000 : 10_000;
+    },
+  });
+}
+
+export function useAuthorityGrants(filters: GrantFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.authorityGrants(filters),
+    queryFn: () => platformApi.listAuthorityGrants(filters),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useOutcomes(runId?: string) {
+  return useQuery({
+    queryKey: queryKeys.outcomes(runId),
+    queryFn: () => platformApi.listOutcomes(runId),
+  });
+}
+
+export function useMetrics(runId?: string) {
+  return useQuery({
+    queryKey: queryKeys.metrics(runId),
+    queryFn: () => platformApi.listMetrics(runId),
+  });
+}
+
+export function useAutomationSchedules() {
+  return useQuery({
+    queryKey: queryKeys.automationSchedules,
+    queryFn: () => platformApi.listAutomationSchedules(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useUpdateAutomationScheduleState() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      scheduleId,
+      state,
+      rationale,
+    }: {
+      scheduleId: string;
+      state: 'active' | 'paused';
+      rationale: string;
+    }) => platformApi.updateAutomationScheduleState(scheduleId, { state, rationale }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.automationSchedules }),
+  });
+}
+
+export function useProductionChannel(channelKey: string) {
+  return useQuery({
+    queryKey: queryKeys.productionChannel(channelKey),
+    queryFn: () => platformApi.getProductionChannel(channelKey),
+  });
+}
+
+export function useReleaseEvaluation(evaluationId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.releaseEvaluation(evaluationId),
+    queryFn: () => platformApi.getReleaseEvaluation(evaluationId ?? ''),
+    enabled: evaluationId !== null,
+  });
+}
+
+export function useObservations() {
+  return useQuery({
+    queryKey: queryKeys.observations,
+    queryFn: () => platformApi.listObservations(),
+  });
+}
+
+export function useImprovementCandidates() {
+  return useQuery({
+    queryKey: queryKeys.improvementCandidates,
+    queryFn: () => platformApi.listImprovementCandidates(),
+  });
+}
+
+export function useReviewImprovementCandidate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ candidateId, value }: { candidateId: string; value: ReviewImprovementInput }) =>
+      platformApi.reviewImprovementCandidate(candidateId, value),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.improvementCandidates }),
+  });
+}
+
+export function useMemoryCandidates() {
+  return useQuery({
+    queryKey: queryKeys.memoryCandidates,
+    queryFn: () => platformApi.listMemoryCandidates(),
+  });
+}
+
+export function useReviewMemoryCandidate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ candidateId, value }: { candidateId: string; value: ReviewMemoryInput }) =>
+      platformApi.reviewMemoryCandidate(candidateId, value),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.memoryCandidates }),
+  });
+}
+
+export function useApproveExecutionRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, value }: { runId: string; value: ApproveRunInput }) =>
+      platformApi.approveExecutionRun(runId, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+        queryClient.invalidateQueries({ queryKey: ['authority-grants'] }),
+      ]),
+  });
+}
+
+export function useCancelExecutionRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => platformApi.cancelExecutionRun(runId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+  });
+}
+
+export function useRevokeAuthorityGrant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (grantId: string) => platformApi.revokeAuthorityGrant(grantId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['authority-grants'] }),
   });
 }
 

@@ -1,16 +1,22 @@
-# Relativity Agent Builder
+# Paul OS
 
-A reuse-first, governed agent specification scaffold. The approved React landing page is wired to
-an Express API, PostgreSQL catalog, deterministic first-party generator CLI, shadow deployment
-fixture, and evaluation results.
+A Git-authored, PostgreSQL-governed agent platform built around bounded authority, immutable
+releases, durable execution, and evidence. The current vertical slice compiles a synthetic daily
+brief skill, imports an immutable release, grants a scoped authority envelope, executes through a
+deterministic or explicitly enabled model provider, and records an outcome with usage and cost
+metrics.
 
 ## Workspace
 
 ```text
 apps/frontend       React, Vite, TanStack Query, MSW
 apps/backend        Express, Prisma, PostgreSQL, BigQuery connector boundary
+apps/worker         Durable PostgreSQL lease/heartbeat execution worker
 apps/generator-cli  Deterministic subprocess generator
 packages/contracts  Zod wire contracts, state machines, generated OpenAPI
+packages/runtime    Manifest compiler, profile validation, model-provider boundary
+
+00-core ... 12-agents  Git-authored manifests, guidance, fixtures, and contract tests
 ```
 
 Node 22 or newer and npm 10.9.2 are required. Dependencies are exact-pinned and installed from the
@@ -31,6 +37,10 @@ The frontend runs on `http://localhost:5173` and proxies `/agents`, `/health`, a
 `/openapi.json` to the backend on port 3000. The backend binds to `127.0.0.1` by default; set
 `HOST=0.0.0.0` only inside a container or behind an authenticated network boundary.
 
+Local `npm run dev` keeps execution in the backend process for a low-friction development loop.
+To exercise the durable worker locally, set `EXECUTION_DISPATCH_MODE=external`, build the worker,
+and run `npm run start:worker` in a second terminal.
+
 Run all checks:
 
 ```bash
@@ -38,7 +48,9 @@ npm run format:check
 npm run lint
 npm run typecheck
 npm test
+npm run test:e2e
 npm run build
+npm run check:sanitized
 ```
 
 ## Docker Compose
@@ -48,12 +60,32 @@ docker compose up --build
 ```
 
 The composed frontend is available on `http://localhost:8080`. PostgreSQL data is stored in a
-named volume, migrations use `prisma migrate deploy`, and seeds are idempotent.
+named volume, migrations use `prisma migrate deploy`, and seeds are idempotent. Compose runs the
+dedicated worker and configures the backend with `EXECUTION_DISPATCH_MODE=external`, so only the
+worker claims model-execution runs.
 Compose publishes its development ports on `127.0.0.1` only. The image runs seeds only when
 `SEED_ON_BOOT=true`; leave that flag unset outside disposable/demo environments. Compose performs
 migrations and optional demo seeding in its one-shot `migrate` service before starting the backend.
 
-## API flow
+## Paul OS vertical slice
+
+The canonical definition is `02-skills/daily-brief/manifest.yaml`. The runtime compiler parses
+restricted YAML, validates it with Zod, resolves exact dependencies, rejects cycles, serializes a
+canonical representation, and produces a deterministic digest. The `/v1` control plane imports the
+definition and creates immutable release bundles, authority grants, execution runs, approvals,
+outcomes, and metric samples.
+
+An authority grant binds an exact release digest, project, input constraints, tool scopes, validity
+window, run count, and cost ceilings. Revoked, expired, exhausted, or scope-mismatched grants fail
+closed. The deterministic provider is the default and is used in CI. Direct model access is opt-in,
+credential-gated, and rejected when `PROVIDER_POLICY=gateway_only`.
+
+The console preserves the matte-black and purple instrument design across five surfaces: Build,
+Registry, Runs & Approvals, Evidence, and Incubator. Existing builder, library, and certification
+routes remain available during the compatibility period described in
+`docs/adr/0009-legacy-api-sunset.md`.
+
+## Legacy Agent Builder flow
 
 1. Search with `GET /agents?query=...` and score candidates with `POST /agents/similarity`.
 2. Create a draft with `POST /agents/specs`.
@@ -116,9 +148,34 @@ interpretations, and compacts old non-promotion certification results. Configure
 idempotent maintenance service. Promotion-evidence runs and published corpus membership are never
 pruned.
 
-The application image starts only the backend process. For a managed deployment, run
+The independent automation clock calls the database-locked, idempotent schedule service once on
+boot and then every `AUTOMATION_SCHEDULER_INTERVAL_MS` (30 seconds by default), claiming at most
+`AUTOMATION_SCHEDULER_BATCH_SIZE` schedules per tick. Set `AUTOMATION_SCHEDULER_ENABLED=false` when
+an external scheduler owns this clock. Process-local ticks never overlap; PostgreSQL advisory locks,
+unique occurrence keys, and dispatch leases prevent duplicates across backend instances. Shutdown
+stops the clock and waits for an in-flight scheduling transaction before disconnecting.
+
+`PAUL_OS_PROFILE_PATH` resolves the gitignored private profile (default
+`.local/profile/profile.yaml`). The runtime loader validates it and exposes only `context`, a
+content digest, classification, timestamp, and token contribution—never secret references or the
+filesystem path. A daily-brief request assembles the fixed-precedence core and optional private
+profile layers, then persists only an immutable digest and sanitized source/classification/token
+summary. Idempotency and authority grants bind to that exact digest. Immediately before calling a
+model, the backend or external worker reloads the local profile, reproduces the envelope, and fails
+closed if it is missing, invalid, or changed. The full private context exists only in memory and is
+passed ephemerally to the provider; it is never written to the run, grant, audit log, or API
+response. When using a private profile with separate backend and worker processes, both must resolve
+the same file content. With no profile file (the default Compose setup), both use the stable public
+core context and behavior remains credential-free.
+
+The backend image starts only the HTTP process, and the worker image starts only the durable
+execution daemon. For a managed deployment, run
 `prisma migrate deploy` once in a dedicated init/release job, keep `SEED_ON_BOOT=false`, and give
 the long-running runtime identity no schema or seed privileges.
+
+The worker claims queued work with PostgreSQL leases and heartbeats, records attempts and
+idempotency keys, honors cancellation and bounded retries, and recovers expired leases after a
+restart. Its graceful-shutdown window is controlled by `WORKER_SHUTDOWN_TIMEOUT_MS`.
 
 ## Secrets and transfer
 
@@ -126,9 +183,11 @@ Commit only `.env.example`. Configure these values through the destination envir
 environment secrets:
 
 - `DATABASE_URL`
-- `OPENAI_API_KEY` (reserved for a future generator adapter; unused by this scaffold)
+- `ANTHROPIC_API_KEY` only when the direct local provider is intentionally enabled
 - GCP Workload Identity provider/service account settings for future deployment
 
-Do not commit service-account JSON, ADC files, database passwords, or vendor tokens. Confluence,
-Jira, email, Slack, and Interstellar are contract fixtures only until they are wired on the work
-computer.
+Do not commit service-account JSON, ADC files, database passwords, vendor tokens, prompts, model
+responses, or private profile data. Confluence, Jira, email, Slack, and telemetry sources are
+contract fixtures only until an explicitly configured live connector is available. Historical
+migration literals are handled by the narrow allowlist documented in `docs/SANITIZATION.md`; active
+content is checked by `npm run check:sanitized`.

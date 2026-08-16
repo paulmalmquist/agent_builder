@@ -18,6 +18,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@agent-builder/contracts$': '<rootDir>/../../packages/contracts/src/index.ts',
+    '^@paul-os/runtime$': '<rootDir>/../../packages/runtime/src/index.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   collectCoverageFrom: [

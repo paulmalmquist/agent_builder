@@ -1,0 +1,29 @@
+apiVersion: paul-os/v1
+kind: Automation
+metadata:
+  id: 40000000-0000-4000-8000-000000000001
+  slug: weekday-daily-brief
+  version: 1.0.0
+  owner: local-user
+  purpose: Request a weekday daily briefing under a bounded authority grant.
+  lifecycle: experimental
+  provenance: synthetic
+dependencies:
+  - familyId: 30000000-0000-4000-8000-000000000001
+    version: 1.0.0
+  - familyId: c0000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  schedule:
+    cron: '0 7 * * 1-5'
+    timezone: profile
+    catchUp: latest_only
+  releaseSelector: daily-briefing-agent@1.0.0
+  project: personal-operations@1.0.0
+  authorityClass: read-only-briefing
+  deduplicationWindowMinutes: 60
+  retry:
+    maximumAttempts: 2
+    backoff: exponential
+  costBudgetUsd: 0.50
+  onMissingAuthority: request_approval

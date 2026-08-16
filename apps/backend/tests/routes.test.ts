@@ -51,7 +51,7 @@ const outcomes: OutcomesSection = {
 const knowledge: KnowledgeSection = {
   sources: [
     {
-      descriptorId: 'bq-relativity-mes-builds',
+      descriptorId: 'bq-operations-builds',
       purpose: 'Resolve impacted builds',
       requiredCitations: true,
     },
@@ -122,10 +122,10 @@ const spec = agentSpecSchema.parse({
   updatedAt: now,
 });
 const source = sourceDescriptorSchema.parse({
-  id: 'bq-relativity-mes-builds',
+  id: 'bq-operations-builds',
   role: 'knowledge',
   provider: 'bigquery',
-  displayName: 'MES Builds',
+  displayName: 'Operations Builds',
   uri: 'bigquery://project/dataset/table',
   authority: 'system_of_record',
   owner: 'Manufacturing Data',
@@ -468,6 +468,10 @@ function createFakeServices(): ServiceBundle {
     maintenance: {
       start: jest.fn(() => Promise.resolve()),
       stop: jest.fn(),
+    },
+    automationScheduler: {
+      start: jest.fn(() => Promise.resolve()),
+      stop: jest.fn(() => Promise.resolve()),
     },
   };
 }

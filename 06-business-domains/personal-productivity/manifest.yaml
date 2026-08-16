@@ -1,0 +1,24 @@
+apiVersion: paul-os/v1
+kind: BusinessDomain
+metadata:
+  id: 60000000-0000-4000-8000-000000000001
+  slug: personal-productivity
+  version: 1.0.0
+  owner: local-user
+  purpose: Define generic workflow defaults for personal planning.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: 10000000-0000-4000-8000-000000000001
+    version: 1.0.0
+  - familyId: 70000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  mandatoryProtocols: [safe-execution@1.0.0]
+  defaultContextPolicy: default-context@1.0.0
+  vocabulary:
+    priority: An explicitly selected outcome for the current planning horizon.
+    signal: A time-bounded observation that may change a decision.
+  defaults:
+    citationsRequired: true
+    externalWritesAllowed: false

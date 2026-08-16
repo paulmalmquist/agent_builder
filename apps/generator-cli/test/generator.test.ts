@@ -32,7 +32,7 @@ function validInput() {
       knowledge: {
         sources: [
           {
-            descriptorId: 'bq-relativity-build-overview',
+            descriptorId: 'bq-operations-build-overview',
             purpose: 'Authoritative build status',
             requiredCitations: true,
           },
@@ -75,7 +75,7 @@ describe('generator CLI', () => {
     expect(agentManifestSchema.parse(manifest)).toEqual(manifest);
     expect(manifest.generatorVersion).toBe(GENERATOR_VERSION);
     expect(manifest.generatedAt).toBe(fixedDate.toISOString());
-    expect(manifest.knowledgeSourceIds).toEqual(['bq-relativity-build-overview']);
+    expect(manifest.knowledgeSourceIds).toEqual(['bq-operations-build-overview']);
   });
 
   it('writes the manifest and emits parseable progress', async () => {

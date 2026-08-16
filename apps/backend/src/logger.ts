@@ -24,6 +24,8 @@ export function createLogger(config: Pick<AppConfig, 'logLevel'>): Logger {
         'err.cause.response.body',
         '*.rows',
         '*.rowPayload',
+        '*.context',
+        '*.contextValues',
       ],
       censor: '[REDACTED]',
     },

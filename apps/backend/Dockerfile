@@ -7,6 +7,7 @@ RUN apt-get update \
 COPY . .
 RUN npm ci
 RUN npm run build -w @agent-builder/contracts \
+    && npm run build -w @paul-os/runtime \
     && npm run build -w @agent-builder/generator-cli \
     && npm run build -w @agent-builder/backend \
     && npm prune --omit=dev

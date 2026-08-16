@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -30,26 +32,43 @@ jobs:
       BIGQUERY_ENABLED: 'false'
       GENERATOR_CONCURRENCY: '2'
       RUN_DATABASE_INTEGRATION: 'true'
+      EXECUTION_DISPATCH_MODE: external
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Scan repository for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
       - run: npm run db:generate
       - run: npm run db:deploy
       - run: npm run db:seed
+      - run: npm run check:sanitized
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:coverage
+      - name: Install Chromium for smoke tests
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm run build
       - run: docker compose config
 
   containers:
     runs-on: ubuntu-latest
     needs: validate
+    env:
+      SEED_ON_BOOT: 'true'
+      REPOSITORY_SOURCE_COMMIT: ${{ github.sha }}
+      ALLOW_UNVERIFIED_REPOSITORY_IMPORTS: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,6 +81,8 @@ jobs:
         run: |
           curl --fail --retry 30 --retry-delay 2 --retry-all-errors http://localhost:8080/health
           curl --fail http://localhost:8080/openapi.json
+      - name: Verify governed lifecycle through external worker
+        run: npm run smoke:compose
       - name: Verify idempotent restart
         run: |
           docker compose down
@@ -73,6 +94,6 @@ jobs:
           docker compose exec -T postgres psql -U agent_builder -d agent_builder -tAc "SELECT count(*) FROM \"Agent\" WHERE \"slug\" = 'supplier-delay-alert-v1';" | grep -qx 1
           docker compose exec -T postgres psql -U agent_builder -d agent_builder -tAc "SELECT count(*) FROM \"AgentFamily\" WHERE \"slug\" = 'inventory-risk-analyst';" | grep -qx 1
           docker compose exec -T postgres psql -U agent_builder -d agent_builder -tAc "SELECT count(*) FROM \"Agent\" WHERE \"slug\" = 'inventory-risk-analyst-v1';" | grep -qx 1
-          docker compose exec -T postgres psql -U agent_builder -d agent_builder -tAc "SELECT count(*) FROM \"KnowledgeSource\" WHERE \"id\" = 'bq-relativity-mes-builds';" | grep -qx 1
+          docker compose exec -T postgres psql -U agent_builder -d agent_builder -tAc "SELECT count(*) FROM \"KnowledgeSource\" WHERE \"id\" = 'bq-operations-builds';" | grep -qx 1
       - if: always()
         run: docker compose down -v

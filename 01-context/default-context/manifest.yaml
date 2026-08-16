@@ -1,0 +1,21 @@
+apiVersion: paul-os/v1
+kind: ContextPolicy
+metadata:
+  id: 10000000-0000-4000-8000-000000000001
+  slug: default-context
+  version: 1.0.0
+  owner: local-platform-owner
+  purpose: Assemble bounded run context with deterministic precedence and provenance.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: 00000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  precedence: [core, private_profile, business_domain, project, agent, request]
+  maxInputTokens: 12000
+  lazyLoadResources: true
+  mandatoryRulesCannotBeWeakened: true
+  provenanceRequired: true
+  durableMemoryWrites: staged
+  onMissingRequiredContext: fail_closed

@@ -6,6 +6,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/v1': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
       '/agents': {
         target: 'http://localhost:3000',
         changeOrigin: true,
@@ -31,6 +35,7 @@ export default defineConfig({
       },
     },
     globals: true,
+    testTimeout: 15_000,
     setupFiles: ['./src/test/setup.ts'],
     css: true,
     coverage: {

@@ -11,7 +11,11 @@ export async function startServer(): Promise<Server> {
   const services = createServices(prisma, config, logger);
   await services.dispatcher.recoverAndResume();
   await services.certificationDispatcher.recoverAndResume();
+  if (services.platform.dispatchMode === 'in_process') {
+    await services.platform.executionDispatcher.recoverAndResume();
+  }
   await services.maintenance.start();
+  await services.automationScheduler.start();
 
   const server = createServer(createApp(services, logger, config));
   await new Promise<void>((resolve, reject) => {
@@ -38,7 +42,8 @@ export async function startServer(): Promise<Server> {
       void prisma.$disconnect().finally(() => process.exit(1));
     }, config.shutdownTimeoutMs);
     forceExit.unref();
-    server.close(() => {
+    const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
+    void Promise.all([serverClosed, services.automationScheduler.stop()]).then(() => {
       clearTimeout(forceExit);
       void prisma.$disconnect().finally(() => {
         process.exitCode = 0;

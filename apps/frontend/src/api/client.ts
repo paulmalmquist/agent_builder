@@ -18,6 +18,24 @@ import {
   shadowDeployResponseSchema,
   similarityResponseSchema,
   sourceListResponseSchema,
+  approveExecutionRunResponseSchema,
+  automationScheduleListResponseSchema,
+  automationScheduleSchema,
+  authorityGrantListResponseSchema,
+  authorityGrantSchema,
+  executionRunListResponseSchema,
+  executionRunSchema,
+  metricListResponseSchema,
+  memoryCandidateListResponseSchema,
+  memoryCandidateSchema,
+  observationListResponseSchema,
+  outcomeListResponseSchema,
+  improvementCandidateListResponseSchema,
+  improvementCandidateSchema,
+  platformApiRoutes,
+  productionChannelSchema,
+  releaseEvaluationSchema,
+  resourceListResponseSchema,
   type AgentCatalogQuery,
   type DerivationMode,
   type GuardrailsSection,
@@ -28,6 +46,12 @@ import {
   type PromotionRequest,
   type SourceDescriptor,
   type UpdateKnowledgeRequest,
+  type AuthorityGrant,
+  type AutomationSchedule,
+  type ExecutionRun,
+  type ImprovementCandidate,
+  type MemoryCandidate,
+  type ResourceVersion,
 } from '@agent-builder/contracts';
 
 type Parser<T> = {
@@ -43,6 +67,54 @@ export type SimilarityResponse = ReturnType<typeof similarityResponseSchema.pars
 export type SourceListResponse = ReturnType<typeof sourceListResponseSchema.parse>;
 export type GenerationAccepted = ReturnType<typeof generationAcceptedSchema.parse>;
 export type EvaluationResponse = ReturnType<typeof evaluationResponseSchema.parse>;
+export type PlatformResourceList = ReturnType<typeof resourceListResponseSchema.parse>;
+export type PlatformRunList = ReturnType<typeof executionRunListResponseSchema.parse>;
+export type AuthorityGrantList = ReturnType<typeof authorityGrantListResponseSchema.parse>;
+export type OutcomeList = ReturnType<typeof outcomeListResponseSchema.parse>;
+export type MetricList = ReturnType<typeof metricListResponseSchema.parse>;
+export type AutomationScheduleList = ReturnType<typeof automationScheduleListResponseSchema.parse>;
+export type ObservationList = ReturnType<typeof observationListResponseSchema.parse>;
+export type ImprovementCandidateList = ReturnType<
+  typeof improvementCandidateListResponseSchema.parse
+>;
+export type MemoryCandidateList = ReturnType<typeof memoryCandidateListResponseSchema.parse>;
+
+export type ResourceFilters = {
+  kind?: ResourceVersion['kind'];
+  lifecycle?: ResourceVersion['lifecycle'];
+  query?: string;
+  limit?: number;
+};
+
+export type RunFilters = {
+  state?: ExecutionRun['state'];
+  limit?: number;
+};
+
+export type GrantFilters = {
+  state?: AuthorityGrant['state'];
+  limit?: number;
+};
+
+export type ApproveRunInput = {
+  projectId: string | null;
+  inputConstraints: Record<string, unknown>;
+  toolScopes: string[];
+  validUntil: string;
+  maxRuns: number;
+  maxEstimatedCostPerRunUsd: number;
+  totalCostBudgetUsd: number;
+  rationale: string;
+};
+
+export type ReviewImprovementInput = {
+  decision: 'incubate' | 'reject';
+  rationale: string;
+};
+
+export type ReviewMemoryInput =
+  | { decision: 'accept' | 'reject'; rationale: string }
+  | { decision: 'edit_accept'; editedValue: Record<string, unknown>; rationale: string };
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const apiBaseUrl = configuredBaseUrl?.replace(/\/+$/, '') ?? '';
@@ -308,6 +380,135 @@ export const agentApi = {
 
   retire(agentId: string, rationale: string) {
     return request(apiRoutes.retire(agentId), retirementResponseSchema, jsonBody({ rationale }));
+  },
+};
+
+export const platformApi = {
+  listResources(filters: ResourceFilters = {}) {
+    return request(
+      appendParams(platformApiRoutes.resources, {
+        kind: filters.kind,
+        lifecycle: filters.lifecycle,
+        query: filters.query,
+        limit: filters.limit ?? 50,
+      }),
+      resourceListResponseSchema,
+    );
+  },
+
+  listExecutionRuns(filters: RunFilters = {}) {
+    return request(
+      appendParams(platformApiRoutes.executionRuns, {
+        state: filters.state,
+        limit: filters.limit ?? 50,
+      }),
+      executionRunListResponseSchema,
+    );
+  },
+
+  getExecutionRun(runId: string) {
+    return request(platformApiRoutes.executionRun(runId), executionRunSchema);
+  },
+
+  approveExecutionRun(runId: string, value: ApproveRunInput) {
+    return request(
+      platformApiRoutes.approveExecutionRun(runId),
+      approveExecutionRunResponseSchema,
+      jsonBody(value),
+    );
+  },
+
+  cancelExecutionRun(runId: string) {
+    return request(platformApiRoutes.cancelExecutionRun(runId), executionRunSchema, {
+      method: 'POST',
+    });
+  },
+
+  listAuthorityGrants(filters: GrantFilters = {}) {
+    return request(
+      appendParams(platformApiRoutes.authorityGrants, {
+        state: filters.state,
+        limit: filters.limit ?? 50,
+      }),
+      authorityGrantListResponseSchema,
+    );
+  },
+
+  revokeAuthorityGrant(grantId: string) {
+    return request(platformApiRoutes.revokeAuthorityGrant(grantId), authorityGrantSchema, {
+      method: 'POST',
+    });
+  },
+
+  listOutcomes(runId?: string) {
+    return request(appendParams(platformApiRoutes.outcomes, { runId }), outcomeListResponseSchema);
+  },
+
+  listMetrics(runId?: string) {
+    return request(appendParams(platformApiRoutes.metrics, { runId }), metricListResponseSchema);
+  },
+
+  listAutomationSchedules(state?: AutomationSchedule['state']) {
+    return request(
+      appendParams(platformApiRoutes.automationSchedules, { state, limit: 50 }),
+      automationScheduleListResponseSchema,
+    );
+  },
+
+  updateAutomationScheduleState(
+    scheduleId: string,
+    value: { state: AutomationSchedule['state']; rationale: string },
+  ) {
+    return request(
+      platformApiRoutes.automationScheduleState(scheduleId),
+      automationScheduleSchema,
+      jsonBody(value),
+    );
+  },
+
+  getProductionChannel(channelKey: string) {
+    return request(platformApiRoutes.productionChannel(channelKey), productionChannelSchema);
+  },
+
+  getReleaseEvaluation(evaluationId: string) {
+    return request(platformApiRoutes.releaseEvaluation(evaluationId), releaseEvaluationSchema);
+  },
+
+  listObservations() {
+    return request(
+      appendParams(platformApiRoutes.observations, { limit: 50 }),
+      observationListResponseSchema,
+    );
+  },
+
+  listImprovementCandidates(state?: ImprovementCandidate['state']) {
+    return request(
+      appendParams(platformApiRoutes.improvementCandidates, { state, limit: 50 }),
+      improvementCandidateListResponseSchema,
+    );
+  },
+
+  reviewImprovementCandidate(candidateId: string, value: ReviewImprovementInput) {
+    return request(
+      platformApiRoutes.reviewImprovementCandidate(candidateId),
+      improvementCandidateSchema,
+      jsonBody(value),
+    );
+  },
+
+  listMemoryCandidates(state?: MemoryCandidate['state']) {
+    return request(
+      appendParams(platformApiRoutes.memoryCandidates, { state, limit: 50 }),
+      memoryCandidateListResponseSchema,
+    );
+  },
+
+  reviewMemoryCandidate(candidateId: string, value: ReviewMemoryInput) {
+    return request(
+      platformApiRoutes.reviewMemoryCandidate(candidateId),
+      memoryCandidateSchema,
+      jsonBody(value),
+    );
   },
 };
 

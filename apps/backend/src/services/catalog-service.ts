@@ -77,7 +77,7 @@ const providerMap = {
   jira: DatabaseSourceProvider.JIRA,
   email: DatabaseSourceProvider.EMAIL,
   slack: DatabaseSourceProvider.SLACK,
-  interstellar: DatabaseSourceProvider.INTERSTELLAR,
+  telemetry: DatabaseSourceProvider.TELEMETRY,
   fixture: DatabaseSourceProvider.FIXTURE,
 } as const;
 
@@ -87,7 +87,7 @@ const providerWire = {
   [DatabaseSourceProvider.JIRA]: 'jira',
   [DatabaseSourceProvider.EMAIL]: 'email',
   [DatabaseSourceProvider.SLACK]: 'slack',
-  [DatabaseSourceProvider.INTERSTELLAR]: 'interstellar',
+  [DatabaseSourceProvider.TELEMETRY]: 'telemetry',
   [DatabaseSourceProvider.FIXTURE]: 'fixture',
 } as const;
 

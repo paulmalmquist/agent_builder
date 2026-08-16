@@ -1,0 +1,16 @@
+apiVersion: paul-os/v1
+kind: Reference
+metadata:
+  id: 50000000-0000-4000-8000-000000000001
+  slug: briefing-principles
+  version: 1.0.0
+  owner: local-user
+  purpose: Provide static, sanitized principles for concise daily briefings.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies: []
+spec:
+  artifact: REFERENCE.md
+  mediaType: text/markdown
+  immutableAfterCandidate: true
+  citationLabel: briefing-principles-v1

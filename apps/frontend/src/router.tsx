@@ -22,6 +22,34 @@ export const router = createBrowserRouter([
         },
       },
       {
+        path: 'registry',
+        lazy: async () => {
+          const { RegistryPage } = await import('./features/platform/RegistryPage');
+          return { Component: RegistryPage };
+        },
+      },
+      {
+        path: 'runs',
+        lazy: async () => {
+          const { RunsPage } = await import('./features/platform/RunsPage');
+          return { Component: RunsPage };
+        },
+      },
+      {
+        path: 'evidence',
+        lazy: async () => {
+          const { EvidencePage } = await import('./features/platform/EvidencePage');
+          return { Component: EvidencePage };
+        },
+      },
+      {
+        path: 'incubator',
+        lazy: async () => {
+          const { IncubatorPage } = await import('./features/platform/IncubatorPage');
+          return { Component: IncubatorPage };
+        },
+      },
+      {
         path: 'certification/:agentId',
         lazy: async () => {
           const { CertificationPage } = await import('./features/certification/CertificationPage');

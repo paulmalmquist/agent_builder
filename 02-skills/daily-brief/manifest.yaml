@@ -1,0 +1,100 @@
+apiVersion: paul-os/v1
+kind: Skill
+metadata:
+  id: 20000000-0000-4000-8000-000000000001
+  slug: daily-brief
+  version: 1.0.0
+  owner: local-user
+  purpose: Produce a concise, cited daily briefing from user-supplied planning inputs.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: 50000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  inputSchema:
+    type: object
+    additionalProperties: false
+    required: [date, timezone, priorities, calendarItems, tasks, signals, userConstraints]
+    properties:
+      date:
+        type: string
+        format: date
+      timezone:
+        type: string
+        minLength: 1
+        maxLength: 100
+      priorities:
+        type: array
+        maxItems: 20
+        items: { type: string, minLength: 1, maxLength: 500 }
+      calendarItems:
+        type: array
+        maxItems: 100
+        items:
+          type: object
+          additionalProperties: false
+          required: [title, startsAt, endsAt]
+          properties:
+            title: { type: string, minLength: 1, maxLength: 300 }
+            startsAt: { type: string, format: date-time }
+            endsAt: { type: string, format: date-time }
+      tasks:
+        type: array
+        maxItems: 100
+        items: { type: string, minLength: 1, maxLength: 500 }
+      signals:
+        type: array
+        maxItems: 100
+        items: { type: string, minLength: 1, maxLength: 1000 }
+      userConstraints:
+        type: array
+        maxItems: 20
+        items: { type: string, minLength: 1, maxLength: 500 }
+  outputSchema:
+    type: object
+    additionalProperties: false
+    required:
+      - topPriorities
+      - scheduleRisks
+      - decisionsRequired
+      - proposedActions
+      - citations
+      - confidence
+      - unresolvedItems
+    properties:
+      topPriorities:
+        type: array
+        maxItems: 5
+        items: { type: string, minLength: 1, maxLength: 500 }
+      scheduleRisks:
+        type: array
+        maxItems: 10
+        items: { type: string, minLength: 1, maxLength: 500 }
+      decisionsRequired:
+        type: array
+        maxItems: 10
+        items: { type: string, minLength: 1, maxLength: 500 }
+      proposedActions:
+        type: array
+        maxItems: 10
+        items: { type: string, minLength: 1, maxLength: 500 }
+      citations:
+        type: array
+        maxItems: 100
+        items: { type: string, minLength: 1, maxLength: 500 }
+      confidence: { type: number, minimum: 0, maximum: 1 }
+      unresolvedItems:
+        type: array
+        maxItems: 20
+        items: { type: string, minLength: 1, maxLength: 500 }
+  tools: []
+  permissions: []
+  contextRequirements:
+    - profile.timezone
+    - request.priorities
+  successCriteria:
+    - Output validates against the declared schema.
+    - Schedule-derived claims cite supplied calendar items.
+    - No proposed action is executed by this skill.
+    - Estimated run cost remains within the authority grant.

@@ -1,6 +1,8 @@
 node_modules/
 dist/
 coverage/
+playwright-report/
+test-results/
 .env
 .env.*
 !.env.example
@@ -8,3 +10,10 @@ coverage/
 .DS_Store
 apps/backend/src/generated/
 apps/backend/prisma/dev.db
+
+# Paul OS private overlays and ephemeral runtime state.
+.local/*
+!.local/README.md
+.runtime/*
+!.runtime/README.md
+!.runtime/.gitignore

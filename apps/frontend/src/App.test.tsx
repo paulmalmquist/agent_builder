@@ -124,7 +124,7 @@ describe('Agent Builder workflow', () => {
       knowledge: {
         sources: [
           {
-            descriptorId: 'relativity-mes-genealogy',
+            descriptorId: 'demo-build-genealogy',
             purpose: 'Trace delayed supply to affected builds',
             requiredCitations: true,
           },

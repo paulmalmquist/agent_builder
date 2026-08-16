@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   AgentDerivationMode,
   AgentStatus,
@@ -32,9 +34,87 @@ import {
   outcomesSectionSchema,
   outputsSectionSchema,
 } from '@agent-builder/contracts';
+import { assertAcyclicDependencies, compileResourceYaml } from '@paul-os/runtime';
+import { RegistryService } from '../src/services/registry-service.js';
 
 const prisma = new PrismaClient();
 const seedActor = 'system:seed';
+const configuredSourceCommit = process.env['REPOSITORY_SOURCE_COMMIT']?.trim();
+const seedSourceCommit =
+  configuredSourceCommit !== undefined && /^[a-f0-9]{7,64}$/i.test(configuredSourceCommit)
+    ? configuredSourceCommit
+    : 'synthetic-baseline';
+
+async function trackedManifestPaths(): Promise<string[]> {
+  const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
+    ? path.resolve(process.cwd(), '..', '..')
+    : process.cwd();
+  const entries = await readdir(workspaceRoot, { withFileTypes: true });
+  const manifests: string[] = [];
+  for (const domain of entries.filter(
+    (entry) => entry.isDirectory() && /^\d{2}-[a-z0-9-]+$/.test(entry.name),
+  )) {
+    const domainPath = path.join(workspaceRoot, domain.name);
+    for (const resource of await readdir(domainPath, { withFileTypes: true })) {
+      if (!resource.isDirectory()) continue;
+      const manifestPath = path.join(domainPath, resource.name, 'manifest.yaml');
+      try {
+        await readFile(manifestPath, 'utf8');
+        manifests.push(manifestPath);
+      } catch {
+        // Profiles and documentation directories are not registry resources.
+      }
+    }
+  }
+  return manifests;
+}
+
+async function seedPlatformResources(): Promise<void> {
+  const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
+    ? path.resolve(process.cwd(), '..', '..')
+    : process.cwd();
+  const sources = await Promise.all(
+    (await trackedManifestPaths()).map(async (manifestPath) => ({
+      manifestPath,
+      source: await readFile(manifestPath, 'utf8'),
+      compiled: compileResourceYaml(await readFile(manifestPath, 'utf8')),
+    })),
+  );
+  assertAcyclicDependencies(sources.map(({ compiled }) => compiled.manifest));
+  const byFamily = new Map(
+    sources.map((entry) => [entry.compiled.manifest.metadata.id, entry] as const),
+  );
+  const ordered: typeof sources = [];
+  const visited = new Set<string>();
+  const visit = (familyId: string): void => {
+    if (visited.has(familyId)) return;
+    const entry = byFamily.get(familyId);
+    if (entry === undefined) return;
+    entry.compiled.manifest.dependencies.forEach((dependency) => visit(dependency.familyId));
+    visited.add(familyId);
+    ordered.push(entry);
+  };
+  byFamily.forEach((_entry, familyId) => visit(familyId));
+
+  const registry = new RegistryService(prisma, seedSourceCommit);
+  const imported = new Map<string, string>();
+  for (const entry of ordered) {
+    const result = await registry.importResource({
+      manifestYaml: entry.source,
+      sourcePath: path.relative(workspaceRoot, entry.manifestPath).replaceAll('\\', '/'),
+    });
+    imported.set(entry.compiled.manifest.metadata.id, result.resource.id);
+  }
+  const referenceId = imported.get('50000000-0000-4000-8000-000000000001');
+  const dailyBriefId = imported.get('20000000-0000-4000-8000-000000000001');
+  if (referenceId === undefined || dailyBriefId === undefined) {
+    throw new Error('Daily brief seed resources are incomplete');
+  }
+  await registry.createRelease({
+    resourceVersionIds: [referenceId, dailyBriefId],
+    projectId: null,
+  });
+}
 
 const supplierFamilyId = '4a40357e-924f-46db-86ac-b8ed920be486';
 const supplierChampionId = '4a40357e-924f-46db-86ac-b8ed920be486';
@@ -77,12 +157,12 @@ const supplierOutcomes = outcomesSectionSchema.parse({
 const supplierKnowledge = knowledgeSectionSchema.parse({
   sources: [
     {
-      descriptorId: 'bq-relativity-mes-builds',
+      descriptorId: 'bq-operations-builds',
       purpose: 'Resolve impacted production builds',
       requiredCitations: true,
     },
     {
-      descriptorId: 'bq-relativity-mes-genealogy',
+      descriptorId: 'bq-operations-genealogy',
       purpose: 'Trace delayed components into build genealogy',
       requiredCitations: true,
     },
@@ -134,7 +214,7 @@ const evalCaseInputs = [
     'Known supplier delay',
     { supplierId: 'SUP-104', delayDays: 5 },
     { affectedBuilds: ['BUILD-42'], escalationRequired: true },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.GOLDEN],
   ],
   [
@@ -142,7 +222,7 @@ const evalCaseInputs = [
     'Delay with no build impact',
     { supplierId: 'SUP-208', delayDays: 1 },
     { affectedBuilds: [], escalationRequired: false },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.FALSE_ALARM],
   ],
   [
@@ -150,7 +230,7 @@ const evalCaseInputs = [
     'Missing genealogy fails closed',
     { supplierId: 'SUP-301', genealogyAvailable: false },
     { status: 'blocked', reason: 'genealogy_unavailable' },
-    ['bq-relativity-mes-genealogy'],
+    ['bq-operations-genealogy'],
     [EvalCaseTag.REGRESSION],
   ],
   [
@@ -158,7 +238,7 @@ const evalCaseInputs = [
     'Every build includes a citation',
     { supplierId: 'SUP-104', requireCitations: true },
     { citedBuildCount: 1, buildCount: 1 },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.GOLDEN],
   ],
   [
@@ -166,7 +246,7 @@ const evalCaseInputs = [
     'Replay multi-supplier delay',
     { supplierIds: ['SUP-104', 'SUP-208'] },
     { affectedBuilds: ['BUILD-42'] },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.REPLAY],
   ],
   [
@@ -206,7 +286,7 @@ const evalCaseInputs = [
     'Conflicting build status is surfaced',
     { buildId: 'BUILD-77', conflictingRecords: true },
     { status: 'unresolved', conflictCount: 2 },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.GOLDEN],
   ],
   [
@@ -320,7 +400,7 @@ const rejectedManifest = agentManifestSchema.parse({
           expectedResult: {
             __fixture: {
               output: { affectedBuilds: [], escalationRequired: false },
-              citations: ['bq-relativity-mes-builds'],
+              citations: ['bq-operations-builds'],
               attemptedActions: [],
             },
           },
@@ -331,7 +411,7 @@ const rejectedManifest = agentManifestSchema.parse({
             expectedResult: {
               __fixture: {
                 output: { affectedBuilds: ['BUILD-UNKNOWN'] },
-                citations: ['bq-relativity-mes-builds'],
+                citations: ['bq-operations-builds'],
                 attemptedActions: [],
               },
             },
@@ -386,11 +466,11 @@ const inventoryCorpusHash = sha256([
 const refreshedAt = new Date('2026-07-30T12:00:00.000Z');
 const sources = [
   [
-    'bq-relativity-mes-builds',
+    'bq-operations-builds',
     SourceRole.KNOWLEDGE,
     SourceProvider.BIGQUERY,
-    'MES Gold Build Records',
-    'bigquery://agent-builder-demo/relativity_mes/gold_builds',
+    'Operations Build Records',
+    'bigquery://agent-builder-demo/operations/gold_builds',
     SourceAuthority.SYSTEM_OF_RECORD,
     'Manufacturing Data Platform',
     'US',
@@ -398,7 +478,7 @@ const sources = [
     false,
     {
       project: 'agent-builder-demo',
-      dataset: 'relativity_mes',
+      dataset: 'operations',
       table: 'gold_builds',
       location: 'US',
       columns: ['build_id', 'status', 'supplier_id', 'updated_at'],
@@ -406,11 +486,11 @@ const sources = [
     },
   ],
   [
-    'bq-relativity-mes-genealogy',
+    'bq-operations-genealogy',
     SourceRole.KNOWLEDGE,
     SourceProvider.BIGQUERY,
-    'MES Gold Genealogy',
-    'bigquery://agent-builder-demo/relativity_mes/gold_genealogy',
+    'Operations Component Genealogy',
+    'bigquery://agent-builder-demo/operations/gold_genealogy',
     SourceAuthority.SYSTEM_OF_RECORD,
     'Manufacturing Data Platform',
     'US',
@@ -418,7 +498,7 @@ const sources = [
     false,
     {
       project: 'agent-builder-demo',
-      dataset: 'relativity_mes',
+      dataset: 'operations',
       table: 'gold_genealogy',
       location: 'US',
       columns: ['build_id', 'component_id', 'supplier_id', 'lot_id'],
@@ -426,11 +506,11 @@ const sources = [
     },
   ],
   [
-    'bq-relativity-mes-ncr',
+    'bq-operations-quality-events',
     SourceRole.KNOWLEDGE,
     SourceProvider.BIGQUERY,
-    'MES Gold NCR Records',
-    'bigquery://agent-builder-demo/relativity_mes/gold_ncr',
+    'Operations Quality Event Records',
+    'bigquery://agent-builder-demo/operations/quality_events',
     SourceAuthority.SYSTEM_OF_RECORD,
     'Quality Data Platform',
     'US',
@@ -438,7 +518,7 @@ const sources = [
     false,
     {
       project: 'agent-builder-demo',
-      dataset: 'relativity_mes',
+      dataset: 'operations',
       table: 'gold_ncr',
       location: 'US',
       columns: ['ncr_id', 'build_id', 'severity', 'status'],
@@ -512,11 +592,11 @@ const sources = [
     { project: 'SUP', issueType: 'Incident' },
   ],
   [
-    'interstellar-build-observations',
+    'telemetry-build-observations',
     SourceRole.TELEMETRY,
-    SourceProvider.INTERSTELLAR,
-    'Interstellar Build Observations',
-    'interstellar://builds/observations',
+    SourceProvider.TELEMETRY,
+    'Telemetry Build Observations',
+    'telemetry://builds/observations',
     SourceAuthority.DERIVED,
     'Manufacturing Systems',
     'US',
@@ -1324,6 +1404,7 @@ async function main(): Promise<void> {
   await seedFamiliesAndVersions();
   await seedSources();
   await seedCertification();
+  await seedPlatformResources();
 }
 
 main()

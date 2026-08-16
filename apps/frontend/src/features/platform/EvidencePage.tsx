@@ -1,0 +1,327 @@
+import { Link, useSearchParams } from 'react-router-dom';
+import type { ReleaseEvaluationGateResult } from '@agent-builder/contracts';
+import {
+  useMetrics,
+  useOutcomes,
+  useProductionChannel,
+  useReleaseEvaluation,
+} from '../../api/hooks';
+import { getErrorMessage } from '../../api/client';
+import { Notice } from '../../components/Notice';
+import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
+
+function formatMetric(value: number, unit: string) {
+  if (unit === 'usd') return `$${value.toFixed(value < 1 ? 4 : 2)}`;
+  if (unit === 'ms') return `${Math.round(value)} ms`;
+  if (unit === 'ratio') return `${Math.round(value * 100)}%`;
+  return `${value.toLocaleString()} ${unit}`;
+}
+
+const gateLabels: Record<ReleaseEvaluationGateResult['key'], string> = {
+  dependency_closure: 'DEPENDENCY CLOSURE',
+  schema_conformance: 'SCHEMA CONFORMANCE',
+  citation_coverage: 'CITATION COVERAGE',
+  unauthorized_actions: 'UNAUTHORIZED ACTIONS',
+  mean_cost_usd: 'MEAN COST',
+  p95_latency_ms: 'P95 LATENCY',
+  mean_outcome_quality: 'MEAN OUTCOME QUALITY',
+};
+
+function formatGateValue(gate: ReleaseEvaluationGateResult, value: number): string {
+  if (gate.key === 'mean_cost_usd') return `$${value.toFixed(value < 1 ? 4 : 2)}`;
+  if (gate.key === 'p95_latency_ms') return `${Math.round(value)} ms`;
+  if (
+    gate.key === 'dependency_closure' ||
+    gate.key === 'schema_conformance' ||
+    gate.key === 'citation_coverage' ||
+    gate.key === 'mean_outcome_quality'
+  ) {
+    return `${Math.round(value * 100)}%`;
+  }
+  return value.toLocaleString();
+}
+
+export function EvidencePage() {
+  const [searchParams] = useSearchParams();
+  const channelKey = searchParams.get('channel')?.trim() || 'daily-operations';
+  const evaluationId = searchParams.get('evaluation')?.trim() || null;
+  const productionChannel = useProductionChannel(channelKey);
+  const releaseEvaluation = useReleaseEvaluation(evaluationId);
+  const outcomes = useOutcomes();
+  const metrics = useMetrics();
+  const outcomeItems = outcomes.data?.items ?? [];
+  const metricItems = metrics.data?.items ?? [];
+  const error = outcomes.error ?? metrics.error;
+
+  return (
+    <main className="os-surface">
+      <SurfaceHeader
+        description="Trace validated outcomes, operational measurements, and certification evidence back to the exact immutable release that produced them."
+        kicker="OUTCOMES · METRICS · CERTIFICATION"
+        stateDetail="PROVENANCE RETAINED · SCORES SERVER-OWNED"
+        title="Evidence"
+      />
+      <InstrumentStrip
+        readings={[
+          { label: 'OUTCOMES', value: outcomeItems.length },
+          { label: 'METRIC SAMPLES', value: metricItems.length },
+          {
+            label: 'CITED OUTCOMES',
+            value: outcomeItems.filter((outcome) => outcome.citations.length > 0).length,
+          },
+          {
+            label: 'UNRESOLVED ITEMS',
+            value: outcomeItems.reduce(
+              (count, outcome) => count + outcome.unresolvedItems.length,
+              0,
+            ),
+          },
+        ]}
+      />
+      {error ? <Notice tone="error">{getErrorMessage(error)}</Notice> : null}
+      {productionChannel.error ? (
+        <Notice tone="error">{getErrorMessage(productionChannel.error)}</Notice>
+      ) : null}
+      {releaseEvaluation.error ? (
+        <Notice tone="error">{getErrorMessage(releaseEvaluation.error)}</Notice>
+      ) : null}
+      <div className="os-toolbar">
+        <div>
+          <p className="page-kicker">OPERATIONAL EVIDENCE LEDGER</p>
+        </div>
+        <Link className="secondary-button" to="/library">
+          OPEN AGENT CERTIFICATION →
+        </Link>
+      </div>
+      <section aria-busy={productionChannel.isLoading} className="os-panel release-evidence-panel">
+        <header className="os-panel-heading">
+          <h2>Production authority</h2>
+          <small>CHANNEL · {channelKey.toUpperCase()}</small>
+        </header>
+        {productionChannel.isLoading ? (
+          <div className="os-empty-state">Resolving production pointer…</div>
+        ) : null}
+        {productionChannel.data ? (
+          <div className="release-authority-grid">
+            <article className="evidence-card">
+              <header>
+                <div>
+                  <h2>Current production release</h2>
+                  <p>{productionChannel.data.projectId ?? 'Default project authority'}</p>
+                </div>
+                <span
+                  className="os-status-chip"
+                  data-state={
+                    productionChannel.data.currentReleaseId === null ? 'not_started' : 'succeeded'
+                  }
+                >
+                  {productionChannel.data.currentReleaseId === null ? 'unassigned' : 'active'}
+                </span>
+              </header>
+              <div className="run-metadata">
+                <span>
+                  RELEASE · {productionChannel.data.currentReleaseId?.slice(0, 8) ?? 'none'}
+                </span>
+                <span>
+                  DIGEST · {productionChannel.data.currentReleaseDigest?.slice(0, 12) ?? 'none'}
+                </span>
+                <span>PRIOR · {productionChannel.data.priorReleaseId?.slice(0, 8) ?? 'none'}</span>
+                <span>APPROVER · {productionChannel.data.promotedBy ?? 'none'}</span>
+                <span>
+                  DECIDED ·{' '}
+                  {productionChannel.data.promotedAt === null
+                    ? 'not promoted'
+                    : new Date(productionChannel.data.promotedAt).toLocaleString()}
+                </span>
+              </div>
+            </article>
+          </div>
+        ) : null}
+      </section>
+      {evaluationId !== null ? (
+        <section
+          aria-busy={releaseEvaluation.isLoading}
+          className="os-panel release-evidence-panel"
+        >
+          <header className="os-panel-heading">
+            <h2>Deterministic contract evaluation</h2>
+            <small>EVALUATION · {evaluationId.slice(0, 8)}</small>
+          </header>
+          {releaseEvaluation.isLoading ? (
+            <div className="os-empty-state">Loading immutable evaluation evidence…</div>
+          ) : null}
+          {releaseEvaluation.data ? (
+            <>
+              <div className="release-evaluation-summary">
+                <span
+                  className="os-status-chip"
+                  data-state={releaseEvaluation.data.verdict === 'passed' ? 'succeeded' : 'failed'}
+                >
+                  {releaseEvaluation.data.verdict}
+                </span>
+                <span>EXECUTOR · {releaseEvaluation.data.executorKind}</span>
+                <span>VERSION · {releaseEvaluation.data.executorVersion}</span>
+                <span>MODE · {releaseEvaluation.data.evaluationMode}</span>
+                <span>CORPUS · REV {releaseEvaluation.data.corpusVersion}</span>
+                <span>RELEASE · {releaseEvaluation.data.releaseDigest.slice(0, 12)}</span>
+                <span>HISTORY · {releaseEvaluation.data.historySnapshotDigest.slice(0, 12)}</span>
+                <span>RUN LINEAGE · {releaseEvaluation.data.evidence.historyRunIds.length}</span>
+              </div>
+              <div aria-label="Server-owned gate results" className="release-gate-grid">
+                {releaseEvaluation.data.gateResults.map((gate) => (
+                  <article className="evidence-card" key={gate.key}>
+                    <small>
+                      {gateLabels[gate.key]} · {gate.evidenceSource.replaceAll('_', ' ')}
+                    </small>
+                    <strong className="metric-value">
+                      {gate.status === 'not_applicable' || gate.measuredValue === null
+                        ? 'N/A'
+                        : formatGateValue(gate, gate.measuredValue)}
+                    </strong>
+                    <span
+                      className="os-status-chip"
+                      data-state={
+                        gate.status === 'passed'
+                          ? 'succeeded'
+                          : gate.status === 'failed'
+                            ? 'failed'
+                            : 'not_started'
+                      }
+                    >
+                      {gate.status.replaceAll('_', ' ')}
+                    </span>
+                    <p>
+                      THRESHOLD · {gate.operator.toUpperCase()}{' '}
+                      {formatGateValue(gate, gate.threshold)} · SAMPLES {gate.sampleSize}
+                    </p>
+                    <p>{gate.detail}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="release-case-list">
+                {releaseEvaluation.data.results.map((result) => (
+                  <article className="evidence-card" key={result.caseKey}>
+                    <header>
+                      <div>
+                        <h2>{result.caseKey.replaceAll('-', ' ')}</h2>
+                        <p>Server-recorded deterministic assertions</p>
+                      </div>
+                      <span
+                        className="os-status-chip"
+                        data-state={result.passed ? 'succeeded' : 'failed'}
+                      >
+                        {result.passed ? 'passed' : 'failed'}
+                      </span>
+                    </header>
+                    <ul className="release-assertion-list">
+                      {result.assertions.map((assertion) => (
+                        <li key={assertion.key}>
+                          <span aria-hidden="true">{assertion.passed ? '●' : '○'}</span>
+                          <div>
+                            <strong>{assertion.key.replaceAll('_', ' ')}</strong>
+                            <p>{assertion.detail}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
+              </div>
+              <p className="os-disclosure">{releaseEvaluation.data.disclaimer}</p>
+            </>
+          ) : null}
+        </section>
+      ) : (
+        <section className="os-panel release-evidence-panel">
+          <div className="os-empty-state">
+            <strong>No release evaluation selected.</strong>
+            <span>
+              Add an evaluation query parameter to inspect server-owned gates and case evidence.
+            </span>
+          </div>
+        </section>
+      )}
+      <div className="evidence-layout">
+        <section aria-busy={outcomes.isLoading} className="os-panel">
+          <header className="os-panel-heading">
+            <h2>Validated outcomes</h2>
+            <small>OUTPUT PAYLOADS REMAIN CONTROLLED</small>
+          </header>
+          <div className="evidence-list">
+            {outcomes.isLoading ? <div className="os-empty-state">Loading outcomes…</div> : null}
+            {!outcomes.isLoading && outcomeItems.length === 0 ? (
+              <div className="os-empty-state">
+                <strong>No outcomes have been recorded.</strong>
+                <span>Successful executions will write validated, provenance-bearing records.</span>
+              </div>
+            ) : null}
+            {outcomeItems.map((outcome) => (
+              <article className="evidence-card" key={outcome.id}>
+                <header>
+                  <div>
+                    <h2>Outcome {outcome.id.slice(0, 8)}</h2>
+                    <p>
+                      Run {outcome.runId.slice(0, 8)} ·{' '}
+                      {new Date(outcome.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <span
+                    className="os-status-chip"
+                    data-state={outcome.unresolvedItems.length === 0 ? 'succeeded' : 'running'}
+                  >
+                    {outcome.unresolvedItems.length === 0 ? 'resolved' : 'review'}
+                  </span>
+                </header>
+                <div className="run-metadata">
+                  <span>
+                    QUALITY · {outcome.qualityScore === null ? 'not scored' : outcome.qualityScore}
+                  </span>
+                  <span>
+                    CONFIDENCE · {outcome.confidence === null ? 'not reported' : outcome.confidence}
+                  </span>
+                  <span>CITATIONS · {outcome.citations.length}</span>
+                  <span>UNRESOLVED · {outcome.unresolvedItems.length}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+        <section aria-busy={metrics.isLoading} className="os-panel">
+          <header className="os-panel-heading">
+            <h2>Metric samples</h2>
+            <small>QUALITY · LATENCY · TOKENS · COST</small>
+          </header>
+          <div className="evidence-list">
+            {metrics.isLoading ? <div className="os-empty-state">Loading measurements…</div> : null}
+            {!metrics.isLoading && metricItems.length === 0 ? (
+              <div className="os-empty-state">
+                <strong>No metrics have been observed.</strong>
+                <span>Usage, latency, cost, and quality samples appear after execution.</span>
+              </div>
+            ) : null}
+            {metricItems.map((metric) => (
+              <article className="evidence-card" key={metric.id}>
+                <header>
+                  <div>
+                    <h2>{metric.name.replaceAll('_', ' ')}</h2>
+                    <p>{new Date(metric.observedAt).toLocaleString()}</p>
+                  </div>
+                  <span className="resource-kind">{metric.unit}</span>
+                </header>
+                <strong className="metric-value">{formatMetric(metric.value, metric.unit)}</strong>
+                <div className="run-metadata">
+                  <span>RUN · {metric.runId?.slice(0, 8) ?? 'platform'}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+      <p className="os-disclosure">
+        Deterministic contract evidence validates declared fixtures and release composition; it does
+        not measure semantic model quality. Semantic execution remains a separately stamped evidence
+        mode.
+      </p>
+    </main>
+  );
+}

@@ -21,7 +21,9 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['scripts/*.mjs'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -46,7 +48,15 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/backend/**/*.ts', 'apps/generator-cli/**/*.ts', 'packages/contracts/**/*.ts'],
+    files: [
+      'apps/backend/**/*.ts',
+      'apps/generator-cli/**/*.ts',
+      'apps/worker/**/*.ts',
+      'e2e/**/*.ts',
+      'packages/contracts/**/*.ts',
+      'packages/runtime/**/*.ts',
+      'scripts/**/*.mjs',
+    ],
     languageOptions: {
       globals: globals.node,
     },
@@ -63,5 +73,9 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
     },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    ...tseslint.configs.disableTypeChecked,
   },
 );

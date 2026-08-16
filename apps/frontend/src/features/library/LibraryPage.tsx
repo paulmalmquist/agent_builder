@@ -101,13 +101,11 @@ export function LibraryPage() {
           <span>PROVIDER</span>
           <select onChange={(event) => setFilter('provider', event.target.value)} value={provider}>
             <option value="">All providers</option>
-            {['bigquery', 'confluence', 'jira', 'email', 'slack', 'interstellar', 'fixture'].map(
-              (value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ),
-            )}
+            {['bigquery', 'confluence', 'jira', 'email', 'slack', 'fixture'].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </label>
       </section>

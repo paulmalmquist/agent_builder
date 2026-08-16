@@ -1,0 +1,23 @@
+apiVersion: paul-os/v1
+kind: KnowledgeSource
+metadata:
+  id: 80000000-0000-4000-8000-000000000001
+  slug: planning-fixture
+  version: 1.0.0
+  owner: local-user
+  purpose: Supply synthetic planning records for deterministic development and evaluation.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: 00000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  provider: fixture
+  capabilities: [record_lookup]
+  authority: curated
+  access: read_only
+  citationRequired: true
+  region: local
+  dataClassification: synthetic
+  credentialRef: null
+  clientMaySelectIdentifiers: false

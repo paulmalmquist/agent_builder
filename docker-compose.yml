@@ -1,3 +1,5 @@
+name: paul-os
+
 services:
   postgres:
     image: postgres:16
@@ -37,6 +39,9 @@ services:
       INTERPRETATION_TTL_HOURS: 24
       MAINTENANCE_ENABLED: 'true'
       MAINTENANCE_HOUR_UTC: 2
+      EXECUTION_DISPATCH_MODE: external
+      ALLOW_UNVERIFIED_REPOSITORY_IMPORTS: '${ALLOW_UNVERIFIED_REPOSITORY_IMPORTS:-true}'
+      REPOSITORY_SOURCE_COMMIT: '${REPOSITORY_SOURCE_COMMIT:-}'
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -68,11 +73,38 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://agent_builder:agent_builder@postgres:5432/agent_builder?schema=public&connection_limit=10&pool_timeout=10
-      SEED_ON_BOOT: 'true'
+      SEED_ON_BOOT: '${SEED_ON_BOOT:-false}'
+      REPOSITORY_SOURCE_COMMIT: '${REPOSITORY_SOURCE_COMMIT:-}'
     depends_on:
       postgres:
         condition: service_healthy
     restart: 'no'
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://agent_builder:agent_builder@postgres:5432/agent_builder?schema=public&connection_limit=10&pool_timeout=10
+      WORKER_ID: compose-worker
+      WORKER_CONCURRENCY: 2
+      WORKER_POLL_MS: 1000
+      WORKER_LEASE_MS: 60000
+      WORKER_HEARTBEAT_MS: 15000
+      WORKER_SHUTDOWN_TIMEOUT_MS: 20000
+      MODEL_PROVIDER: deterministic
+      PROVIDER_POLICY: direct_allowed
+      MODEL_NAME: daily-brief-fixture
+      MODEL_TIMEOUT_MS: 120000
+      MODEL_INPUT_USD_PER_MILLION_TOKENS: 3
+      MODEL_OUTPUT_USD_PER_MILLION_TOKENS: 15
+      MODEL_PRICING_VERSION: local-2026-08
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 30s
 
   frontend:
     build:

@@ -1,0 +1,39 @@
+apiVersion: paul-os/v1
+kind: Agent
+metadata:
+  id: c0000000-0000-4000-8000-000000000001
+  slug: daily-briefing-agent
+  version: 1.0.0
+  owner: local-user
+  purpose: Orchestrate a governed daily briefing from bounded planning inputs.
+  lifecycle: experimental
+  provenance: synthetic
+dependencies:
+  - familyId: 10000000-0000-4000-8000-000000000001
+    version: 1.0.0
+  - familyId: 20000000-0000-4000-8000-000000000001
+    version: 1.0.0
+  - familyId: 70000000-0000-4000-8000-000000000001
+    version: 1.0.0
+  - familyId: 80000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  objective: Produce one concise, cited daily planning brief without taking external action.
+  skills: [daily-brief@1.0.0]
+  protocols: [safe-execution@1.0.0]
+  contextPolicy: default-context@1.0.0
+  knowledgeSources: [planning-fixture@1.0.0]
+  tools: []
+  triggers:
+    - kind: schedule
+      automation: weekday-daily-brief@1.0.0
+  executionLoop:
+    maximumSteps: 1
+    onUnresolved: return_to_user
+    outputContract: daily-brief@1.0.0
+  memoryPolicy:
+    reads: accepted_only
+    writes: staged_for_human_acceptance
+  production:
+    requiresImmutableRelease: true
+    authorityClass: read-only-briefing

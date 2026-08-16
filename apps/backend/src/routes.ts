@@ -47,6 +47,7 @@ import {
 } from '@agent-builder/contracts';
 import { z } from 'zod';
 import type { ServiceBundle } from './services/types.js';
+import { registerPlatformRoutes } from './platform-routes.js';
 
 const sourceQuerySchema = z.object({ role: sourceRoleSchema.optional() });
 let cachedOpenApiDocument: ReturnType<typeof createOpenApiDocument> | undefined;
@@ -94,6 +95,8 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.get('/openapi.json', (_request, response) => {
     response.status(200).json(openApiDocument());
   });
+
+  if (services.platform !== undefined) registerPlatformRoutes(router, services.platform);
 
   // Static /agents routes precede all dynamic identifiers.
   router.post(

@@ -25,3 +25,33 @@ export const apiRoutes = {
   health: '/health',
   openapi: '/openapi.json',
 } as const;
+
+export const platformApiRoutes = {
+  resources: '/v1/resources',
+  repositoryImports: '/v1/repository-imports',
+  releases: '/v1/releases',
+  release: (releaseId: string) => `/v1/releases/${releaseId}`,
+  authorityGrants: '/v1/authority-grants',
+  revokeAuthorityGrant: (grantId: string) => `/v1/authority-grants/${grantId}/revoke`,
+  executionRuns: '/v1/execution-runs',
+  executionRun: (runId: string) => `/v1/execution-runs/${runId}`,
+  approveExecutionRun: (runId: string) => `/v1/execution-runs/${runId}/approve`,
+  cancelExecutionRun: (runId: string) => `/v1/execution-runs/${runId}/cancel`,
+  outcomes: '/v1/outcomes',
+  metrics: '/v1/metrics',
+  releaseEvaluations: '/v1/release-evaluations',
+  releaseEvaluation: (evaluationId: string) => `/v1/release-evaluations/${evaluationId}`,
+  productionChannel: (channelKey: string) => `/v1/production-channels/${channelKey}`,
+  promoteRelease: (channelKey: string) => `/v1/production-channels/${channelKey}/promote`,
+  rollbackRelease: (channelKey: string) => `/v1/production-channels/${channelKey}/rollback`,
+  automationSchedules: '/v1/automation-schedules',
+  automationSchedule: (scheduleId: string) => `/v1/automation-schedules/${scheduleId}`,
+  automationScheduleState: (scheduleId: string) => `/v1/automation-schedules/${scheduleId}/state`,
+  scheduleDueAutomations: '/v1/automation-schedules/schedule-due',
+  observations: '/v1/observations',
+  improvementCandidates: '/v1/improvement-candidates',
+  reviewImprovementCandidate: (candidateId: string) =>
+    `/v1/improvement-candidates/${candidateId}/review`,
+  memoryCandidates: '/v1/memory-candidates',
+  reviewMemoryCandidate: (candidateId: string) => `/v1/memory-candidates/${candidateId}/review`,
+} as const;
