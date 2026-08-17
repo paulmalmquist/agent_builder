@@ -13,6 +13,8 @@ by source, generated OpenAPI, migrations, tests, and accepted architecture decis
 - `motion-polish-blueprint-prompt.md` — motion, disclosure, and blueprint-canvas visual direction.
 - `open-source-landscape-notes.md` — archived exploration of reusable public projects and missing
   platform capabilities; claims require fresh verification before use.
+- `operational-agent-proving-catalog.md` — accepted follow-on validation scope defining 16
+  substantial data and synthetic-manufacturing agents across five authority rungs.
 - `phase-2-quiet-console-plan.md` — the initial quiet-console, Plugin, reuse, and managed-workstation
   proposal that informed the recovery-first implementation plan.
 - `attention-console-mockup.html` — static, dependency-free Attention surface concept.
