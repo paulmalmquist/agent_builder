@@ -26,8 +26,17 @@ import type { CompleteServiceBundle } from './types.js';
 import {
   AnthropicModelProvider,
   DeterministicDailyBriefProvider,
+  EnvironmentPluginSecretResolver,
+  HttpPluginTransportAdapter,
+  PluginTransportRegistry,
+  UnavailablePluginTransportAdapter,
   type ModelProvider,
+  type PluginHealthProbe,
 } from '@paul-os/runtime';
+import {
+  DeterministicFeatureHashEmbeddingProvider,
+  type EmbeddingProvider,
+} from '@agent-builder/contracts';
 import { RegistryService } from './registry-service.js';
 import { ReleaseGovernanceService } from './release-governance-service.js';
 import { ExecutionService } from './execution-service.js';
@@ -35,6 +44,10 @@ import { AutomationLearningService } from './automation-learning-service.js';
 import { ExecutionDispatcher } from '../execution/dispatcher.js';
 import { AutomationScheduler } from '../automation/scheduler.js';
 import { AttentionService } from './attention-service.js';
+import { PluginService } from './plugin-service.js';
+import { PluginHealthScheduler } from '../plugins/health-scheduler.js';
+import { ReuseService } from './reuse-service.js';
+import { CatalogIndexScheduler } from '../catalog/index-scheduler.js';
 
 export function createServices(
   prisma: PrismaClient,
@@ -45,6 +58,8 @@ export function createServices(
     bigQueryClient?: BigQueryClientLike;
     certificationExecutor?: AgentExecutor;
     modelProvider?: ModelProvider;
+    pluginHealthProbe?: PluginHealthProbe;
+    embeddingProvider?: EmbeddingProvider;
   } = {},
 ): CompleteServiceBundle {
   const connectors = createKnowledgeConnectorRegistry(config, overrides.bigQueryClient);
@@ -102,6 +117,31 @@ export function createServices(
   }
   const execution = new ExecutionService(prisma, config, modelProvider);
   const attention = new AttentionService(prisma);
+  const pluginHealthProbe =
+    overrides.pluginHealthProbe ??
+    new PluginTransportRegistry([
+      new HttpPluginTransportAdapter(new EnvironmentPluginSecretResolver(process.env)),
+      new UnavailablePluginTransportAdapter('mcp'),
+      new UnavailablePluginTransportAdapter('cli'),
+      new UnavailablePluginTransportAdapter('db'),
+    ]);
+  const plugins = new PluginService(prisma, config, pluginHealthProbe);
+  const embeddingProvider =
+    overrides.embeddingProvider ??
+    (config.model.provider === 'deterministic'
+      ? new DeterministicFeatureHashEmbeddingProvider()
+      : undefined);
+  const reuse = new ReuseService(prisma, config.model.providerPolicy, embeddingProvider);
+  const catalogIndexScheduler = new CatalogIndexScheduler(
+    reuse.indexer,
+    logger,
+    config.environment !== 'test',
+  );
+  const pluginHealthScheduler = new PluginHealthScheduler(
+    plugins,
+    logger,
+    config.environment !== 'test',
+  );
   const executionDispatcher = new ExecutionDispatcher(
     config.execution.concurrency,
     execution,
@@ -135,8 +175,12 @@ export function createServices(
     certificationDispatcher,
     maintenance,
     automationScheduler,
+    pluginHealthScheduler,
+    catalogIndexScheduler,
     platform: {
       attention,
+      plugins,
+      reuse,
       registry: new RegistryService(prisma, config.repositorySourceCommit),
       releaseGovernance: new ReleaseGovernanceService(prisma),
       execution,

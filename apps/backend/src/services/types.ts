@@ -53,6 +53,10 @@ import type { AutomationLearningService } from './automation-learning-service.js
 import type { ReleaseGovernanceService } from './release-governance-service.js';
 import type { AutomationSchedulerApi } from '../automation/scheduler.js';
 import type { AttentionService } from './attention-service.js';
+import type { PluginService } from './plugin-service.js';
+import type { PluginHealthSchedulerApi } from '../plugins/health-scheduler.js';
+import type { CatalogIndexSchedulerApi } from '../catalog/index-scheduler.js';
+import type { ReuseService } from './reuse-service.js';
 
 export interface CatalogApi {
   list(query: AgentCatalogQuery): Promise<AgentCatalogResponse>;
@@ -165,11 +169,15 @@ export interface ServiceBundle {
   certificationDispatcher: CertificationDispatcherApi;
   maintenance: MaintenanceSchedulerApi;
   automationScheduler: AutomationSchedulerApi;
+  pluginHealthScheduler: PluginHealthSchedulerApi;
+  catalogIndexScheduler: CatalogIndexSchedulerApi;
   platform?: PlatformServices;
 }
 
 export interface PlatformServices {
   attention: AttentionService;
+  plugins: PluginService;
+  reuse: ReuseService;
   registry: RegistryService;
   releaseGovernance: ReleaseGovernanceService;
   execution: ExecutionService;

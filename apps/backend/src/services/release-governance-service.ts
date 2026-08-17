@@ -34,6 +34,7 @@ import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentRequestContext } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { appendPlatformEvent } from './attention-service.js';
+import { activateReleaseCatalogPublications } from './reuse-service.js';
 import {
   DeterministicContractReleaseEvaluator,
   deterministicContractDisclaimer,
@@ -669,15 +670,24 @@ export class ReleaseGovernanceService {
       },
     });
     await transaction.$queryRaw`SELECT set_config('paul_os.production_decision_id', ${decision.id}, true)`;
+    const promotedAt = new Date();
     const updated = await transaction.productionChannel.update({
       where: { key: channel.key },
       data: {
         currentReleaseId: input.releaseId,
         priorReleaseId: channel.currentReleaseId,
         promotedBy: input.actor,
-        promotedAt: new Date(),
+        promotedAt,
       },
       include: { currentRelease: true },
+    });
+    await activateReleaseCatalogPublications(transaction, {
+      releaseId: input.releaseId,
+      evaluationId: input.evaluationId,
+      decisionId: decision.id,
+      previousReleaseId: channel.currentReleaseId,
+      actor: input.actor,
+      now: promotedAt,
     });
     await appendAuditEvent(transaction, {
       action:

@@ -1,10 +1,11 @@
 import type { ResourceVersion } from '@agent-builder/contracts';
 import { Link, useSearchParams } from 'react-router-dom';
-import { usePlatformResources } from '../../api/hooks';
+import { usePlatformResources, usePlugins } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Notice } from '../../components/Notice';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
+import { PluginRegistry } from './PluginRegistry';
 
 const resourceKinds: Array<ResourceVersion['kind']> = [
   'Skill',
@@ -20,6 +21,8 @@ const resourceKinds: Array<ResourceVersion['kind']> = [
   'BusinessDomain',
   'ContextPolicy',
   'CorePolicy',
+  'Plugin',
+  'PluginPack',
 ];
 
 const lifecycles: Array<ResourceVersion['lifecycle']> = [
@@ -50,14 +53,22 @@ export function RegistryPage() {
     ...(debouncedQuery.trim() ? { query: debouncedQuery.trim() } : {}),
     limit: 100,
   });
+  const plugins = usePlugins({ includeDisabled: true, limit: 100 });
   const items = resources.data?.items ?? [];
+  const pluginItems = plugins.data?.items ?? [];
   const production = items.filter((resource) => resource.lifecycle === 'production').length;
   const candidates = items.filter((resource) => resource.lifecycle === 'candidate').length;
   const readings = [
     { label: 'VERSIONED RESOURCES', value: items.length },
     { label: 'PRODUCTION', value: production },
-    { label: 'CANDIDATES', value: candidates },
-    { label: 'DEFINITION SOURCE', value: 'GIT' },
+    {
+      label: 'PLUGINS READY',
+      value: pluginItems.filter((plugin) => plugin.healthStatus === 'healthy').length,
+    },
+    {
+      label: 'NEEDS REVIEW',
+      value: pluginItems.filter((plugin) => plugin.healthStatus === 'degraded').length + candidates,
+    },
   ];
 
   function setFilter(key: 'query' | 'kind' | 'lifecycle', value: string) {
@@ -77,6 +88,31 @@ export function RegistryPage() {
         title="Registry"
       />
       <InstrumentStrip readings={readings} />
+      <section aria-busy={plugins.isLoading} className="plugin-registry-section">
+        <header className="os-panel-heading">
+          <div>
+            <h2>Governed connections</h2>
+            <p>
+              Every transport becomes the same typed tool surface. Healthy connections stay quiet;
+              degraded connections rise first.
+            </p>
+          </div>
+          <small>MCP · HTTP · CLI · DATABASE</small>
+        </header>
+        {plugins.isError ? <Notice tone="error">{getErrorMessage(plugins.error)}</Notice> : null}
+        {plugins.isLoading ? (
+          <div className="os-empty-state" role="status">
+            Reading governed Plugins…
+          </div>
+        ) : null}
+        {!plugins.isLoading && pluginItems.length === 0 ? (
+          <div className="os-empty-state">
+            <strong>No Plugin definitions are available.</strong>
+            <span>Import a certified Plugin manifest to expose its typed tools here.</span>
+          </div>
+        ) : null}
+        {pluginItems.length > 0 ? <PluginRegistry plugins={pluginItems} /> : null}
+      </section>
       <div className="os-toolbar">
         <div className="os-toolbar-group">
           <label className="os-filter">

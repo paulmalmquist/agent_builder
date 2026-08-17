@@ -9,15 +9,19 @@ metadata:
   lifecycle: candidate
   provenance: synthetic
 dependencies:
-  - familyId: 00000000-0000-4000-8000-000000000001
+  - familyId: d0000000-0000-4000-8000-000000000001
     version: 1.0.0
 spec:
-  provider: fixture
-  capabilities: [record_lookup]
-  authority: curated
+  plugin:
+    familyId: d0000000-0000-4000-8000-000000000001
+    version: 1.0.0
+  capability: record_lookup
+  subset:
+    descriptor: planning-records
+    constraints:
+      syntheticOnly: true
   access: read_only
   citationRequired: true
   region: local
   dataClassification: synthetic
-  credentialRef: null
   clientMaySelectIdentifiers: false

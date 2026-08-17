@@ -157,10 +157,14 @@ async function createRun(
   estimatedUpperCostUsd = 0.1,
   developmentDraft = true,
 ): Promise<ExecutionRun> {
+  const entry = await prisma.releaseResource.findFirstOrThrow({
+    where: { releaseId: release.id, kind: ResourceKind.SKILL },
+  });
   return prisma.executionRun.create({
     data: {
       ...localScope,
       releaseId: release.id,
+      entryResourceVersionId: entry.resourceVersionId,
       authorityGrantId: grant.id,
       releaseDigest: release.digest,
       contextDigest,
@@ -204,10 +208,14 @@ async function fixture(
   } = {},
 ): Promise<Fixture> {
   const release = await dailyBriefRelease(options.projectId ?? null);
+  const entry = await prisma.releaseResource.findFirstOrThrow({
+    where: { releaseId: release.id, kind: ResourceKind.SKILL },
+  });
   const grant = await prisma.authorityGrant.create({
     data: {
       ...localScope,
       releaseId: release.id,
+      entryResourceVersionId: entry.resourceVersionId,
       releaseDigest: release.digest,
       contextDigest: options.contextDigest ?? contextDigest,
       projectId: release.projectId,

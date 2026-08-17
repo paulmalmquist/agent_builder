@@ -1,4 +1,5 @@
 import {
+  CatalogVisibility as DatabaseCatalogVisibility,
   ImprovementCandidateState,
   ResourceKind as DatabaseResourceKind,
   ResourceLifecycle as DatabaseResourceLifecycle,
@@ -6,6 +7,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import {
+  capabilityProfileSchema,
   createReleaseRequestSchema,
   jsonValueSchema,
   releaseBundleSchema,
@@ -18,7 +20,13 @@ import {
   type ReleaseBundle,
   type ResourceVersion,
 } from '@agent-builder/contracts';
-import { canonicalJson, compileResourceYaml, isFrozenLifecycle, sha256 } from '@paul-os/runtime';
+import {
+  assertPluginReferencesValid,
+  canonicalJson,
+  compileResourceYaml,
+  isFrozenLifecycle,
+  sha256,
+} from '@paul-os/runtime';
 import { z } from 'zod';
 import { appendAuditEvent } from '../audit.js';
 import { AppError } from '../errors.js';
@@ -40,6 +48,8 @@ const kindToDatabase = {
   MetricDefinition: DatabaseResourceKind.METRIC_DEFINITION,
   ImprovementCandidate: DatabaseResourceKind.IMPROVEMENT_CANDIDATE,
   Agent: DatabaseResourceKind.AGENT,
+  Plugin: DatabaseResourceKind.PLUGIN,
+  PluginPack: DatabaseResourceKind.PLUGIN_PACK,
 } as const;
 
 const kindToWire = Object.fromEntries(
@@ -59,8 +69,78 @@ const lifecycleToWire = Object.fromEntries(
   Object.entries(lifecycleToDatabase).map(([wire, database]) => [database, wire]),
 ) as Record<DatabaseResourceLifecycle, keyof typeof lifecycleToDatabase>;
 
+const catalogVisibilityToDatabase = {
+  private: DatabaseCatalogVisibility.PRIVATE,
+  department: DatabaseCatalogVisibility.DEPARTMENT,
+  organization: DatabaseCatalogVisibility.ORGANIZATION,
+} as const;
+
 type ResourceRecord = Prisma.ResourceVersionGetPayload<{ include: { family: true } }>;
 type ReleaseRecord = Prisma.ReleaseBundleGetPayload<{ include: { resources: true } }>;
+
+async function prepareCatalogPublications(
+  transaction: Prisma.TransactionClient,
+  release: { id: string; workspaceId: string; departmentId: string | null },
+  versions: Array<ResourceRecord>,
+  actor: string,
+): Promise<void> {
+  for (const version of versions) {
+    if (
+      version.family.kind !== DatabaseResourceKind.AGENT &&
+      version.family.kind !== DatabaseResourceKind.SKILL
+    ) {
+      continue;
+    }
+    const manifest = resourceManifestSchema.parse(version.definition);
+    const profileValue = manifest.metadata.capabilityProfile;
+    const visibility = manifest.metadata.catalogVisibility;
+    if (profileValue === undefined || visibility === undefined) continue;
+    const profile = capabilityProfileSchema.parse(profileValue);
+    const profileDigest = sha256(canonicalJson(profile));
+    const existingProfile = await transaction.capabilityProfile.findUnique({
+      where: { resourceVersionId: version.id },
+    });
+    if (existingProfile !== null && existingProfile.digest !== profileDigest) {
+      throw new AppError(
+        409,
+        'CAPABILITY_PROFILE_IMMUTABLE',
+        'A frozen resource version cannot change its governed capability profile',
+      );
+    }
+    const storedProfile =
+      existingProfile ??
+      (await transaction.capabilityProfile.create({
+        data: {
+          workspaceId: version.family.workspaceId,
+          departmentId: version.family.departmentId,
+          resourceVersionId: version.id,
+          schemaVersion: profile.schemaVersion,
+          profile: toPrismaJson(capabilityProfileSchema, profile, 'CapabilityProfile.profile'),
+          digest: profileDigest,
+          createdBy: actor,
+        },
+      }));
+    await transaction.catalogPublication.upsert({
+      where: {
+        releaseId_resourceVersionId: {
+          releaseId: release.id,
+          resourceVersionId: version.id,
+        },
+      },
+      create: {
+        workspaceId: release.workspaceId,
+        departmentId: release.departmentId,
+        resourceVersionId: version.id,
+        releaseId: release.id,
+        capabilityProfileId: storedProfile.id,
+        subjectKind: version.family.kind,
+        catalogVisibility: catalogVisibilityToDatabase[visibility],
+        preparedBy: actor,
+      },
+      update: {},
+    });
+  }
+}
 
 function assertAcyclicExactPins(
   versions: Array<{ familyId: string; version: string; dependencyPins: Prisma.JsonValue }>,
@@ -243,6 +323,8 @@ export class RegistryService {
         });
       }
 
+      const resolvedDependencies: Array<{ id: string; digest: string }> = [];
+      const resolvedDependencyManifests = [];
       for (const dependency of manifest.dependencies) {
         const found = await transaction.resourceVersion.findFirst({
           where: {
@@ -262,6 +344,35 @@ export class RegistryService {
             },
           );
         }
+        resolvedDependencies.push({ id: found.id, digest: found.digest });
+        resolvedDependencyManifests.push(resourceManifestSchema.parse(found.definition));
+      }
+      const resolvedManifestIds = new Set(resolvedDependencies.map(({ id }) => id));
+      let dependencyFrontier = [...resolvedManifestIds];
+      while (dependencyFrontier.length > 0) {
+        const transitivePins = await transaction.resourceDependencyPin.findMany({
+          where: { sourceVersionId: { in: dependencyFrontier } },
+          include: { targetVersion: true },
+        });
+        const next: string[] = [];
+        for (const pin of transitivePins) {
+          if (resolvedManifestIds.has(pin.targetVersionId)) continue;
+          resolvedManifestIds.add(pin.targetVersionId);
+          next.push(pin.targetVersionId);
+          resolvedDependencyManifests.push(
+            resourceManifestSchema.parse(pin.targetVersion.definition),
+          );
+        }
+        dependencyFrontier = next;
+      }
+      try {
+        assertPluginReferencesValid([manifest, ...resolvedDependencyManifests]);
+      } catch {
+        throw new AppError(
+          422,
+          'PLUGIN_REFERENCE_INVALID',
+          'The resource contains an invalid exact Plugin or capability reference',
+        );
       }
       const dependencyGraph = await transaction.resourceVersion.findMany({
         where: { family: visibleScope },
@@ -357,6 +468,22 @@ export class RegistryService {
           'RESOURCE_VERSION_IMMUTABLE',
           'A frozen resource version cannot be changed; create a successor version',
         );
+      }
+
+      if (!idempotent) {
+        await transaction.resourceDependencyPin.deleteMany({
+          where: { sourceVersionId: resource.id },
+        });
+      }
+      if (resolvedDependencies.length > 0) {
+        await transaction.resourceDependencyPin.createMany({
+          data: resolvedDependencies.map((dependency) => ({
+            sourceVersionId: resource.id,
+            targetVersionId: dependency.id,
+            targetDigest: dependency.digest,
+          })),
+          skipDuplicates: true,
+        });
       }
 
       const existingImport = await transaction.repositoryImport.findUnique({
@@ -552,7 +679,10 @@ export class RegistryService {
         where: { digest, ...aggregateScopeWhere() },
         include: { resources: true },
       });
-      if (existing !== null) return existing;
+      if (existing !== null) {
+        await prepareCatalogPublications(transaction, existing, ordered, actor);
+        return existing;
+      }
       const created = await transaction.releaseBundle.create({
         data: {
           ...scope,
@@ -570,6 +700,7 @@ export class RegistryService {
         },
         include: { resources: true },
       });
+      await prepareCatalogPublications(transaction, created, ordered, actor);
       await appendAuditEvent(transaction, {
         action: 'release.created',
         entityType: 'ReleaseBundle',

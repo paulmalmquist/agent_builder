@@ -3,7 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { App } from './App';
 import { renderWithClient } from './test/render';
-import { server } from './test/server';
+import {
+  catalogPublicationId,
+  lastBuilderDecision,
+  lastBuilderDecisionIdempotencyKey,
+  server,
+} from './test/server';
 
 async function defineScope(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /open step 01/i }));
@@ -18,13 +23,22 @@ async function defineScope(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Find reusable agents' }));
 }
 
-async function completeSpecification(user: ReturnType<typeof userEvent.setup>) {
-  await defineScope(user);
+async function chooseBuildNew(user: ReturnType<typeof userEvent.setup>) {
   await user.click(
     await screen.findByRole('button', {
       name: /none of these fit — build a new agent/i,
     }),
   );
+  await user.type(
+    screen.getByLabelText(/Why does the referred option not fit/i),
+    'This workflow needs a distinct approval boundary.',
+  );
+  await user.click(screen.getByRole('button', { name: 'Create new draft' }));
+}
+
+async function completeSpecification(user: ReturnType<typeof userEvent.setup>) {
+  await defineScope(user);
+  await chooseBuildNew(user);
   expect(await screen.findByText(/New draft created/i)).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: /open step 02/i }));
@@ -65,11 +79,7 @@ describe('Agent Builder workflow', () => {
     ).not.toBeInTheDocument();
 
     await defineScope(user);
-    await user.click(
-      await screen.findByRole('button', {
-        name: /none of these fit — build a new agent/i,
-      }),
-    );
+    await chooseBuildNew(user);
     expect(await screen.findByText(/New draft created/i)).toBeInTheDocument();
     await waitFor(() => expect(step02).toHaveAttribute('aria-disabled', 'false'));
     expect(step03).toHaveAttribute('aria-disabled', 'true');
@@ -99,81 +109,30 @@ describe('Agent Builder workflow', () => {
     await waitFor(() => expect(step04).toHaveAttribute('aria-disabled', 'false'));
   });
 
-  it('honors pre-completed sections returned by a branched specification', async () => {
-    const agentId = '11111111-1111-4111-8111-111111111111';
-    const specId = '22222222-2222-4222-8222-222222222222';
-    const now = '2026-07-31T14:00:00.000Z';
-    const branchedSpec = {
-      id: specId,
-      agentId,
-      baseAgentId: agentId,
-      derivationMode: 'configure',
-      interpretationId: null,
-      unconfirmedPrefill: null,
-      status: 'draft',
-      revision: 3,
-      outcomes: {
-        name: 'Supplier continuity analyst',
-        department: 'Manufacturing Operations',
-        purpose: 'Monitor supplier delays and prepare an evidence-backed escalation brief.',
-        audience: 'Supply planners and program managers',
-        desiredOutcomes: ['Identify at-risk builds'],
-        humanBaseline: 'A planner reconciles reports in 45 minutes.',
-        exclusions: ['Changing purchase orders'],
-      },
-      knowledge: {
-        sources: [
-          {
-            descriptorId: 'demo-build-genealogy',
-            purpose: 'Trace delayed supply to affected builds',
-            requiredCitations: true,
-          },
-        ],
-      },
-      guardrails: {
-        workflowStages: ['Retrieve governed evidence', 'Draft the requested output'],
-        prohibitedActions: [],
-        approvalRequirements: [],
-        failClosedConditions: ['Stop when a required source is unavailable'],
-        responseRequirements: {
-          citations: true,
-          confidence: true,
-          unresolvedConflicts: true,
-        },
-      },
-      outputs: null,
-      completion: {
-        outcomes: true,
-        knowledge: true,
-        guardrails: true,
-        outputs: false,
-      },
-      createdAt: now,
-      updatedAt: now,
+  it('creates a configuration overlay without forking a new specification', async () => {
+    let specCreates = 0;
+    const recordSpecCreation = ({ request }: { request: Request; requestId: string }) => {
+      if (new URL(request.url).pathname === '/v1/builder/specs' && request.method === 'POST') {
+        specCreates += 1;
+      }
     };
-    server.use(
-      http.post('http://localhost/agents/specs', () =>
-        HttpResponse.json(branchedSpec, { status: 201 }),
-      ),
-      http.get(`http://localhost/agents/specs/${specId}`, () => HttpResponse.json(branchedSpec)),
-    );
-
+    server.events.on('request:start', recordSpecCreation);
     const user = userEvent.setup();
-    renderWithClient(<App />);
-    await defineScope(user);
-    await user.click(await screen.findByRole('button', { name: /Supplier Risk Analyst/i }));
-    await user.click(await screen.findByRole('button', { name: /^Configure/i }));
+    try {
+      renderWithClient(<App />);
+      await defineScope(user);
+      await user.click(await screen.findByRole('button', { name: /Configure overlay/i }));
+      await user.click(screen.getByRole('button', { name: 'Create overlay' }));
 
-    expect(await screen.findByText(/Configured branch created/i)).toBeInTheDocument();
-    const step02 = screen.getByRole('button', { name: /open step 02/i });
-    const step03 = screen.getByRole('button', { name: /open step 03/i });
-    const step04 = screen.getByRole('button', { name: /open step 04/i });
-    await waitFor(() => {
-      expect(step02).toHaveAttribute('aria-disabled', 'false');
-      expect(step03).toHaveAttribute('aria-disabled', 'false');
-      expect(step04).toHaveAttribute('aria-disabled', 'false');
-    });
-    expect(step04.closest('.workflow-row')).toHaveAttribute('data-next-actionable', 'true');
+      expect(await screen.findByText(/certified agent was not forked/i)).toBeInTheDocument();
+      expect(specCreates).toBe(0);
+      expect(screen.getByRole('button', { name: /open step 02/i })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    } finally {
+      server.events.removeListener('request:start', recordSpecCreation);
+    }
   });
 
   it('searches the canonical catalog before creating a draft', async () => {
@@ -187,9 +146,59 @@ describe('Agent Builder workflow', () => {
 
     await defineScope(user);
 
-    expect(await screen.findByText(/Reuse candidates are ranked/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Referred choices are ready/i)).toBeInTheDocument();
     expect(await screen.findByText('87% MATCH')).toBeInTheDocument();
-    expect(screen.getByText(/Closest semantic match: 87%/i)).toBeInTheDocument();
+    expect(screen.getByText(/Closest certified match: 87%/i)).toBeInTheDocument();
+    expect(screen.getByText(/Certified · 12\/12 gates/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Structured-only fallback').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Custom approval brief/i)).toBeInTheDocument();
+    expect(screen.getByText(/9 active · 14 total deployments/i)).toBeInTheDocument();
+    expect(screen.getByText(/92% success across 50 runs/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$0.31 per run/i)).toBeInTheDocument();
+  });
+
+  it('records an idempotent use-as-is deployment without any legacy Build request', async () => {
+    const legacyPaths: string[] = [];
+    const recordLegacyPath = ({ request }: { request: Request; requestId: string }) => {
+      const path = new URL(request.url).pathname;
+      if (path.startsWith('/agents')) legacyPaths.push(path);
+    };
+    server.events.on('request:start', recordLegacyPath);
+    const user = userEvent.setup();
+    try {
+      renderWithClient(<App />);
+      await defineScope(user);
+      await user.click(
+        await screen.findByRole('button', { name: /Use Supplier Risk Analyst as-is/i }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Create deployment' }));
+
+      expect(await screen.findByText(/No draft was created/i)).toBeInTheDocument();
+      expect(lastBuilderDecision).toEqual({
+        action: 'use_as_is',
+        selectedPublicationId: catalogPublicationId,
+        buildNewReason: null,
+      });
+      expect(lastBuilderDecisionIdempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(legacyPaths).toEqual([]);
+    } finally {
+      server.events.removeListener('request:start', recordLegacyPath);
+    }
+  });
+
+  it('records Extend as a forked guided draft', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<App />);
+    await defineScope(user);
+    await user.click(await screen.findByRole('button', { name: /Extend as fork/i }));
+    await user.click(screen.getByRole('button', { name: 'Create extension draft' }));
+
+    expect(await screen.findByText(/recorded source lineage/i)).toBeInTheDocument();
+    expect(lastBuilderDecision).toEqual({
+      action: 'extend',
+      selectedPublicationId: catalogPublicationId,
+      buildNewReason: null,
+    });
   });
 
   it('completes all sections, generates, and enters shadow evaluation', async () => {
@@ -216,7 +225,7 @@ describe('Agent Builder workflow', () => {
     const specId = '22222222-2222-4222-8222-222222222222';
     let recoverCalls = 0;
     server.use(
-      http.get(`http://localhost/agents/generation-jobs/${jobId}`, () =>
+      http.get(`http://localhost/v1/builder/generation-jobs/${jobId}`, () =>
         HttpResponse.json({
           id: jobId,
           agentId,
@@ -235,7 +244,7 @@ describe('Agent Builder workflow', () => {
           updatedAt: '2026-07-31T14:00:00.000Z',
         }),
       ),
-      http.post(`http://localhost/agents/${agentId}/recover`, () => {
+      http.post(`http://localhost/v1/builder/agents/${agentId}/recover`, () => {
         recoverCalls += 1;
         return HttpResponse.json({ agentId, status: 'draft' });
       }),

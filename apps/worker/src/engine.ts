@@ -10,8 +10,10 @@ import {
   type ModelRequest,
   type ModelStreamEvent,
   type ModelUsage,
+  PluginRuntimeError,
 } from '@paul-os/runtime';
 import type { WorkerConfig } from './config.js';
+import type { WorkerPluginPlanCoordinator } from './plugin-plan.js';
 import type { ClaimedRun, ProviderUsageSettlement, WorkerStore } from './types.js';
 
 class WorkerFault extends Error {
@@ -98,6 +100,7 @@ async function consumeModelStream(
 
 function classifyFailure(error: unknown): WorkerFault {
   if (error instanceof WorkerFault) return error;
+  if (error instanceof PluginRuntimeError) return new WorkerFault(error.code, false);
   if (error instanceof DOMException && error.name === 'TimeoutError') {
     return new WorkerFault('MODEL_TIMEOUT', true);
   }
@@ -113,6 +116,7 @@ export class ExecutionEngine {
     private readonly provider: ModelProvider,
     private readonly config: WorkerConfig,
     private readonly logger: Logger,
+    private readonly pluginPlans?: WorkerPluginPlanCoordinator,
   ) {}
 
   async recover(): Promise<void> {
@@ -156,14 +160,18 @@ export class ExecutionEngine {
     );
     const started = performance.now();
     let observedUsage: ModelUsage | null = null;
+    let observedPluginCostUsd = 0;
     const incurredUsage = (): ProviderUsageSettlement | undefined => {
-      if (observedUsage === null) return undefined;
+      if (observedUsage === null && observedPluginCostUsd === 0) return undefined;
+      const usage = observedUsage ?? { inputTokens: 0, outputTokens: 0 };
+      const modelCostUsd =
+        (usage.inputTokens * this.config.pricing.inputUsdPerMillionTokens +
+          usage.outputTokens * this.config.pricing.outputUsdPerMillionTokens) /
+        1_000_000;
       return {
-        usage: observedUsage,
-        actualCostUsd:
-          (observedUsage.inputTokens * this.config.pricing.inputUsdPerMillionTokens +
-            observedUsage.outputTokens * this.config.pricing.outputUsdPerMillionTokens) /
-          1_000_000,
+        usage,
+        actualCostUsd: modelCostUsd + observedPluginCostUsd,
+        pluginCostUsd: observedPluginCostUsd,
         latencyMs: performance.now() - started,
         pricingVersion: this.config.pricing.version,
         providerKind: this.provider.kind,
@@ -192,6 +200,15 @@ export class ExecutionEngine {
       const inputResult = dailyBriefInputSchema.safeParse(run.input);
       if (!inputResult.success) throw new WorkerFault('RUN_INPUT_SCHEMA_INVALID', false);
       const input = inputResult.data;
+      const pluginResult =
+        this.pluginPlans === undefined
+          ? { context: {}, costUsd: 0 }
+          : await this.pluginPlans.execute(run, workerId, controller.signal);
+      observedPluginCostUsd = pluginResult.costUsd;
+      const baseContext = providerContextValues(executionContext);
+      if (Object.hasOwn(baseContext, 'pluginResults')) {
+        throw new WorkerFault('PLUGIN_CONTEXT_KEY_CONFLICT', false);
+      }
       const timeout = AbortSignal.timeout(this.config.provider.timeoutMs);
       const signal = AbortSignal.any([controller.signal, timeout]);
       const response = await consumeModelStream(
@@ -200,7 +217,10 @@ export class ExecutionEngine {
           system:
             'Create a concise daily briefing. Return only JSON matching the requested output contract. Never invent source facts or citations.',
           input,
-          context: providerContextValues(executionContext),
+          context:
+            Object.keys(pluginResult.context).length === 0
+              ? baseContext
+              : { ...baseContext, pluginResults: pluginResult.context },
           maxOutputTokens: run.maxOutputTokens,
           timeoutMs: this.config.provider.timeoutMs,
         },
@@ -218,14 +238,16 @@ export class ExecutionEngine {
       if (invalidDailyBriefCitations(input, output).length > 0) {
         throw new WorkerFault('MODEL_CITATION_OUTSIDE_INPUT_PROVENANCE', false);
       }
-      const actualCostUsd =
+      const modelCostUsd =
         (response.usage.inputTokens * this.config.pricing.inputUsdPerMillionTokens +
           response.usage.outputTokens * this.config.pricing.outputUsdPerMillionTokens) /
         1_000_000;
+      const actualCostUsd = modelCostUsd + observedPluginCostUsd;
       const completed = await this.store.complete(run, workerId, {
         output,
         usage: response.usage,
         actualCostUsd,
+        pluginCostUsd: observedPluginCostUsd,
         latencyMs: performance.now() - started,
         qualityScore: scoreDailyBriefQuality(input, output),
         pricingVersion: this.config.pricing.version,
@@ -254,6 +276,29 @@ export class ExecutionEngine {
       if (error instanceof RunCancelled) {
         await this.store.cancelClaimed(run.id, workerId, incurredUsage());
         this.logger.info({ runId: run.id }, 'Execution run cancelled');
+        return;
+      }
+      if (
+        error instanceof PluginRuntimeError &&
+        [
+          'PLUGIN_DISABLED',
+          'PLUGIN_WORKSTATION_UNAVAILABLE',
+          'PLUGIN_HTTP_UNAVAILABLE',
+          'PLUGIN_MCP_UNAVAILABLE',
+          'PLUGIN_CLI_UNAVAILABLE',
+          'PLUGIN_DB_UNAVAILABLE',
+        ].includes(error.code)
+      ) {
+        await this.store.pauseForPlugin(run.id, workerId, error.code, incurredUsage());
+        this.logger.warn({ runId: run.id, code: error.code }, 'Execution paused for Plugin');
+        return;
+      }
+      if (error instanceof PluginRuntimeError && error.code === 'PLUGIN_RUN_LEASE_LOST') {
+        this.logger.warn({ runId: run.id }, 'Plugin execution lease was lost; result discarded');
+        return;
+      }
+      if (error instanceof PluginRuntimeError && error.code === 'RUN_CANCELLED') {
+        await this.store.cancelClaimed(run.id, workerId, incurredUsage());
         return;
       }
       const failure = classifyFailure(error);

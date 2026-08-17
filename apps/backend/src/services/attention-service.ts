@@ -4,6 +4,7 @@ import {
   ExecutionRunState,
   ImprovementCandidateState,
   MemoryCandidateState,
+  PluginInstallationState,
   ReleaseEvaluationVerdict,
   type DigestDeliveryAttempt,
   type DigestSnapshot as DigestSnapshotRecord,
@@ -40,6 +41,10 @@ import { requireHumanActor } from './actors.js';
 
 const stringArraySchema = z.array(z.string());
 const MAX_DIGEST_EVENTS = 250;
+
+type DegradedPluginRecord = Prisma.PluginInstallationGetPayload<{
+  include: { pluginVersion: { include: { family: true } } };
+}>;
 
 interface PlatformEventInput {
   kind: string;
@@ -446,72 +451,92 @@ export class AttentionService {
         actorId: principal.actorId,
       },
     });
-    const [approvals, evaluations, memory, improvements, degradedRuns, resolutions, events] =
-      await Promise.all([
-        this.prisma.approvalRequest.findMany({
-          where: { state: ApprovalRequestState.PENDING, run: scope },
-          include: { run: true },
-          orderBy: { createdAt: 'asc' },
-        }),
-        this.prisma.releaseEvaluation.findMany({
-          where: {
-            verdict: ReleaseEvaluationVerdict.PASSED,
-            release: scope,
-            promotionDecisions: { none: {} },
-            declineDecisions: { none: {} },
+    const [
+      approvals,
+      evaluations,
+      memory,
+      improvements,
+      degradedRuns,
+      degradedPlugins,
+      resolutions,
+      events,
+    ] = await Promise.all([
+      this.prisma.approvalRequest.findMany({
+        where: { state: ApprovalRequestState.PENDING, run: scope },
+        include: { run: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.releaseEvaluation.findMany({
+        where: {
+          verdict: ReleaseEvaluationVerdict.PASSED,
+          release: scope,
+          promotionDecisions: { none: {} },
+          declineDecisions: { none: {} },
+        },
+        include: {
+          release: {
+            include: { resources: { include: { resourceVersion: true } } },
           },
-          include: {
-            release: {
-              include: { resources: { include: { resourceVersion: true } } },
+        },
+        orderBy: { finishedAt: 'asc' },
+      }),
+      this.prisma.memoryCandidate.findMany({
+        where: { state: MemoryCandidateState.STAGED, sourceRun: scope },
+        include: { sourceRun: true },
+        orderBy: { stagedAt: 'asc' },
+      }),
+      this.prisma.improvementCandidate.findMany({
+        where: { state: ImprovementCandidateState.PROPOSED, observation: scope },
+        include: { observation: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.executionRun.findMany({
+        where: {
+          AND: [
+            scope,
+            {
+              OR: [
+                { state: ExecutionRunState.FAILED },
+                { state: ExecutionRunState.PAUSED_BUDGET },
+                { state: ExecutionRunState.PAUSED_PLUGIN },
+                {
+                  state: ExecutionRunState.RUNNING,
+                  leaseExpiresAt: { lt: now },
+                },
+              ],
             },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.pluginInstallation.findMany({
+        where: {
+          ...scope,
+          state: {
+            in: [PluginInstallationState.DEGRADED, PluginInstallationState.DISABLED],
           },
-          orderBy: { finishedAt: 'asc' },
-        }),
-        this.prisma.memoryCandidate.findMany({
-          where: { state: MemoryCandidateState.STAGED, sourceRun: scope },
-          include: { sourceRun: true },
-          orderBy: { stagedAt: 'asc' },
-        }),
-        this.prisma.improvementCandidate.findMany({
-          where: { state: ImprovementCandidateState.PROPOSED, observation: scope },
-          include: { observation: true },
-          orderBy: { createdAt: 'asc' },
-        }),
-        this.prisma.executionRun.findMany({
-          where: {
-            AND: [
-              scope,
-              {
-                OR: [
-                  { state: ExecutionRunState.FAILED },
-                  { state: ExecutionRunState.PAUSED_BUDGET },
-                  {
-                    state: ExecutionRunState.RUNNING,
-                    leaseExpiresAt: { lt: now },
-                  },
-                ],
-              },
-            ],
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 50,
-        }),
-        this.prisma.attentionResolution.findMany({
-          where: {
-            workspaceId: principal.workspaceId,
-            departmentScopeKey: departmentScopeKey(principal.departmentId),
-          },
-          select: { itemId: true },
-        }),
-        this.prisma.platformEvent.findMany({
-          where: {
-            ...scope,
-            sequence: { gt: cursor?.lastDeliveredEventSequence ?? 0n },
-            occurredAt: { lte: now },
-          },
-          orderBy: { sequence: 'asc' },
-        }),
-      ]);
+        },
+        include: { pluginVersion: { include: { family: true } } },
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.attentionResolution.findMany({
+        where: {
+          workspaceId: principal.workspaceId,
+          departmentScopeKey: departmentScopeKey(principal.departmentId),
+        },
+        select: { itemId: true },
+      }),
+      this.prisma.platformEvent.findMany({
+        where: {
+          ...scope,
+          sequence: { gt: cursor?.lastDeliveredEventSequence ?? 0n },
+          occurredAt: { lte: now },
+        },
+        orderBy: { sequence: 'asc' },
+      }),
+    ]);
 
     const decide: AttentionItem[] = [
       ...approvals.map(({ run, ...approval }) => this.executionApprovalItem(run, approval)),
@@ -530,12 +555,15 @@ export class AttentionService {
       ...improvements.map((candidate) => this.improvementItem(candidate)),
     ];
     const resolvedIds = new Set(resolutions.map(({ itemId: resolvedItemId }) => resolvedItemId));
-    const degraded = degradedRuns
-      .map((run) => this.degradedRunItem(run, now))
-      .filter(
-        ({ id: degradedItemId, payload }) =>
-          payload.metadata['state'] !== 'failed' || !resolvedIds.has(degradedItemId),
-      );
+    const degraded = [
+      ...degradedPlugins.map((installation) => this.degradedPluginItem(installation)),
+      ...degradedRuns
+        .map((run) => this.degradedRunItem(run, now))
+        .filter(
+          ({ id: degradedItemId, payload }) =>
+            payload.metadata['state'] !== 'failed' || !resolvedIds.has(degradedItemId),
+        ),
+    ];
     const digest = summarizePlatformEventCounts(events, cursor?.lastDeliveredAt ?? null, now);
     return attentionResponseSchema.parse({
       generatedAt: now.toISOString(),
@@ -609,15 +637,12 @@ export class AttentionService {
     });
   }
 
-  async createDigestSnapshot(windowEndedAt = new Date()): Promise<DigestSnapshot> {
+  async createDigestSnapshot(): Promise<DigestSnapshot> {
     const principal = currentRequestPrincipal();
-    return this.createDigestSnapshotForActor(principal.actorId, windowEndedAt);
+    return this.createDigestSnapshotForActor(principal.actorId);
   }
 
-  async createDigestSnapshotForActor(
-    actorId: string,
-    windowEndedAt = new Date(),
-  ): Promise<DigestSnapshot> {
+  async createDigestSnapshotForActor(actorId: string): Promise<DigestSnapshot> {
     const principal = currentRequestPrincipal();
     if (principal.authentication !== 'system' && principal.actorId !== actorId) {
       throw new AppError(
@@ -675,7 +700,9 @@ export class AttentionService {
         if (first === undefined || last === undefined) {
           throw new AppError(500, 'INTERNAL_ERROR', 'Digest sequence window is unavailable');
         }
-        const windowStartedAt = cursor.lastDeliveredAt ?? first.occurredAt;
+        const eventTimes = events.map(({ occurredAt }) => occurredAt.getTime());
+        const windowStartedAt = new Date(Math.min(...eventTimes));
+        const windowEndedAt = new Date(Math.max(...eventTimes));
         const summary = summarizePlatformEventsForDigest(events, windowStartedAt, windowEndedAt);
         return transaction.digestSnapshot.upsert({
           where: {
@@ -1170,19 +1197,26 @@ export class AttentionService {
 
   private degradedRunItem(run: ExecutionRun, now: Date): AttentionItem {
     const budgetStop = run.state === ExecutionRunState.PAUSED_BUDGET;
+    const pluginPaused = run.state === ExecutionRunState.PAUSED_PLUGIN;
     const stalled =
       run.state === ExecutionRunState.RUNNING &&
       (run.leaseExpiresAt?.getTime() ?? 0) < now.getTime();
-    const kind: AttentionItem['kind'] = budgetStop ? 'budget_stop' : 'stalled_run';
+    const kind: AttentionItem['kind'] = budgetStop
+      ? 'budget_stop'
+      : pluginPaused
+        ? 'plugin_health'
+        : 'stalled_run';
     return attentionItemSchema.parse({
       id: itemId(kind, run.id),
       kind,
       shelf: 'degraded',
       headline: budgetStop
         ? 'Safety stop: this run exceeds its cost limit.'
-        : stalled
-          ? 'A run stopped sending heartbeats.'
-          : 'A run failed before it produced an outcome.',
+        : pluginPaused
+          ? 'A required Plugin is unavailable.'
+          : stalled
+            ? 'A run stopped sending heartbeats.'
+            : 'A run failed before it produced an outcome.',
       delta: `${run.progress}% complete · ${run.message}`,
       status: budgetStop ? 'safety_stop' : 'degraded',
       primaryAction: {
@@ -1207,9 +1241,11 @@ export class AttentionService {
       },
       reason: budgetStop
         ? 'The configured cost ceiling stopped execution before more could be spent.'
-        : stalled
-          ? 'The worker lease expired. Recovery must decide whether to retry.'
-          : 'The execution service recorded a terminal failure.',
+        : pluginPaused
+          ? 'The run is held. It will not perform late work while its required Plugin is unavailable.'
+          : stalled
+            ? 'The worker lease expired. Recovery must decide whether to retry.'
+            : 'The execution service recorded a terminal failure.',
       provenance: {
         sourceType: 'ExecutionRun',
         sourceId: run.id,
@@ -1236,6 +1272,63 @@ export class AttentionService {
           { label: 'Cost limit', value: `$${run.maxEstimatedCostUsd.toNumber().toFixed(2)}` },
         ],
         metadata: { state: run.state.toLowerCase(), message: run.message },
+      },
+    });
+  }
+
+  private degradedPluginItem(installation: DegradedPluginRecord): AttentionItem {
+    const state = installation.state.toLowerCase();
+    return attentionItemSchema.parse({
+      id: itemId('plugin_health', installation.id),
+      kind: 'plugin_health',
+      shelf: 'degraded',
+      headline:
+        installation.state === PluginInstallationState.DISABLED
+          ? `${installation.pluginVersion.family.name} is disabled.`
+          : `${installation.pluginVersion.family.name} is degraded.`,
+      delta: 'Required calls are held · no silent fallback is allowed',
+      status: 'degraded',
+      primaryAction: {
+        kind: 'open_details',
+        ...consoleActionCopy.reviewFlightRecorder,
+        resourceId: installation.id,
+        requiresRationale: false,
+      },
+      secondaryAction: null,
+      cost: null,
+      reason:
+        installation.state === PluginInstallationState.DISABLED
+          ? 'The kill switch is active. New calls fail closed until a human enables this Plugin.'
+          : 'The latest governed health evidence did not pass. New calls fail closed.',
+      provenance: {
+        sourceType: 'PluginInstallation',
+        sourceId: installation.id,
+        actorId: installation.updatedBy,
+        requestId: null,
+        explanation: 'Plugin installation state placed this item on the Degraded shelf.',
+      },
+      occurredAt: iso(installation.updatedAt),
+      payload: {
+        sourceType: 'PluginInstallation',
+        sourceId: installation.id,
+        detailPath: `/v1/plugin-installations/${installation.id}`,
+        scopes: [],
+        runId: null,
+        candidateId: null,
+        channelKey: null,
+        releaseId: null,
+        evaluationId: null,
+        expiresAt: null,
+        reviewFacts: [
+          { label: 'Plugin', value: installation.pluginVersion.family.name },
+          { label: 'Version', value: installation.pluginVersion.version },
+          { label: 'Recorded state', value: state },
+        ],
+        metadata: {
+          state,
+          pluginVersionId: installation.pluginVersionId,
+          pluginDigest: installation.pluginDigest,
+        },
       },
     });
   }

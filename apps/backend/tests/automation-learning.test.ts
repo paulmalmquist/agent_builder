@@ -32,6 +32,7 @@ describe('automation and learning contracts', () => {
       name: 'Daily briefing',
       channelKey: 'daily-brief-production',
       releaseId: '00000000-0000-4000-8000-000000000001',
+      entryResourceVersionId: '00000000-0000-4000-8000-000000000002',
       authorityGrantId: null,
       timezone: 'America/New_York',
       intervalSeconds: 86_400,

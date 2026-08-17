@@ -1,10 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 import { pino } from 'pino';
+import {
+  EnvironmentPluginSecretResolver,
+  HttpPluginTransportAdapter,
+  PluginTransportRegistry,
+  UnavailablePluginTransportAdapter,
+} from '@paul-os/runtime';
 import { loadWorkerConfig } from './config.js';
 import { WorkerDaemon } from './daemon.js';
 import { ExecutionEngine } from './engine.js';
 import { createModelProvider } from './provider.js';
 import { PrismaWorkerStore } from './store.js';
+import { WorkerPluginExecutor } from './plugin-execution.js';
+import { WorkerPluginPlanCoordinator } from './plugin-plan.js';
+import { PrismaWorkerPluginExecutionStore } from './plugin-store.js';
 
 const config = loadWorkerConfig();
 const logger = pino({
@@ -27,7 +36,16 @@ const logger = pino({
 const prisma = new PrismaClient();
 const provider = createModelProvider(config);
 const store = new PrismaWorkerStore(prisma);
-const engine = new ExecutionEngine(store, provider, config, logger);
+const pluginStore = new PrismaWorkerPluginExecutionStore(prisma);
+const pluginRuntime = new PluginTransportRegistry([
+  new HttpPluginTransportAdapter(new EnvironmentPluginSecretResolver(process.env)),
+  new UnavailablePluginTransportAdapter('mcp'),
+  new UnavailablePluginTransportAdapter('cli'),
+  new UnavailablePluginTransportAdapter('db'),
+]);
+const pluginExecutor = new WorkerPluginExecutor(pluginStore, pluginRuntime);
+const pluginPlans = new WorkerPluginPlanCoordinator(pluginStore, pluginExecutor);
+const engine = new ExecutionEngine(store, provider, config, logger, pluginPlans);
 const daemon = new WorkerDaemon(engine, config, logger);
 
 let stopping = false;
@@ -53,4 +71,7 @@ export { WorkerDaemon } from './daemon.js';
 export { ExecutionEngine } from './engine.js';
 export { createModelProvider } from './provider.js';
 export { PrismaWorkerStore } from './store.js';
+export { WorkerPluginExecutor } from './plugin-execution.js';
+export { WorkerPluginPlanCoordinator } from './plugin-plan.js';
+export { PrismaWorkerPluginExecutionStore } from './plugin-store.js';
 export type * from './types.js';

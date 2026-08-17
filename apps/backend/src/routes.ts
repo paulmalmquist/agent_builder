@@ -98,6 +98,173 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
 
   if (services.platform !== undefined) registerPlatformRoutes(router, services.platform);
 
+  // Versioned Builder facade. It intentionally reuses the existing services while the
+  // agent-centric persistence is retired behind the control-plane contract.
+  router.get(
+    '/v1/builder/sources',
+    asyncRoute(async (request, response) => {
+      const query = sourceQuerySchema.parse(request.query);
+      const role = query.role ?? null;
+      send(response, 200, sourceListResponseSchema, {
+        role,
+        items: await services.sources.list(role),
+      });
+    }),
+  );
+  router.post(
+    '/v1/builder/specs/interpret',
+    asyncRoute(async (request, response) => {
+      const input = interpretSpecRequestSchema.parse(request.body);
+      send(
+        response,
+        200,
+        interpretSpecResponseSchema,
+        await services.interpretations.interpret(input),
+      );
+    }),
+  );
+  router.post(
+    '/v1/builder/specs',
+    asyncRoute(async (request, response) => {
+      const input = createSpecRequestSchema.parse(request.body);
+      send(response, 201, agentSpecSchema, await services.specs.create(input));
+    }),
+  );
+  router.get(
+    '/v1/builder/specs/:specId',
+    uuidRouteParam('specId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        agentSpecSchema,
+        await services.specs.get(request.params['specId'] as string),
+      );
+    }),
+  );
+  router.put(
+    '/v1/builder/specs/:specId/outcomes',
+    uuidRouteParam('specId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        agentSpecSchema,
+        await services.specs.updateOutcomes(
+          request.params['specId'] as string,
+          updateOutcomesRequestSchema.parse(request.body),
+        ),
+      );
+    }),
+  );
+  router.put(
+    '/v1/builder/specs/:specId/knowledge',
+    uuidRouteParam('specId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        agentSpecSchema,
+        await services.specs.updateKnowledge(
+          request.params['specId'] as string,
+          updateKnowledgeRequestSchema.parse(request.body),
+        ),
+      );
+    }),
+  );
+  router.put(
+    '/v1/builder/specs/:specId/guardrails',
+    uuidRouteParam('specId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        agentSpecSchema,
+        await services.specs.updateGuardrails(
+          request.params['specId'] as string,
+          updateGuardrailsRequestSchema.parse(request.body),
+        ),
+      );
+    }),
+  );
+  router.put(
+    '/v1/builder/specs/:specId/outputs',
+    uuidRouteParam('specId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        agentSpecSchema,
+        await services.specs.updateOutputs(
+          request.params['specId'] as string,
+          updateOutputsRequestSchema.parse(request.body),
+        ),
+      );
+    }),
+  );
+  router.post(
+    '/v1/builder/specs/:specId/generate',
+    uuidRouteParam('specId'),
+    asyncRoute(async (request, response) => {
+      const accepted = await services.generation.accept(request.params['specId'] as string);
+      const versioned = {
+        ...accepted,
+        statusUrl: `/v1/builder/generation-jobs/${accepted.jobId}`,
+      };
+      response.location(versioned.statusUrl);
+      services.dispatcher.enqueue(accepted.jobId);
+      send(response, 202, generationAcceptedSchema, versioned);
+    }),
+  );
+  router.get(
+    '/v1/builder/generation-jobs/:jobId',
+    uuidRouteParam('jobId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        generationJobSchema,
+        await services.generation.getJob(request.params['jobId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/builder/agents/:agentId/recover',
+    uuidRouteParam('agentId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        recoverAgentResponseSchema,
+        await services.deployment.recover(request.params['agentId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/builder/agents/:agentId/shadow-deploy',
+    uuidRouteParam('agentId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        shadowDeployResponseSchema,
+        await services.deployment.shadowDeploy(request.params['agentId'] as string),
+      );
+    }),
+  );
+  router.get(
+    '/v1/builder/agents/:agentId/evaluation',
+    uuidRouteParam('agentId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        evaluationResponseSchema,
+        await services.deployment.evaluation(request.params['agentId'] as string),
+      );
+    }),
+  );
+
   // Static /agents routes precede all dynamic identifiers.
   router.post(
     '/agents/similarity',

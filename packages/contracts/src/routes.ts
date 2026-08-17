@@ -60,4 +60,19 @@ export const platformApiRoutes = {
     `/v1/improvement-candidates/${candidateId}/review`,
   memoryCandidates: '/v1/memory-candidates',
   reviewMemoryCandidate: (candidateId: string) => `/v1/memory-candidates/${candidateId}/review`,
+  plugins: '/v1/plugins',
+  plugin: (pluginVersionId: string) => `/v1/plugins/${pluginVersionId}`,
+  pluginInstallations: '/v1/plugin-installations',
+  pluginInstallation: (installationId: string) => `/v1/plugin-installations/${installationId}`,
+  configurePluginInstallation: (installationId: string) =>
+    `/v1/plugin-installations/${installationId}/configure`,
+  checkPluginHealth: (installationId: string) =>
+    `/v1/plugin-installations/${installationId}/health-check`,
+  enablePluginInstallation: (installationId: string) =>
+    `/v1/plugin-installations/${installationId}/enable`,
+  disablePluginInstallation: (installationId: string) =>
+    `/v1/plugin-installations/${installationId}/disable`,
+  pluginUsedBy: (installationId: string) => `/v1/plugin-installations/${installationId}/used-by`,
+  uninstallPlugin: (installationId: string) =>
+    `/v1/plugin-installations/${installationId}/uninstall`,
 } as const;

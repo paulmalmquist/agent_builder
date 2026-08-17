@@ -29,6 +29,25 @@ function elapsed(start: string | null, end: string | null) {
   return `${(milliseconds / 1_000).toFixed(milliseconds < 10_000 ? 1 : 0)} s`;
 }
 
+function PluginScopeSummary({ scopes }: { scopes: ExecutionRun['requiredPluginScopes'] }) {
+  if (scopes.length === 0) return null;
+  return (
+    <div className="run-plugin-scopes">
+      <strong>PLUGIN ACCESS</strong>
+      <ul>
+        {scopes.map((scope) => (
+          <li key={`${scope.installationId}:${scope.tool}`}>
+            <span>{scope.scopeDescription}</span>
+            <small>
+              {scope.effect} · {scope.executionPlacement.replace('_', ' ')}
+            </small>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function RunFlightRecorder({ run }: { run: ExecutionRun }) {
   const terminal = ['succeeded', 'failed', 'cancelled'].includes(run.state);
   return (
@@ -52,7 +71,9 @@ function RunFlightRecorder({ run }: { run: ExecutionRun }) {
           <span>02</span>
           <div>
             <strong>AUTHORITY</strong>
-            <small>{run.requiredToolScopes.length} bounded scopes</small>
+            <small>
+              {run.requiredToolScopes.length + run.requiredPluginScopes.length} bounded scopes
+            </small>
           </div>
           <em>
             {run.authorityGrantId
@@ -210,6 +231,7 @@ export function RunsPage() {
                   </span>
                   <span>START · {time(run.startedAt)}</span>
                 </div>
+                <PluginScopeSummary scopes={run.requiredPluginScopes} />
                 <RunFlightRecorder run={run} />
                 {run.state === 'awaiting_approval' ? (
                   <button
@@ -273,8 +295,21 @@ export function RunsPage() {
                     BUDGET · {money(grant.spentCostUsd)} / {money(grant.totalCostBudgetUsd)}
                   </span>
                   <span>EXPIRES · {time(grant.validUntil)}</span>
-                  <span>TOOLS · {grant.toolScopes.join(', ') || 'model only'}</span>
+                  <span>TOOLS · {grant.toolScopes.join(', ') || 'no legacy tools'}</span>
                 </div>
+                {grant.pluginScopes.length > 0 ? (
+                  <div className="run-plugin-scopes">
+                    <strong>GRANTED PLUGIN ACCESS</strong>
+                    <ul>
+                      {grant.pluginScopes.map((scope) => (
+                        <li key={`${scope.installationId}:${scope.tool}`}>
+                          <span>{scope.scopeDescription}</span>
+                          <small>{scope.effect}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 {grant.state === 'active' ? (
                   <button
                     className="secondary-button run-action"

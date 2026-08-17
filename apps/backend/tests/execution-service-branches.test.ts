@@ -25,6 +25,8 @@ const GRANT_ID = '20000000-0000-4000-8000-000000000001';
 const RUN_ID = '30000000-0000-4000-8000-000000000001';
 const DIGEST_SNAPSHOT_ID = '30000000-0000-4000-8000-000000000002';
 const RESOURCE_ID = '40000000-0000-4000-8000-000000000001';
+const PLUGIN_VERSION_ID = '40000000-0000-4000-8000-000000000002';
+const PLUGIN_INSTALLATION_ID = '40000000-0000-4000-8000-000000000003';
 const FAMILY_ID = '50000000-0000-4000-8000-000000000001';
 const DIGEST = 'a'.repeat(64);
 const CONTEXT_DIGEST = defaultDailyBriefExecutionContext.digest;
@@ -135,11 +137,13 @@ function grantRecord(overrides: Partial<DatabaseAuthorityGrant> = {}): DatabaseA
     workspaceId: LOCAL_WORKSPACE_ID,
     departmentId: LOCAL_DEPARTMENT_ID,
     releaseId: RELEASE_ID,
+    entryResourceVersionId: RESOURCE_ID,
     releaseDigest: DIGEST,
     contextDigest: CONTEXT_DIGEST,
     projectId: 'project-alpha',
     inputConstraints: {},
     toolScopes: [],
+    pluginScopes: [],
     validFrom: new Date(Date.now() - 60_000),
     validUntil: new Date(Date.now() + 3_600_000),
     maxRuns: 5,
@@ -159,12 +163,16 @@ function grantRecord(overrides: Partial<DatabaseAuthorityGrant> = {}): DatabaseA
   };
 }
 
-function runRecord(overrides: Partial<DatabaseExecutionRun> = {}): DatabaseExecutionRun {
+function runRecord(
+  overrides: Partial<DatabaseExecutionRun> = {},
+): DatabaseExecutionRun & { pluginCallPlans: [] } {
   return {
     id: RUN_ID,
     workspaceId: LOCAL_WORKSPACE_ID,
     departmentId: LOCAL_DEPARTMENT_ID,
     releaseId: RELEASE_ID,
+    entryResourceVersionId: RESOURCE_ID,
+    legacyEntrypointUnresolved: false,
     authorityGrantId: GRANT_ID,
     digestSnapshotId: null,
     releaseDigest: DIGEST,
@@ -174,6 +182,8 @@ function runRecord(overrides: Partial<DatabaseExecutionRun> = {}): DatabaseExecu
     contextEstimatedTokens: defaultDailyBriefExecutionContext.estimatedTokens,
     projectId: 'project-alpha',
     requiredToolScopes: [],
+    requiredPluginScopes: [],
+    requiresPluginApproval: false,
     state: ExecutionRunState.QUEUED,
     input: dailyInput,
     providerKind: ModelProviderKind.DETERMINISTIC,
@@ -202,6 +212,7 @@ function runRecord(overrides: Partial<DatabaseExecutionRun> = {}): DatabaseExecu
     finishedAt: null,
     createdAt: NOW,
     updatedAt: NOW,
+    pluginCallPlans: [],
     ...overrides,
   };
 }
@@ -278,6 +289,7 @@ function database() {
   };
   const outcomeRecord = { findMany: asyncMock([]) };
   const metricSample = { findMany: asyncMock([]) };
+  const resourceDependencyPin = { findMany: asyncMock([]) };
   const transaction = {
     $executeRaw: jest.fn(async () => 1),
     $queryRaw: jest.fn(async () => []),
@@ -294,6 +306,7 @@ function database() {
     attentionCursor,
     outcomeRecord,
     metricSample,
+    resourceDependencyPin,
   };
   const transactionMock = jest.fn((operation: TransactionOperation) =>
     operation(transaction as unknown as Prisma.TransactionClient),
@@ -319,12 +332,14 @@ function database() {
     attentionCursor,
     outcomeRecord,
     metricSample,
+    resourceDependencyPin,
   };
 }
 
 function request(overrides: Record<string, unknown> = {}) {
   return {
     releaseId: RELEASE_ID,
+    entryResourceVersionId: RESOURCE_ID,
     authorityGrantId: GRANT_ID,
     input: dailyInput,
     maxInputTokens: 1_000,
@@ -338,6 +353,7 @@ function request(overrides: Record<string, unknown> = {}) {
 
 function approval(overrides: Record<string, unknown> = {}) {
   return {
+    entryResourceVersionId: RESOURCE_ID,
     contextDigest: CONTEXT_DIGEST,
     projectId: 'project-alpha',
     inputConstraints: {},
@@ -371,6 +387,26 @@ function runAsHuman<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 describe('ExecutionService idempotency and run admission', () => {
+  it('fails closed when an in-process dispatcher receives a planned Plugin call', async () => {
+    const db = database();
+    await expect(
+      new ExecutionService(db.prisma, config(), modelProvider()).createRun(
+        request({
+          pluginCalls: [
+            {
+              installationId: PLUGIN_INSTALLATION_ID,
+              pluginVersionId: PLUGIN_VERSION_ID,
+              tool: 'lookup',
+              inputPath: ['calendarItems', 0],
+              outputContextKey: 'lookup_result',
+            },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 503, code: 'PLUGIN_WORKER_REQUIRED' });
+    expect(db.executionRun.findFirst).not.toHaveBeenCalled();
+  });
+
   it('returns an equivalent idempotent run without reloading its release', async () => {
     const db = database();
     db.executionRun.findUnique.mockResolvedValueOnce(runRecord());

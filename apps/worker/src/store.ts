@@ -30,6 +30,7 @@ type ClaimRow = {
   workspaceId: string;
   departmentId: string | null;
   releaseId: string;
+  entryResourceVersionId: string;
   releaseDigest: string;
   contextDigest: string;
   actualReleaseDigest: string;
@@ -37,6 +38,7 @@ type ClaimRow = {
   releaseProjectId: string | null;
   authorityGrantId: string;
   developmentDraft: boolean;
+  requiresPluginApproval: boolean;
   requiredToolScopes: Prisma.JsonValue;
   input: Prisma.JsonValue;
   providerKind: 'deterministic' | 'anthropic' | 'gateway';
@@ -53,6 +55,7 @@ type ClaimRow = {
 
 type GrantLockRow = {
   id: string;
+  entryResourceVersionId: string;
   contextDigest: string;
   state: 'active' | 'revoked' | 'exhausted' | 'expired';
   validFrom: Date;
@@ -135,6 +138,7 @@ function toClaimedRun(row: ClaimRow, productionEpoch: Date | null): ClaimedRun {
     id: row.id,
     releaseId: row.releaseId,
     releaseDigest: row.releaseDigest,
+    entryResourceVersionId: row.entryResourceVersionId,
     contextDigest: row.contextDigest,
     authorityGrantId: row.authorityGrantId,
     developmentDraft: row.developmentDraft,
@@ -179,7 +183,11 @@ function releaseTools(rows: ResourceDefinitionRow[]): { dailyBrief: boolean; too
     if (manifest.kind !== 'Skill') continue;
     if (manifest.metadata.slug === 'daily-brief') dailyBrief = true;
     const skill = skillSpecSchema.parse(manifest.spec);
-    skill.tools.forEach((tool) => tools.add(tool));
+    skill.tools.forEach((tool) => {
+      // Exact Plugin references are governed by RunPluginRequirement, immutable call plans, and
+      // the Plugin executor. They must never be flattened into the legacy string-scope channel.
+      if (typeof tool === 'string') tools.add(tool);
+    });
   }
   return { dailyBrief, tools: [...tools] };
 }
@@ -408,9 +416,9 @@ export class PrismaWorkerStore implements WorkerStore {
     return this.withSerializableTransaction(async (transaction) => {
       const candidates = await transaction.$queryRaw<ClaimRow[]>`
           SELECT run."id", run."workspaceId", run."departmentId",
-                 run."releaseId", run."releaseDigest", run."contextDigest",
+                 run."releaseId", run."entryResourceVersionId", run."releaseDigest", run."contextDigest",
                  release."digest" AS "actualReleaseDigest", run."authorityGrantId",
-                 run."developmentDraft",
+                 run."developmentDraft", run."requiresPluginApproval",
                  run."projectId", release."projectId" AS "releaseProjectId", run."requiredToolScopes",
                  run."input", run."providerKind", run."providerVersion", run."model",
                  run."pricingVersion", run."maxInputTokens", run."maxOutputTokens", run."maxEstimatedCostUsd",
@@ -419,6 +427,8 @@ export class PrismaWorkerStore implements WorkerStore {
           JOIN "ReleaseBundle" release
             ON release."id" = run."releaseId"
           WHERE run."state" = 'queued'
+            AND run."entryResourceVersionId" IS NOT NULL
+            AND run."legacyEntrypointUnresolved" = FALSE
             AND run."authorityGrantId" IS NOT NULL
             AND (
               run."attempts" = 0 OR
@@ -434,7 +444,7 @@ export class PrismaWorkerStore implements WorkerStore {
       if (candidate === undefined) return null;
 
       const grants = await transaction.$queryRaw<GrantLockRow[]>`
-          SELECT "id", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
+          SELECT "id", "entryResourceVersionId", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
                  "reservedCostUsd", "totalCostBudgetUsd", "maxEstimatedCostPerRunUsd",
                  "usedRuns", "maxRuns", "inputConstraints", "toolScopes", "projectId"
           FROM "AuthorityGrant"
@@ -474,21 +484,61 @@ export class PrismaWorkerStore implements WorkerStore {
           )));
 
       const definitions = await transaction.$queryRaw<ResourceDefinitionRow[]>`
-          SELECT resource_version."definition"
-          FROM "ReleaseResource" release_resource
-          JOIN "ResourceVersion" resource_version
-            ON resource_version."id" = release_resource."resourceVersionId"
-          WHERE release_resource."releaseId" = ${candidate.releaseId}::uuid
-          ORDER BY release_resource."ordinal" ASC
+          WITH RECURSIVE entry_closure("resourceVersionId", path, depth) AS (
+            SELECT resource."resourceVersionId", ARRAY[resource."resourceVersionId"]::uuid[], 0
+            FROM "ReleaseResource" resource
+            JOIN "ResourceVersion" version
+              ON version."id" = resource."resourceVersionId" AND version."digest" = resource."digest"
+            WHERE resource."releaseId" = ${candidate.releaseId}::uuid
+              AND resource."resourceVersionId" = ${candidate.entryResourceVersionId}::uuid
+            UNION ALL
+            SELECT pin."targetVersionId", closure.path || pin."targetVersionId", closure.depth + 1
+            FROM entry_closure closure
+            JOIN "ResourceDependencyPin" pin
+              ON pin."sourceVersionId" = closure."resourceVersionId"
+            JOIN "ReleaseResource" resource
+              ON resource."releaseId" = ${candidate.releaseId}::uuid
+             AND resource."resourceVersionId" = pin."targetVersionId"
+             AND resource."digest" = pin."targetDigest"
+            JOIN "ResourceVersion" target
+              ON target."id" = pin."targetVersionId" AND target."digest" = pin."targetDigest"
+            WHERE closure.depth < 100
+              AND NOT pin."targetVersionId" = ANY(closure.path)
+          )
+          SELECT version."definition"
+          FROM entry_closure closure
+          JOIN "ResourceVersion" version ON version."id" = closure."resourceVersionId"
+          ORDER BY closure.depth ASC, closure."resourceVersionId" ASC
         `;
       const requirements = releaseTools(definitions);
+      const pluginApproval = candidate.requiresPluginApproval
+        ? await transaction.approvalRequest.findFirst({
+            where: {
+              runId: candidate.id,
+              state: ApprovalRequestState.APPROVED,
+              decidedBy: { not: null },
+              rationale: { not: null },
+              decidedAt: { not: null },
+            },
+            select: { decidedBy: true, rationale: true },
+          })
+        : null;
+      const pluginApprovalSatisfied =
+        !candidate.requiresPluginApproval ||
+        (pluginApproval?.decidedBy !== null &&
+          pluginApproval?.decidedBy !== undefined &&
+          !pluginApproval.decidedBy.startsWith('system:') &&
+          pluginApproval.rationale !== null &&
+          pluginApproval.rationale.trim().length >= 10);
       const input = jsonObjectSchema.parse(candidate.input);
       const constraints = grant === undefined ? {} : jsonObjectSchema.parse(grant.inputConstraints);
       const toolScopes = grant === undefined ? [] : stringArraySchema.parse(grant.toolScopes);
       const requiredToolScopes = stringArraySchema.parse(candidate.requiredToolScopes);
       const scopeInvalid =
         candidate.releaseDigest !== candidate.actualReleaseDigest ||
+        grant?.entryResourceVersionId !== candidate.entryResourceVersionId ||
         grant?.contextDigest !== candidate.contextDigest ||
+        !pluginApprovalSatisfied ||
         !currentProductionRelease ||
         !epochApproved ||
         !requirements.dailyBrief ||
@@ -508,13 +558,15 @@ export class PrismaWorkerStore implements WorkerStore {
             ? 'The queued release is no longer the current production release'
             : productionRequired && !epochApproved
               ? 'The first run of this production release epoch requires human approval'
-              : scopeInvalid
-                ? 'Authority grant does not cover the exact release input and tool scopes'
-                : perRunLimitExceeded
-                  ? 'Authority grant per-run cost ceiling is insufficient'
-                  : grant?.state === 'revoked'
-                    ? 'Authority grant was revoked'
-                    : 'Authority grant is unavailable, expired, or exhausted';
+              : !pluginApprovalSatisfied
+                ? 'An approval-required Plugin call needs a human decision for this run'
+                : scopeInvalid
+                  ? 'Authority grant does not cover the exact release input and tool scopes'
+                  : perRunLimitExceeded
+                    ? 'Authority grant per-run cost ceiling is insufficient'
+                    : grant?.state === 'revoked'
+                      ? 'Authority grant was revoked'
+                      : 'Authority grant is unavailable, expired, or exhausted';
         await transaction.executionRun.update({
           where: { id: candidate.id },
           data: {
@@ -713,7 +765,7 @@ export class PrismaWorkerStore implements WorkerStore {
       }
 
       const grants = await transaction.$queryRaw<GrantLockRow[]>`
-          SELECT "id", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
+          SELECT "id", "entryResourceVersionId", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
                  "reservedCostUsd", "totalCostBudgetUsd", "maxEstimatedCostPerRunUsd",
                  "usedRuns", "maxRuns", "inputConstraints", "toolScopes", "projectId"
           FROM "AuthorityGrant"
@@ -785,10 +837,22 @@ export class PrismaWorkerStore implements WorkerStore {
             departmentId: lock.departmentId,
             runId: run.id,
             name: 'model.cost',
-            value: result.actualCostUsd,
+            value: result.actualCostUsd - (result.pluginCostUsd ?? 0),
             unit: 'usd',
             metadata: { pricingVersion: result.pricingVersion },
           },
+          ...((result.pluginCostUsd ?? 0) > 0
+            ? [
+                {
+                  workspaceId: lock.workspaceId,
+                  departmentId: lock.departmentId,
+                  runId: run.id,
+                  name: 'plugin.cost',
+                  value: result.pluginCostUsd ?? 0,
+                  unit: 'usd',
+                },
+              ]
+            : []),
           {
             workspaceId: lock.workspaceId,
             departmentId: lock.departmentId,
@@ -889,6 +953,68 @@ export class PrismaWorkerStore implements WorkerStore {
     return this.prisma.$transaction(async (transaction) =>
       this.cancelWithinTransaction(transaction, runId, workerId, incurred),
     );
+  }
+
+  async pauseForPlugin(
+    runId: string,
+    workerId: string,
+    code: string,
+    incurred?: ProviderUsageSettlement,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (transaction) => {
+      const locks = await transaction.$queryRaw<LockRow[]>`
+        SELECT "id", "workspaceId", "departmentId", "releaseId", "projectId",
+               "developmentDraft", "providerKind", "cancelRequestedAt",
+               "authorityGrantId", "estimatedUpperCostUsd", "actualCostUsd", "attempts"
+        FROM "ExecutionRun"
+        WHERE "id" = ${runId}::uuid
+          AND "state" = 'running'
+          AND "leaseOwner" = ${workerId}
+        FOR UPDATE
+      `;
+      const lock = locks[0];
+      if (lock === undefined) return false;
+      if (lock.cancelRequestedAt !== null) {
+        return this.cancelWithinTransaction(transaction, runId, workerId, incurred);
+      }
+      await transaction.executionRun.update({
+        where: { id: runId },
+        data: {
+          state: ExecutionRunState.PAUSED_PLUGIN,
+          message: 'A required Plugin became unavailable. The run is held.',
+          error: errorJson(code),
+          ...(incurred === undefined
+            ? {}
+            : { actualCostUsd: Number(lock.actualCostUsd ?? 0) + incurred.actualCostUsd }),
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          heartbeatAt: null,
+        },
+      });
+      await transaction.runStep.updateMany({
+        where: { runId, stepKey: 'model-execution' },
+        data: { state: 'paused_plugin', result: { code } },
+      });
+      await this.settleAttempt(
+        transaction,
+        runId,
+        lock.authorityGrantId,
+        Number(lock.estimatedUpperCostUsd),
+        lock.attempts,
+        incurred,
+      );
+      await transaction.auditEvent.create({
+        data: auditData('execution.paused_plugin', runId, lock, { code }),
+      });
+      await appendRunEvent(transaction, runId, {
+        phase: 'plugin-execution',
+        state: 'paused',
+        message: 'The run is held because its exact required Plugin became unavailable.',
+        costUsd: incurred?.actualCostUsd ?? null,
+        metadata: { code },
+      });
+      return true;
+    });
   }
 
   async failOrRetry(
@@ -1079,7 +1205,7 @@ export class PrismaWorkerStore implements WorkerStore {
     amount: number,
   ): Promise<void> {
     const grants = await transaction.$queryRaw<GrantLockRow[]>`
-      SELECT "id", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
+      SELECT "id", "entryResourceVersionId", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
              "reservedCostUsd", "totalCostBudgetUsd", "maxEstimatedCostPerRunUsd",
              "usedRuns", "maxRuns", "inputConstraints", "toolScopes", "projectId"
       FROM "AuthorityGrant"
@@ -1145,7 +1271,7 @@ export class PrismaWorkerStore implements WorkerStore {
           ...scope,
           runId,
           name: 'model.cost',
-          value: incurred.actualCostUsd,
+          value: incurred.actualCostUsd - (incurred.pluginCostUsd ?? 0),
           unit: 'usd',
           metadata: {
             attempt,
@@ -1156,6 +1282,18 @@ export class PrismaWorkerStore implements WorkerStore {
             outcomePublished: false,
           },
         },
+        ...((incurred.pluginCostUsd ?? 0) > 0
+          ? [
+              {
+                ...scope,
+                runId,
+                name: 'plugin.cost',
+                value: incurred.pluginCostUsd ?? 0,
+                unit: 'usd',
+                metadata: { attempt, outcomePublished: false },
+              },
+            ]
+          : []),
         {
           ...scope,
           runId,
@@ -1175,7 +1313,7 @@ export class PrismaWorkerStore implements WorkerStore {
     incurred: ProviderUsageSettlement,
   ): Promise<void> {
     const grants = await transaction.$queryRaw<GrantLockRow[]>`
-      SELECT "id", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
+      SELECT "id", "entryResourceVersionId", "contextDigest", "state", "validFrom", "validUntil", "spentCostUsd",
              "reservedCostUsd", "totalCostBudgetUsd", "maxEstimatedCostPerRunUsd",
              "usedRuns", "maxRuns", "inputConstraints", "toolScopes", "projectId"
       FROM "AuthorityGrant"

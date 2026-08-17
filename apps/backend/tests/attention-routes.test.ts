@@ -16,6 +16,7 @@ const now = '2026-08-16T12:00:00.000Z';
 const runId = '10000000-0000-4000-8000-000000000001';
 const releaseId = '20000000-0000-4000-8000-000000000002';
 const evaluationId = '30000000-0000-4000-8000-000000000003';
+const entryResourceVersionId = '60000000-0000-4000-8000-000000000006';
 const itemId = `execution_approval:${runId}`;
 
 const actionBase = {
@@ -85,6 +86,8 @@ const detail = attentionItemDetailSchema.parse({
 const rejectedRun = executionRunSchema.parse({
   id: runId,
   releaseId,
+  entryResourceVersionId,
+  legacyEntrypointUnresolved: false,
   releaseDigest: 'a'.repeat(64),
   contextDigest: 'b'.repeat(64),
   contextProvenance: [],
@@ -92,6 +95,8 @@ const rejectedRun = executionRunSchema.parse({
   contextEstimatedTokens: 10,
   projectId: 'daily-brief',
   requiredToolScopes: ['calendar.read'],
+  requiredPluginScopes: [],
+  requiresPluginApproval: false,
   authorityGrantId: null,
   digestSnapshotId: null,
   state: 'cancelled',

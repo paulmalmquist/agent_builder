@@ -8,6 +8,20 @@ metadata:
   purpose: Orchestrate a governed daily briefing from bounded planning inputs.
   lifecycle: experimental
   provenance: synthetic
+  catalogVisibility: organization
+  capabilityProfile:
+    schemaVersion: 1
+    intendedUsers: [knowledge workers]
+    businessDomain: personal productivity
+    triggers: [scheduled daily briefing, on-demand planning request]
+    tasks: [orchestrate a daily briefing, prioritize the day, identify schedule risks]
+    inputs: [priorities, calendar items, tasks, signals, user constraints]
+    outputs: [validated cited daily briefing]
+    knowledgeClasses: [governed planning context]
+    tools: []
+    potentialActions: [propose actions without executing them]
+    successCriteria: [return a concise governed briefing without external writes]
+    riskLevel: low
 dependencies:
   - familyId: 10000000-0000-4000-8000-000000000001
     version: 1.0.0

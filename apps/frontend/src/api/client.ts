@@ -38,6 +38,16 @@ import {
   platformApiRoutes,
   productionChannelSchema,
   productionChannelMutationResponseSchema,
+  pluginCatalogItemSchema,
+  pluginCatalogResponseSchema,
+  pluginHealthCheckSchema,
+  pluginInstallationListResponseSchema,
+  pluginInstallationSchema,
+  pluginUsedByResponseSchema,
+  builderDecisionSchema,
+  builderIntakeResultsSchema,
+  builderIntakeSchema,
+  REUSE_V1_ROUTES,
   releaseDeclineResponseSchema,
   releaseEvaluationSchema,
   resourceListResponseSchema,
@@ -56,7 +66,15 @@ import {
   type ExecutionRun,
   type ImprovementCandidate,
   type MemoryCandidate,
+  type PluginAuthorityScope,
+  type PluginInstallation,
+  type PluginResourceSpec,
   type ResourceVersion,
+  type BuilderDecision,
+  type BuilderDecisionAction,
+  type BuilderIntake,
+  type BuilderIntakeResults,
+  type CapabilityProfile,
 } from '@agent-builder/contracts';
 
 type Parser<T> = {
@@ -86,6 +104,22 @@ export type MemoryCandidateList = ReturnType<typeof memoryCandidateListResponseS
 export type AttentionResponse = ReturnType<typeof attentionResponseSchema.parse>;
 export type AttentionItemDetail = ReturnType<typeof attentionItemDetailSchema.parse>;
 export type AttentionResolution = ReturnType<typeof attentionResolutionSchema.parse>;
+export type PluginCatalog = ReturnType<typeof pluginCatalogResponseSchema.parse>;
+export type PluginCatalogItem = ReturnType<typeof pluginCatalogItemSchema.parse>;
+export type PluginInstallationList = ReturnType<typeof pluginInstallationListResponseSchema.parse>;
+export type PluginHealthCheck = ReturnType<typeof pluginHealthCheckSchema.parse>;
+export type PluginUsedBy = ReturnType<typeof pluginUsedByResponseSchema.parse>;
+export type CreateBuilderIntakeInput = {
+  request: string;
+  department: string;
+  capabilityProfile: CapabilityProfile;
+  confirmed: boolean;
+};
+export type CreateBuilderDecisionInput = {
+  action: BuilderDecisionAction;
+  selectedPublicationId: string | null;
+  buildNewReason: string | null;
+};
 
 export type ResourceFilters = {
   kind?: ResourceVersion['kind'];
@@ -105,13 +139,36 @@ export type GrantFilters = {
 };
 
 export type ApproveRunInput = {
+  entryResourceVersionId: string;
   projectId: string | null;
   inputConstraints: Record<string, unknown>;
   toolScopes: string[];
+  pluginScopes: Array<
+    Pick<PluginAuthorityScope, 'installationId' | 'pluginVersionId' | 'tool' | 'limits'>
+  >;
   validUntil: string;
   maxRuns: number;
   maxEstimatedCostPerRunUsd: number;
   totalCostBudgetUsd: number;
+  rationale: string;
+};
+
+export type PluginCatalogFilters = {
+  transport?: PluginResourceSpec['transport'];
+  executionPlacement?: PluginResourceSpec['executionPlacement'];
+  classification?: PluginResourceSpec['classification'];
+  includeDisabled?: boolean;
+  limit?: number;
+};
+
+export type PluginSecretBindingInput = { slot: string; reference: string };
+export type InstallPluginInput = {
+  pluginVersionId: string;
+  developmentOnly?: boolean;
+  secretBindings: PluginSecretBindingInput[];
+};
+export type ConfigurePluginInput = {
+  secretBindings: PluginSecretBindingInput[];
   rationale: string;
 };
 
@@ -204,6 +261,31 @@ async function request<T>(path: string, schema: Parser<T>, init?: RequestInit): 
       details: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+async function requestEmpty(path: string, init: RequestInit): Promise<void> {
+  const headers = new Headers(init.headers);
+  headers.set('Accept', 'application/json');
+  if (init.body) headers.set('Content-Type', 'application/json');
+  const response = await fetch(new URL(`${apiBaseUrl}${path}`, window.location.origin), {
+    ...init,
+    headers,
+  });
+  if (response.ok) return;
+  const payload = await readJson(response);
+  const parsedError = apiErrorSchema.safeParse(payload);
+  if (parsedError.success) {
+    throw new ApiError(parsedError.data.error.message, {
+      code: parsedError.data.error.code,
+      status: response.status,
+      requestId: parsedError.data.error.requestId,
+      details: parsedError.data.error.details,
+    });
+  }
+  throw new ApiError(`Request failed with status ${response.status}.`, {
+    code: 'HTTP_ERROR',
+    status: response.status,
+  });
 }
 
 const jsonBody = (value: unknown): Pick<RequestInit, 'body' | 'method'> => ({
@@ -399,6 +481,158 @@ export const agentApi = {
   },
 };
 
+const builderV1Routes = {
+  sources: '/v1/builder/sources',
+  specs: '/v1/builder/specs',
+  spec: (specId: string) => `/v1/builder/specs/${specId}`,
+  specSection: (specId: string, section: 'outcomes' | 'knowledge' | 'guardrails' | 'outputs') =>
+    `/v1/builder/specs/${specId}/${section}`,
+  interpretSpec: '/v1/builder/specs/interpret',
+  generate: (specId: string) => `/v1/builder/specs/${specId}/generate`,
+  generationJob: (jobId: string) => `/v1/builder/generation-jobs/${jobId}`,
+  recover: (agentId: string) => `/v1/builder/agents/${agentId}/recover`,
+  shadowDeploy: (agentId: string) => `/v1/builder/agents/${agentId}/shadow-deploy`,
+  evaluation: (agentId: string) => `/v1/builder/agents/${agentId}/evaluation`,
+} as const;
+
+/**
+ * The Build surface uses only the versioned control-plane contract. Legacy `/agents` calls remain
+ * isolated to the catalog and certification screens until their scheduled cutover.
+ */
+export const builderApi = {
+  createIntake(value: CreateBuilderIntakeInput): Promise<BuilderIntake> {
+    return request(REUSE_V1_ROUTES.builderIntakes, builderIntakeSchema, jsonBody(value));
+  },
+
+  getReferredChoices(intakeId: string): Promise<BuilderIntakeResults> {
+    return request(
+      REUSE_V1_ROUTES.builderIntakeChoices.replace(':intakeId', encodeURIComponent(intakeId)),
+      builderIntakeResultsSchema,
+    );
+  },
+
+  createDecision(
+    intakeId: string,
+    value: CreateBuilderDecisionInput,
+    idempotencyKey: string,
+  ): Promise<BuilderDecision> {
+    return request(
+      REUSE_V1_ROUTES.builderDecisions.replace(':intakeId', encodeURIComponent(intakeId)),
+      builderDecisionSchema,
+      {
+        ...jsonBody(value),
+        headers: { 'Idempotency-Key': idempotencyKey },
+      },
+    );
+  },
+
+  listSources(role?: SourceDescriptor['role']) {
+    const suffix = role ? `?${new URLSearchParams({ role }).toString()}` : '';
+    return request(`${builderV1Routes.sources}${suffix}`, sourceListResponseSchema);
+  },
+
+  createSpec(
+    outcomes: OutcomesSection,
+    baseAgentId: string | null,
+    derivationMode: DerivationMode,
+    interpretationId: string | null,
+  ) {
+    return request(
+      builderV1Routes.specs,
+      agentSpecSchema,
+      jsonBody({ outcomes, baseAgentId, derivationMode, interpretationId }),
+    );
+  },
+
+  getSpec(specId: string) {
+    return request(builderV1Routes.spec(specId), agentSpecSchema);
+  },
+
+  updateOutcomes(
+    specId: string,
+    outcomes: OutcomesSection,
+    interpretationConfirmation?: InterpretationConfirmation,
+  ) {
+    return request(builderV1Routes.specSection(specId, 'outcomes'), agentSpecSchema, {
+      method: 'PUT',
+      body: JSON.stringify({
+        value: outcomes,
+        ...(interpretationConfirmation ? { interpretationConfirmation } : {}),
+      }),
+    });
+  },
+
+  updateKnowledge(
+    specId: string,
+    knowledge: KnowledgeSection,
+    interpretationConfirmation?: InterpretationConfirmation,
+  ) {
+    return request(builderV1Routes.specSection(specId, 'knowledge'), agentSpecSchema, {
+      method: 'PUT',
+      body: JSON.stringify({
+        value: knowledge,
+        ...(interpretationConfirmation ? { interpretationConfirmation } : {}),
+      }),
+    });
+  },
+
+  updateGuardrails(
+    specId: string,
+    guardrails: GuardrailsSection,
+    interpretationConfirmation?: InterpretationConfirmation,
+  ) {
+    return request(builderV1Routes.specSection(specId, 'guardrails'), agentSpecSchema, {
+      method: 'PUT',
+      body: JSON.stringify({
+        value: guardrails,
+        ...(interpretationConfirmation ? { interpretationConfirmation } : {}),
+      }),
+    });
+  },
+
+  updateOutputs(
+    specId: string,
+    outputs: OutputsSection,
+    interpretationConfirmation?: InterpretationConfirmation,
+  ) {
+    return request(builderV1Routes.specSection(specId, 'outputs'), agentSpecSchema, {
+      method: 'PUT',
+      body: JSON.stringify({
+        value: outputs,
+        ...(interpretationConfirmation ? { interpretationConfirmation } : {}),
+      }),
+    });
+  },
+
+  interpretSpec(value: InterpretSpecRequest) {
+    return request(builderV1Routes.interpretSpec, interpretSpecResponseSchema, jsonBody(value));
+  },
+
+  generate(specId: string) {
+    return request(builderV1Routes.generate(specId), generationAcceptedSchema, { method: 'POST' });
+  },
+
+  getGenerationJob(jobId: string) {
+    return request(builderV1Routes.generationJob(jobId), generationJobSchema);
+  },
+
+  recover(agentId: string) {
+    return request(builderV1Routes.recover(agentId), recoverAgentResponseSchema, {
+      method: 'POST',
+    });
+  },
+
+  shadowDeploy(agentId: string) {
+    return request(builderV1Routes.shadowDeploy(agentId), shadowDeployResponseSchema, {
+      method: 'POST',
+    });
+  },
+
+  getEvaluation(agentId: string) {
+    return request(builderV1Routes.evaluation(agentId), evaluationResponseSchema);
+  },
+};
+
 export const platformApi = {
   getAttention() {
     return request(platformApiRoutes.attention, attentionResponseSchema);
@@ -426,6 +660,79 @@ export const platformApi = {
       }),
       resourceListResponseSchema,
     );
+  },
+
+  listPlugins(filters: PluginCatalogFilters = {}) {
+    return request(
+      appendParams(platformApiRoutes.plugins, {
+        transport: filters.transport,
+        executionPlacement: filters.executionPlacement,
+        classification: filters.classification,
+        includeDisabled: filters.includeDisabled,
+        limit: filters.limit ?? 50,
+      }),
+      pluginCatalogResponseSchema,
+    );
+  },
+
+  getPlugin(pluginVersionId: string) {
+    return request(platformApiRoutes.plugin(pluginVersionId), pluginCatalogItemSchema);
+  },
+
+  listPluginInstallations(state?: PluginInstallation['state']) {
+    return request(
+      appendParams(platformApiRoutes.pluginInstallations, { state, limit: 100 }),
+      pluginInstallationListResponseSchema,
+    );
+  },
+
+  getPluginInstallation(installationId: string) {
+    return request(platformApiRoutes.pluginInstallation(installationId), pluginInstallationSchema);
+  },
+
+  installPlugin(value: InstallPluginInput) {
+    return request(
+      platformApiRoutes.pluginInstallations,
+      pluginInstallationSchema,
+      jsonBody(value),
+    );
+  },
+
+  configurePluginInstallation(installationId: string, value: ConfigurePluginInput) {
+    return request(
+      platformApiRoutes.configurePluginInstallation(installationId),
+      pluginInstallationSchema,
+      jsonBody(value),
+    );
+  },
+
+  checkPluginHealth(installationId: string) {
+    return request(platformApiRoutes.checkPluginHealth(installationId), pluginHealthCheckSchema, {
+      method: 'POST',
+    });
+  },
+
+  setPluginInstallationState(
+    installationId: string,
+    action: 'enable' | 'disable',
+    rationale: string,
+  ) {
+    const path =
+      action === 'enable'
+        ? platformApiRoutes.enablePluginInstallation(installationId)
+        : platformApiRoutes.disablePluginInstallation(installationId);
+    return request(path, pluginInstallationSchema, jsonBody({ rationale }));
+  },
+
+  getPluginUsedBy(installationId: string) {
+    return request(platformApiRoutes.pluginUsedBy(installationId), pluginUsedByResponseSchema);
+  },
+
+  uninstallPlugin(installationId: string, rationale: string) {
+    return requestEmpty(platformApiRoutes.uninstallPlugin(installationId), {
+      method: 'POST',
+      body: JSON.stringify({ rationale }),
+    });
   },
 
   listExecutionRuns(filters: RunFilters = {}) {

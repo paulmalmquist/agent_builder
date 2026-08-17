@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   DeterministicDailyBriefProvider,
@@ -8,6 +8,7 @@ import {
   collectModelStream,
   compileResourceYaml,
   decryptProfile,
+  discoverResourceManifestPaths,
   encryptProfile,
   evaluateConsoleCopy,
   evaluateSemanticColdRead,
@@ -30,26 +31,7 @@ const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
   : process.cwd();
 
 async function manifestPaths(): Promise<string[]> {
-  const paths: string[] = [];
-  for (let domain = 0; domain <= 12; domain += 1) {
-    const prefix = domain.toString().padStart(2, '0');
-    const directory = (await readdir(workspaceRoot, { withFileTypes: true })).find(
-      (entry) => entry.isDirectory() && entry.name.startsWith(`${prefix}-`),
-    );
-    if (directory === undefined) continue;
-    const domainPath = path.join(workspaceRoot, directory.name);
-    for (const child of await readdir(domainPath, { withFileTypes: true })) {
-      if (!child.isDirectory()) continue;
-      const candidate = path.join(domainPath, child.name, 'manifest.yaml');
-      try {
-        await readFile(candidate, 'utf8');
-        paths.push(candidate);
-      } catch {
-        // A content directory without a manifest is intentionally ignored.
-      }
-    }
-  }
-  return paths;
+  return discoverResourceManifestPaths(workspaceRoot);
 }
 
 describe('Paul OS deterministic runtime', () => {

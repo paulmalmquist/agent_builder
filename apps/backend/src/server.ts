@@ -16,6 +16,8 @@ export async function startServer(): Promise<Server> {
   }
   await services.maintenance.start();
   await services.automationScheduler.start();
+  await services.pluginHealthScheduler.start();
+  await services.catalogIndexScheduler.start();
 
   const server = createServer(createApp(services, logger, config));
   await new Promise<void>((resolve, reject) => {
@@ -32,6 +34,8 @@ export async function startServer(): Promise<Server> {
     if (shuttingDown) return;
     shuttingDown = true;
     services.maintenance.stop();
+    services.pluginHealthScheduler.stop();
+    services.catalogIndexScheduler.stop();
     logger.info({ signal }, 'Shutting down Agent Builder backend');
     const forceExit = setTimeout(() => {
       logger.error(

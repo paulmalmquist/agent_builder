@@ -25,10 +25,25 @@ const evaluationSuiteVersionId = '21212121-2121-4212-8212-212121212121';
 const observationId = '23232323-2323-4232-8232-232323232323';
 export const improvementCandidateId = '24242424-2424-4242-8242-242424242424';
 export const memoryCandidateId = '25252525-2525-4252-8252-252525252525';
+export const httpPluginVersionId = '30303030-3030-4303-8303-303030303030';
+export const httpPluginInstallationId = '31313131-3131-4313-8313-313131313131';
+const mcpPluginVersionId = '32323232-3232-4323-8323-323232323232';
+const mcpPluginInstallationId = '33333333-4444-4333-8333-333333333333';
+const cliPluginVersionId = '34343434-3434-4343-8343-343434343434';
+const dbPluginVersionId = '35353535-3535-4353-8353-353535353535';
+const dbPluginInstallationId = '36363636-3636-4363-8363-363636363636';
+export const builderIntakeId = '37373737-3737-4373-8373-373737373737';
+export const catalogPublicationId = '38383838-3838-4383-8383-383838383838';
+const builderDecisionId = '39393939-3939-4393-8393-393939393939';
+const demandObservationId = '40404040-4040-4404-8404-404040404040';
 const now = '2026-07-31T14:00:00.000Z';
 type TestInterpretationConfirmation = InterpretationConfirmation;
 export let lastOutcomesConfirmation: TestInterpretationConfirmation | null = null;
 export let lastKnowledgeConfirmation: TestInterpretationConfirmation | null = null;
+export let lastPluginApprovalScopes: unknown[] | null = null;
+export let lastPluginSecretBindings: unknown[] | null = null;
+export let lastBuilderDecision: Record<string, unknown> | null = null;
+export let lastBuilderDecisionIdempotencyKey: string | null = null;
 
 const outcomes = {
   name: 'Supplier continuity analyst',
@@ -114,6 +129,62 @@ export const catalogAgent = {
   providers: ['bigquery'] as const,
   createdAt: now,
   updatedAt: now,
+};
+
+const capabilityProfile = {
+  schemaVersion: 1 as const,
+  intendedUsers: [outcomes.audience],
+  businessDomain: outcomes.department,
+  triggers: ['User-requested build intake'],
+  tasks: [outcomes.purpose],
+  inputs: ['User-provided scope'],
+  outputs: outcomes.desiredOutcomes,
+  knowledgeClasses: [],
+  tools: [],
+  potentialActions: [],
+  successCriteria: outcomes.desiredOutcomes,
+  riskLevel: 'moderate' as const,
+};
+
+const trustChip = {
+  certificationState: 'certified' as const,
+  gatesPassed: 12,
+  gatesTotal: 12,
+  corpusSize: 240,
+  recertifiedAt: now,
+  label: 'Certified · 12/12 gates · corpus 240 · re-certified Jul 31',
+};
+
+const referredChoice = {
+  publicationId: catalogPublicationId,
+  subjectKind: 'agent' as const,
+  name: catalogAgent.name,
+  version: '1.0.0',
+  trustChip,
+  delta: {
+    has: ['businessDomain:Manufacturing Operations', 'tasks:Monitor supplier delays'],
+    lacks: ['outputs:Custom approval brief'],
+    offers: ['tools:Build genealogy lookup'],
+  },
+  match: {
+    score: 87,
+    structuredCoverage: 87,
+    embeddingCosine: null,
+    mode: 'structured_only_fallback' as const,
+    label: 'Structured-only fallback' as const,
+  },
+  provenance: {
+    owner: catalogAgent.owner,
+    department: catalogAgent.department,
+    resourceVersionId: agentId,
+    releaseId,
+    releaseDigest: 'a'.repeat(64),
+    publishedAt: now,
+  },
+  deployment: { total: 14, active: 9 },
+  success: { successfulRuns: 46, measuredRuns: 50, rate: 0.92 },
+  cost: { usdPerRun: 0.31, basis: 'observed' as const },
+  knownLimitations: ['Requires a project-specific approval overlay for external writes'],
 };
 
 export const certificationRun = {
@@ -275,6 +346,8 @@ let automationScheduleState: 'active' | 'paused' = 'active';
 let improvementCandidateState: 'proposed' | 'incubating' | 'rejected' = 'proposed';
 let memoryCandidateState: 'staged' | 'accepted' | 'rejected' = 'staged';
 let degradedAttentionResolved = false;
+let httpPluginState: 'installed' | 'enabled' | 'disabled' | 'degraded' = 'enabled';
+let dbPluginInstalled = false;
 
 export function resetFixtures() {
   specFixture = null;
@@ -286,6 +359,12 @@ export function resetFixtures() {
   improvementCandidateState = 'proposed';
   memoryCandidateState = 'staged';
   degradedAttentionResolved = false;
+  httpPluginState = 'enabled';
+  dbPluginInstalled = false;
+  lastPluginApprovalScopes = null;
+  lastPluginSecretBindings = null;
+  lastBuilderDecision = null;
+  lastBuilderDecisionIdempotencyKey = null;
 }
 
 function attentionItem() {
@@ -434,10 +513,178 @@ const platformResource = {
   updatedAt: now,
 };
 
+const pluginLimits = {
+  timeoutMs: 5_000,
+  maxResponseBytes: 250_000,
+  maxRecords: 100,
+  maxInvocationsPerRun: 5,
+  maxEstimatedCostUsd: 0.05,
+};
+
+function pluginCapability(
+  tool: string,
+  scopeDescription: string,
+  effect: 'read' | 'write' | 'destructive' = 'read',
+) {
+  return {
+    tool,
+    description: `${scopeDescription} through a typed, schema-checked test capability.`,
+    effect,
+    approval: effect === 'read' ? ('not_required' as const) : ('approval_required' as const),
+    scopeDescription,
+    limits: pluginLimits,
+  };
+}
+
+function pluginCatalog() {
+  return [
+    {
+      pluginVersionId: mcpPluginVersionId,
+      familyId: '37373737-3737-4373-8373-373737373737',
+      slug: 'team-messages',
+      name: 'Team messages',
+      version: '1.0.0',
+      digest: '2'.repeat(64),
+      transport: 'mcp' as const,
+      executionPlacement: 'control_plane' as const,
+      classification: 'internal' as const,
+      capabilities: [pluginCapability('search_messages', 'Read matching team messages only')],
+      secretSlots: [],
+      activeScopeDescriptions: ['Read matching team messages only'],
+      costThisWeekUsd: 0.12,
+      installationId: mcpPluginInstallationId,
+      installationState: 'degraded' as const,
+      healthStatus: 'degraded' as const,
+      lastUsedAt: now,
+    },
+    {
+      pluginVersionId: httpPluginVersionId,
+      familyId: '38383838-3838-4383-8383-383838383838',
+      slug: 'calendar-api',
+      name: 'Calendar API',
+      version: '2.1.0',
+      digest: '3'.repeat(64),
+      transport: 'http' as const,
+      executionPlacement: 'control_plane' as const,
+      classification: 'internal' as const,
+      capabilities: [
+        pluginCapability('list_events', 'Read calendar events in the requested window'),
+      ],
+      secretSlots: [
+        {
+          name: 'access-token',
+          description: 'Reference to the calendar API access token.',
+          required: true,
+        },
+      ],
+      activeScopeDescriptions: ['Read calendar events in the requested window'],
+      costThisWeekUsd: 0.04,
+      installationId: httpPluginInstallationId,
+      installationState: httpPluginState,
+      healthStatus:
+        httpPluginState === 'disabled' ? ('unavailable' as const) : ('healthy' as const),
+      lastUsedAt: now,
+    },
+    {
+      pluginVersionId: dbPluginVersionId,
+      familyId: '39393939-3939-4393-8393-393939393939',
+      slug: 'analytics-preview',
+      name: 'Analytics preview',
+      version: '1.2.0',
+      digest: '4'.repeat(64),
+      transport: 'db' as const,
+      executionPlacement: 'control_plane' as const,
+      classification: 'restricted' as const,
+      capabilities: [pluginCapability('table_preview', 'Preview up to 100 governed records')],
+      secretSlots: [],
+      activeScopeDescriptions: [],
+      costThisWeekUsd: 0,
+      installationId: dbPluginInstalled ? dbPluginInstallationId : null,
+      installationState: dbPluginInstalled ? ('enabled' as const) : null,
+      healthStatus: dbPluginInstalled ? ('healthy' as const) : ('unknown' as const),
+      lastUsedAt: null,
+    },
+    {
+      pluginVersionId: cliPluginVersionId,
+      familyId: '40404040-4040-4404-8404-404040404040',
+      slug: 'local-files',
+      name: 'Local files',
+      version: '0.9.0',
+      digest: '5'.repeat(64),
+      transport: 'cli' as const,
+      executionPlacement: 'workstation' as const,
+      classification: 'internal' as const,
+      capabilities: [pluginCapability('list_files', 'Read filenames under the selected folder')],
+      secretSlots: [],
+      activeScopeDescriptions: [],
+      costThisWeekUsd: 0,
+      installationId: null,
+      installationState: null,
+      healthStatus: 'unavailable' as const,
+      lastUsedAt: null,
+    },
+  ];
+}
+
+function pluginInstallation(installationId = httpPluginInstallationId) {
+  const versionId =
+    installationId === mcpPluginInstallationId
+      ? mcpPluginVersionId
+      : installationId === dbPluginInstallationId
+        ? dbPluginVersionId
+        : httpPluginVersionId;
+  return {
+    id: installationId,
+    pluginVersionId: versionId,
+    pluginDigest: versionId === httpPluginVersionId ? '3'.repeat(64) : '4'.repeat(64),
+    state: installationId === httpPluginInstallationId ? httpPluginState : ('enabled' as const),
+    executionPlacement: 'control_plane' as const,
+    developmentOnly: false,
+    secretBindings:
+      installationId === httpPluginInstallationId
+        ? [{ slot: 'access-token', configured: true }]
+        : [],
+    installedBy: 'test-operator',
+    installedAt: now,
+    configuredAt: now,
+    disabledAt: httpPluginState === 'disabled' ? now : null,
+    updatedAt: now,
+  };
+}
+
+function requiredPluginScope() {
+  return {
+    installationId: httpPluginInstallationId,
+    pluginVersionId: httpPluginVersionId,
+    pluginDigest: '3'.repeat(64),
+    tool: 'list_events',
+    effect: 'read' as const,
+    scopeDescription: 'Read calendar events in the requested window',
+    limits: pluginLimits,
+    executionPlacement: 'control_plane' as const,
+    approvalRequired: false,
+  };
+}
+
+function grantedPluginScope() {
+  const scope = requiredPluginScope();
+  return {
+    installationId: scope.installationId,
+    pluginVersionId: scope.pluginVersionId,
+    pluginDigest: scope.pluginDigest,
+    tool: scope.tool,
+    effect: scope.effect,
+    scopeDescription: scope.scopeDescription,
+    limits: scope.limits,
+  };
+}
+
 function platformRun() {
   return {
     id: executionRunId,
     releaseId,
+    entryResourceVersionId: platformResourceId,
+    legacyEntrypointUnresolved: false as const,
     releaseDigest: 'b'.repeat(64),
     contextDigest: 'd'.repeat(64),
     contextProvenance: [
@@ -447,9 +694,12 @@ function platformRun() {
     contextEstimatedTokens: 24,
     projectId: 'daily-operations',
     authorityGrantId: platformRunState === 'awaiting_approval' ? null : authorityGrantId,
+    digestSnapshotId: null,
     state: platformRunState,
     input: { date: '2026-07-31' },
     requiredToolScopes: ['read:calendar'],
+    requiredPluginScopes: [requiredPluginScope()],
+    requiresPluginApproval: false,
     providerKind: 'deterministic' as const,
     developmentDraft: false,
     providerVersion: '1.0.0',
@@ -479,15 +729,21 @@ function platformRun() {
   };
 }
 
+export function platformRunFixture() {
+  return platformRun();
+}
+
 function authorityGrant() {
   return {
     id: authorityGrantId,
     releaseId,
+    entryResourceVersionId: platformResourceId,
     releaseDigest: 'b'.repeat(64),
     contextDigest: 'd'.repeat(64),
     projectId: 'daily-operations',
     inputConstraints: {},
     toolScopes: ['read:calendar'],
+    pluginScopes: [grantedPluginScope()],
     validFrom: now,
     validUntil: '2027-08-01T14:00:00.000Z',
     maxRuns: 10,
@@ -510,6 +766,7 @@ function automationSchedule() {
     name: 'Daily operations briefing',
     channelKey: 'daily-operations',
     releaseId,
+    entryResourceVersionId: platformResourceId,
     releaseDigest: 'b'.repeat(64),
     projectId: 'daily-operations',
     authorityGrantId,
@@ -783,26 +1040,149 @@ export const handlers = [
 
   http.get('http://localhost/v1/resources', () => HttpResponse.json({ items: [platformResource] })),
 
+  http.get('http://localhost/v1/plugins', () => HttpResponse.json({ items: pluginCatalog() })),
+
+  http.get('http://localhost/v1/plugins/:pluginVersionId', ({ params }) => {
+    const plugin = pluginCatalog().find((item) => item.pluginVersionId === params.pluginVersionId);
+    return plugin
+      ? HttpResponse.json(plugin)
+      : HttpResponse.json(
+          { error: { code: 'NOT_FOUND', message: 'Plugin not found.' } },
+          { status: 404 },
+        );
+  }),
+
+  http.get('http://localhost/v1/plugin-installations', () =>
+    HttpResponse.json({
+      items: [
+        pluginInstallation(httpPluginInstallationId),
+        pluginInstallation(mcpPluginInstallationId),
+        ...(dbPluginInstalled ? [pluginInstallation(dbPluginInstallationId)] : []),
+      ],
+    }),
+  ),
+
+  http.post('http://localhost/v1/plugin-installations', async ({ request }) => {
+    const body = (await request.json()) as {
+      pluginVersionId?: unknown;
+      secretBindings?: unknown[];
+    };
+    lastPluginSecretBindings = body.secretBindings ?? null;
+    if (body.pluginVersionId !== dbPluginVersionId) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'PLUGIN_INSTALL_BLOCKED',
+            message: 'Only the fixture Plugin is installable.',
+          },
+        },
+        { status: 409 },
+      );
+    }
+    dbPluginInstalled = true;
+    return HttpResponse.json(pluginInstallation(dbPluginInstallationId), { status: 201 });
+  }),
+
+  http.get('http://localhost/v1/plugin-installations/:installationId', ({ params }) =>
+    HttpResponse.json(pluginInstallation(String(params.installationId))),
+  ),
+
+  http.post(
+    'http://localhost/v1/plugin-installations/:installationId/configure',
+    async ({ params, request }) => {
+      const body = (await request.json()) as { secretBindings?: unknown[] };
+      lastPluginSecretBindings = body.secretBindings ?? null;
+      return HttpResponse.json(pluginInstallation(String(params.installationId)));
+    },
+  ),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/health-check', ({ params }) =>
+    HttpResponse.json({
+      id: '41414141-4141-4414-8414-414141414141',
+      installationId: String(params.installationId),
+      status: 'healthy',
+      probeKind: 'http',
+      message: 'The bounded fixture health probe passed.',
+      latencyMs: 24,
+      checkedAt: now,
+    }),
+  ),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/enable', ({ params }) => {
+    if (params.installationId === httpPluginInstallationId) httpPluginState = 'enabled';
+    return HttpResponse.json(pluginInstallation(String(params.installationId)));
+  }),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/disable', ({ params }) => {
+    if (params.installationId === httpPluginInstallationId) httpPluginState = 'disabled';
+    return HttpResponse.json(pluginInstallation(String(params.installationId)));
+  }),
+
+  http.get('http://localhost/v1/plugin-installations/:installationId/used-by', ({ params }) => {
+    const blocked = params.installationId === httpPluginInstallationId;
+    return HttpResponse.json({
+      installationId: String(params.installationId),
+      items: blocked
+        ? [
+            {
+              kind: 'resource',
+              id: platformResourceId,
+              name: 'Daily Brief',
+              lifecycle: 'production',
+              digest: 'a'.repeat(64),
+            },
+          ]
+        : [],
+      uninstallBlocked: blocked,
+    });
+  }),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/uninstall', ({ params }) => {
+    if (params.installationId === dbPluginInstallationId) dbPluginInstalled = false;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.get('http://localhost/v1/execution-runs', () =>
     HttpResponse.json({ items: [platformRun()] }),
   ),
 
   http.post(`http://localhost/v1/execution-runs/${executionRunId}/approve`, async ({ request }) => {
     const body = (await request.json()) as {
+      entryResourceVersionId?: unknown;
       projectId?: unknown;
       inputConstraints?: unknown;
       toolScopes?: unknown;
+      pluginScopes?: unknown;
     };
+    lastPluginApprovalScopes = Array.isArray(body.pluginScopes) ? body.pluginScopes : null;
+    const pluginScope = Array.isArray(body.pluginScopes) ? body.pluginScopes[0] : null;
+    const limits =
+      pluginScope && typeof pluginScope === 'object'
+        ? (pluginScope as { limits?: Record<string, unknown> }).limits
+        : undefined;
+    const pluginScopeValid =
+      pluginScope !== null &&
+      typeof pluginScope === 'object' &&
+      (pluginScope as { installationId?: unknown }).installationId === httpPluginInstallationId &&
+      (pluginScope as { pluginVersionId?: unknown }).pluginVersionId === httpPluginVersionId &&
+      (pluginScope as { tool?: unknown }).tool === 'list_events' &&
+      limits !== undefined &&
+      Object.entries(limits).every(
+        ([key, value]) =>
+          typeof value === 'number' && value <= pluginLimits[key as keyof typeof pluginLimits],
+      );
     if (
+      body.entryResourceVersionId !== platformResourceId ||
       body.projectId !== 'daily-operations' ||
       JSON.stringify(body.inputConstraints) !== JSON.stringify(platformRun().input) ||
-      JSON.stringify(body.toolScopes) !== JSON.stringify(['read:calendar'])
+      JSON.stringify(body.toolScopes) !== JSON.stringify(['read:calendar']) ||
+      !pluginScopeValid
     ) {
       return HttpResponse.json(
         {
           error: {
             code: 'AUTHORITY_ENVELOPE_INSUFFICIENT',
-            message: 'Approval did not bind the server-derived project, input, and tool scopes.',
+            message: 'Approval did not bind the server-derived project, input, and Plugin scopes.',
             requestId: 'test-request',
           },
         },
@@ -923,6 +1303,73 @@ export const handlers = [
     }),
   ),
 
+  http.post('http://localhost/v1/builder/intakes', async ({ request }) => {
+    const body = (await request.json()) as { request: string; confirmed: boolean };
+    return HttpResponse.json(
+      {
+        id: builderIntakeId,
+        request: body.request,
+        requestedBy: 'test-builder',
+        department: outcomes.department,
+        state: body.confirmed ? 'confirmed' : 'interpreted',
+        capabilityProfile,
+        confirmedAt: body.confirmed ? now : null,
+        specificationId: null,
+        createdAt: now,
+      },
+      { status: 201 },
+    );
+  }),
+
+  http.get(`http://localhost/v1/builder/intakes/${builderIntakeId}/referred-choices`, () =>
+    HttpResponse.json({
+      intakeId: builderIntakeId,
+      referredChoices: [referredChoice],
+      compositionSuggestions: [],
+      generatedAt: now,
+    }),
+  ),
+
+  http.post(
+    `http://localhost/v1/builder/intakes/${builderIntakeId}/decisions`,
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        action: 'use_as_is' | 'configure' | 'extend' | 'build_new';
+        selectedPublicationId: string | null;
+        buildNewReason: string | null;
+      };
+      lastBuilderDecision = body;
+      lastBuilderDecisionIdempotencyKey = request.headers.get('Idempotency-Key');
+      const buildNewWithReason = body.action === 'build_new' && body.buildNewReason !== null;
+      return HttpResponse.json(
+        body.action === 'build_new'
+          ? {
+              id: builderDecisionId,
+              intakeId: builderIntakeId,
+              action: 'build_new',
+              selectedPublicationId: null,
+              buildNewReason: body.buildNewReason,
+              demandObservationId: buildNewWithReason ? demandObservationId : null,
+              decidedBy: 'test-builder',
+              highestReferredMatchScore: 87,
+              decidedAt: now,
+            }
+          : {
+              id: builderDecisionId,
+              intakeId: builderIntakeId,
+              action: body.action,
+              selectedPublicationId: body.selectedPublicationId,
+              buildNewReason: null,
+              demandObservationId: null,
+              decidedBy: 'test-builder',
+              highestReferredMatchScore: 87,
+              decidedAt: now,
+            },
+        { status: 201 },
+      );
+    },
+  ),
+
   http.get('http://localhost/agents', ({ request }) => {
     const params = new URL(request.url).searchParams;
     const query = params.get('query') ?? '';
@@ -968,7 +1415,7 @@ export const handlers = [
 
   http.get(`http://localhost/agents/${agentId}`, () => HttpResponse.json(catalogAgent)),
 
-  http.post('http://localhost/agents/specs/interpret', async ({ request }) => {
+  http.post('http://localhost/v1/builder/specs/interpret', async ({ request }) => {
     const body = (await request.json()) as { kind: string; prompt?: string };
     const asksForWrite = body.prompt?.toLocaleLowerCase().includes('write') ?? false;
     const mentionsUnknownErp = body.prompt?.toLocaleLowerCase().includes('our erp') ?? false;
@@ -1067,11 +1514,11 @@ export const handlers = [
     }),
   ),
 
-  http.get('http://localhost/agents/sources', () =>
+  http.get('http://localhost/v1/builder/sources', () =>
     HttpResponse.json({ role: 'knowledge', items: [source] }),
   ),
 
-  http.post('http://localhost/agents/specs', async ({ request }) => {
+  http.post('http://localhost/v1/builder/specs', async ({ request }) => {
     const body = (await request.json()) as {
       outcomes: typeof outcomes;
       baseAgentId: string | null;
@@ -1104,9 +1551,9 @@ export const handlers = [
     return HttpResponse.json(specFixture, { status: 201 });
   }),
 
-  http.get(`http://localhost/agents/specs/${specId}`, () => HttpResponse.json(requireSpec())),
+  http.get(`http://localhost/v1/builder/specs/${specId}`, () => HttpResponse.json(requireSpec())),
 
-  http.put(`http://localhost/agents/specs/${specId}/outcomes`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/outcomes`, async ({ request }) => {
     const body = (await request.json()) as {
       value: typeof outcomes;
       interpretationConfirmation?: TestInterpretationConfirmation;
@@ -1135,7 +1582,7 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.put(`http://localhost/agents/specs/${specId}/knowledge`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/knowledge`, async ({ request }) => {
     const body = (await request.json()) as {
       value: NonNullable<SpecFixture['knowledge']>;
       interpretationConfirmation?: TestInterpretationConfirmation;
@@ -1151,7 +1598,7 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.put(`http://localhost/agents/specs/${specId}/guardrails`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/guardrails`, async ({ request }) => {
     const body = (await request.json()) as { value: typeof guardrails };
     const spec = requireSpec();
     specFixture = {
@@ -1163,7 +1610,7 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.put(`http://localhost/agents/specs/${specId}/outputs`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/outputs`, async ({ request }) => {
     const body = (await request.json()) as { value: typeof outputs };
     const spec = requireSpec();
     specFixture = {
@@ -1176,19 +1623,19 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.post(`http://localhost/agents/specs/${specId}/generate`, () =>
+  http.post(`http://localhost/v1/builder/specs/${specId}/generate`, () =>
     HttpResponse.json(
       {
         jobId,
         agentId,
         state: 'queued',
-        statusUrl: `/agents/generation-jobs/${jobId}`,
+        statusUrl: `/v1/builder/generation-jobs/${jobId}`,
       },
       { status: 202 },
     ),
   ),
 
-  http.get(`http://localhost/agents/generation-jobs/${jobId}`, () =>
+  http.get(`http://localhost/v1/builder/generation-jobs/${jobId}`, () =>
     HttpResponse.json({
       id: jobId,
       agentId,
@@ -1220,7 +1667,7 @@ export const handlers = [
     }),
   ),
 
-  http.post(`http://localhost/agents/${agentId}/shadow-deploy`, () =>
+  http.post(`http://localhost/v1/builder/agents/${agentId}/shadow-deploy`, () =>
     HttpResponse.json({
       deploymentId,
       agentId,
@@ -1229,7 +1676,7 @@ export const handlers = [
     }),
   ),
 
-  http.get(`http://localhost/agents/${agentId}/evaluation`, () =>
+  http.get(`http://localhost/v1/builder/agents/${agentId}/evaluation`, () =>
     HttpResponse.json({
       agentId,
       status: 'complete',

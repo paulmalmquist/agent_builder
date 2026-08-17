@@ -2,7 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 import { renderWithClient } from '../../test/render';
-import { releaseEvaluationId } from '../../test/server';
+import { platformRunFixture, releaseEvaluationId } from '../../test/server';
+import { ApprovalDialog } from './ApprovalDialog';
 import { EvidencePage } from './EvidencePage';
 import { IncubatorPage } from './IncubatorPage';
 import { RegistryPage } from './RegistryPage';
@@ -16,6 +17,119 @@ describe('Paul OS console surfaces', () => {
     expect(resourceHeading).toBeInTheDocument();
     expect(within(resourceHeading.closest('article')!).getByText('Skill')).toBeInTheDocument();
     expect(screen.getByText(/VERSIONED RESOURCES/i).parentElement).toHaveTextContent('1');
+  });
+
+  it('renders every Plugin transport through one quiet, residency-aware card pattern', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<RegistryPage />, ['/registry']);
+
+    const pluginHeadings = await screen.findAllByRole('heading', {
+      name: /Team messages|Calendar API|Analytics preview|Local files/,
+    });
+    expect(pluginHeadings).toHaveLength(4);
+    const pluginCards = document.querySelectorAll('.plugin-card');
+    expect(pluginCards).toHaveLength(4);
+    expect(pluginCards[0]).toHaveTextContent('Team messages');
+    expect(pluginCards[0]).toHaveAttribute('data-health', 'degraded');
+    expect(screen.getByText('mcp')).toBeInTheDocument();
+    expect(screen.getByText('http')).toBeInTheDocument();
+    expect(screen.getByText('db')).toBeInTheDocument();
+    expect(screen.getByText('cli')).toBeInTheDocument();
+
+    const localCard = screen.getByRole('heading', { name: 'Local files' }).closest('article')!;
+    expect(
+      within(localCard).getByRole('button', { name: 'WORKSTATION UNAVAILABLE' }),
+    ).toBeDisabled();
+
+    const analyticsCard = screen
+      .getByRole('heading', { name: 'Analytics preview' })
+      .closest('article')!;
+    await user.click(within(analyticsCard).getByRole('button', { name: 'INSTALL PLUGIN' }));
+    const installDialog = screen.getByRole('dialog', { name: 'Analytics preview' });
+    await user.click(within(installDialog).getByRole('button', { name: 'INSTALL EXACT VERSION' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Analytics preview' })).not.toBeInTheDocument(),
+    );
+    expect(
+      await within(analyticsCard).findByRole('button', { name: 'MANAGE PLUGIN' }),
+    ).toBeInTheDocument();
+  });
+
+  it('uses replace-only opaque secret references and protects certified Plugin dependents', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<RegistryPage />, ['/registry']);
+
+    const calendarCard = (await screen.findByRole('heading', { name: 'Calendar API' })).closest(
+      'article',
+    )!;
+    await user.click(within(calendarCard).getByRole('button', { name: 'MANAGE PLUGIN' }));
+    const dialog = screen.getByRole('dialog', { name: 'Calendar API' });
+    expect(within(dialog).getByText(/Saving replaces every secret binding/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/stored values are intentionally never returned/i),
+    ).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(/Daily Brief · resource · production/i),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'UNINSTALL' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'TRIGGER KILL SWITCH' })).toBeEnabled();
+    const secretReference = within(dialog).getByRole('textbox', { name: /access-token/i });
+    expect(secretReference).toHaveValue('');
+    await user.type(secretReference, 'env://CALENDAR_TOKEN');
+    await user.click(within(dialog).getByRole('button', { name: 'SAVE SECRET REFERENCES' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Calendar API' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('only submits selected server-derived Plugin scopes at equal or lower ceilings', async () => {
+    const user = userEvent.setup();
+    const baseRun = platformRunFixture();
+    const run = {
+      ...baseRun,
+      requiredPluginScopes: [
+        baseRun.requiredPluginScopes[0]!,
+        {
+          ...baseRun.requiredPluginScopes[0]!,
+          tool: 'list_tasks',
+          scopeDescription: 'Read task records in the requested project only',
+        },
+      ],
+    };
+    const onApprove = vi.fn();
+    renderWithClient(
+      <ApprovalDialog
+        error={null}
+        isApproving={false}
+        onApprove={onApprove}
+        onClose={() => undefined}
+        run={run}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Approve execution envelope' });
+    const recordCaps = within(dialog).getAllByRole('spinbutton', { name: 'Record cap' });
+    expect(recordCaps[0]).toHaveAttribute('max', '100');
+    await user.click(recordCaps[0]!);
+    await user.keyboard('{Control>}a{/Control}50');
+    await user.click(
+      within(dialog).getByRole('checkbox', {
+        name: /Read task records in the requested project only/i,
+      }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Approve authority' }));
+
+    expect(onApprove).toHaveBeenCalledOnce();
+    const submitted = onApprove.mock.calls[0]![0];
+    expect(submitted.entryResourceVersionId).toBe(run.entryResourceVersionId);
+    expect(submitted.pluginScopes).toHaveLength(1);
+    expect(submitted.pluginScopes[0]).toMatchObject({
+      tool: 'list_events',
+      limits: { maxRecords: 50 },
+    });
+    expect(submitted.pluginScopes).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ tool: 'list_tasks' })]),
+    );
   });
 
   it('separates approval-required runs from revocable authority envelopes', async () => {

@@ -51,21 +51,69 @@ describeDatabase('Quiet Console Attention ledger', () => {
 
   async function createRelease(actorId: string, departmentId: string | null = LOCAL_DEPARTMENT_ID) {
     const releaseId = randomUUID();
+    const familyId = randomUUID();
+    const entryResourceVersionId = randomUUID();
     const projectId = `attention-${randomUUID()}`;
-    return prisma.releaseBundle.create({
-      data: {
-        id: releaseId,
-        workspaceId: LOCAL_WORKSPACE_ID,
-        departmentId,
-        digest: digest(releaseId),
-        projectId,
-        createdBy: actorId,
-      },
+    const release = await prisma.$transaction(async (transaction) => {
+      await transaction.resourceFamily.create({
+        data: {
+          id: familyId,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          departmentId,
+          kind: ResourceKind.SKILL,
+          slug: `attention-entry-${familyId}`,
+          name: 'Attention fixture entrypoint',
+          createdBy: actorId,
+          updatedBy: actorId,
+        },
+      });
+      await transaction.resourceVersion.create({
+        data: {
+          id: entryResourceVersionId,
+          familyId,
+          version: '1.0.0',
+          lifecycle: ResourceLifecycle.CANDIDATE,
+          owner: actorId,
+          purpose: 'Provide an exact entrypoint for Attention integration runs.',
+          definition: {},
+          digest: digest(`entry-${entryResourceVersionId}`),
+          sourceCommit: 'a'.repeat(40),
+          provenance: {},
+          dependencyPins: [],
+          frozenAt: new Date(),
+          createdBy: actorId,
+          updatedBy: actorId,
+        },
+      });
+      return transaction.releaseBundle.create({
+        data: {
+          id: releaseId,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          departmentId,
+          digest: digest(releaseId),
+          projectId,
+          createdBy: actorId,
+          resources: {
+            create: {
+              resourceVersionId: entryResourceVersionId,
+              kind: ResourceKind.SKILL,
+              digest: digest(`entry-${entryResourceVersionId}`),
+              ordinal: 1,
+            },
+          },
+        },
+      });
     });
+    return { ...release, entryResourceVersionId };
   }
 
   async function createRun(
-    release: { id: string; digest: string; projectId: string | null },
+    release: {
+      id: string;
+      digest: string;
+      projectId: string | null;
+      entryResourceVersionId: string;
+    },
     actorId: string,
     state: ExecutionRunState,
     digestSnapshotId: string | null = null,
@@ -79,6 +127,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
         departmentId,
         digestSnapshotId,
         releaseId: release.id,
+        entryResourceVersionId: release.entryResourceVersionId,
         releaseDigest: release.digest,
         contextDigest: digest(`context-${runId}`),
         contextProvenance: [],
@@ -172,8 +221,11 @@ describeDatabase('Quiet Console Attention ledger', () => {
     });
     await prisma.$transaction(async (transaction) => {
       await transaction.$queryRaw`SELECT set_config('paul_os.certification_evidence_id', ${evaluation.id}, true)`;
-      await transaction.resourceVersion.update({
-        where: { id: suiteVersionId },
+      await transaction.resourceVersion.updateMany({
+        where: {
+          lifecycle: ResourceLifecycle.CANDIDATE,
+          releases: { some: { releaseId } },
+        },
         data: { lifecycle: ResourceLifecycle.CERTIFIED, updatedBy: actorId },
       });
     });
@@ -633,6 +685,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
         name: 'Digest Overflow Department',
       },
     });
+    const eventPeriodStart = new Date('2026-08-15T10:00:00.000Z');
     await prisma.platformEvent.createMany({
       data: Array.from({ length: 251 }, (_, index) => ({
         id: randomUUID(),
@@ -644,6 +697,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
         summary: { costUsd: 0.01 },
         actorId,
         requestId: randomUUID(),
+        occurredAt: new Date(eventPeriodStart.getTime() + index * 1000),
       })),
     });
 
@@ -654,6 +708,10 @@ describeDatabase('Quiet Console Attention ledger', () => {
     const first = await runWithPrincipal(requestPrincipal, () => service.createDigestSnapshot());
     expect(first.summary).toMatchObject({ eventCount: 250, omittedEventCount: 0 });
     expect(first.summary.eventLines).toHaveLength(250);
+    expect(first.summary.windowStartedAt).toBe(eventPeriodStart.toISOString());
+    expect(first.summary.windowEndedAt).toBe(
+      new Date(eventPeriodStart.getTime() + 249_000).toISOString(),
+    );
     await runWithPrincipal(requestPrincipal, () =>
       service.recordDigestDelivery(first.id, {
         attemptKey: `overflow-first-${randomUUID()}`,
@@ -663,6 +721,10 @@ describeDatabase('Quiet Console Attention ledger', () => {
 
     const second = await runWithPrincipal(requestPrincipal, () => service.createDigestSnapshot());
     expect(second.summary).toMatchObject({ eventCount: 1, omittedEventCount: 0 });
+    expect(second.summary.windowStartedAt).toBe(
+      new Date(eventPeriodStart.getTime() + 250_000).toISOString(),
+    );
+    expect(second.summary.windowEndedAt).toBe(second.summary.windowStartedAt);
     expect(BigInt(second.eventSequenceThrough)).toBeGreaterThan(BigInt(first.eventSequenceThrough));
     await runWithPrincipal(requestPrincipal, () =>
       service.recordDigestDelivery(second.id, {

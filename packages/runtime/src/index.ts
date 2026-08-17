@@ -4,4 +4,5 @@ export * from './context-assembly.js';
 export * from './daily-brief.js';
 export * from './execution-context.js';
 export * from './model-provider.js';
+export * from './plugin-runtime.js';
 export * from './profile.js';

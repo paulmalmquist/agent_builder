@@ -461,6 +461,7 @@ describe('ReleaseGovernanceService', () => {
         }),
       },
       releasePromotionDecision: { create: jest.fn().mockResolvedValue(decision) },
+      catalogPublication: { findMany: jest.fn().mockResolvedValue([]) },
       auditEvent: { create: jest.fn().mockResolvedValue({ id: 'audit-id' }) },
       platformEvent: { create: jest.fn().mockResolvedValue({ id: 'platform-event-id' }) },
     };

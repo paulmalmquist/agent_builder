@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   AgentDerivationMode,
@@ -34,7 +34,11 @@ import {
   outcomesSectionSchema,
   outputsSectionSchema,
 } from '@agent-builder/contracts';
-import { assertAcyclicDependencies, compileResourceYaml } from '@paul-os/runtime';
+import {
+  assertAcyclicDependencies,
+  compileResourceYaml,
+  discoverResourceManifestPaths,
+} from '@paul-os/runtime';
 import { RegistryService } from '../src/services/registry-service.js';
 import {
   LOCAL_DEPARTMENT_ID,
@@ -52,36 +56,12 @@ const seedSourceCommit =
     ? configuredSourceCommit
     : 'synthetic-baseline';
 
-async function trackedManifestPaths(): Promise<string[]> {
-  const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
-    ? path.resolve(process.cwd(), '..', '..')
-    : process.cwd();
-  const entries = await readdir(workspaceRoot, { withFileTypes: true });
-  const manifests: string[] = [];
-  for (const domain of entries.filter(
-    (entry) => entry.isDirectory() && /^\d{2}-[a-z0-9-]+$/.test(entry.name),
-  )) {
-    const domainPath = path.join(workspaceRoot, domain.name);
-    for (const resource of await readdir(domainPath, { withFileTypes: true })) {
-      if (!resource.isDirectory()) continue;
-      const manifestPath = path.join(domainPath, resource.name, 'manifest.yaml');
-      try {
-        await readFile(manifestPath, 'utf8');
-        manifests.push(manifestPath);
-      } catch {
-        // Profiles and documentation directories are not registry resources.
-      }
-    }
-  }
-  return manifests;
-}
-
 async function seedPlatformResources(): Promise<void> {
   const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
     ? path.resolve(process.cwd(), '..', '..')
     : process.cwd();
   const sources = await Promise.all(
-    (await trackedManifestPaths()).map(async (manifestPath) => ({
+    (await discoverResourceManifestPaths(workspaceRoot)).map(async (manifestPath) => ({
       manifestPath,
       source: await readFile(manifestPath, 'utf8'),
       compiled: compileResourceYaml(await readFile(manifestPath, 'utf8')),

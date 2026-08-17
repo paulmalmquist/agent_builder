@@ -1,16 +1,22 @@
+import { randomUUID } from 'node:crypto';
 import {
   ApprovalRequestState,
   AuthorityGrantState,
   ContextClassification,
   ExecutionRunState,
   ModelProviderKind,
+  PluginEffect,
+  PluginInstallationState,
+  PluginResidency,
   Prisma,
+  ResourceKind,
   type AuthorityGrant as DatabaseAuthorityGrant,
   type ExecutionRun as DatabaseExecutionRun,
   type PrismaClient,
 } from '@prisma/client';
 import {
   approveExecutionRunRequestSchema,
+  agentResourceSpecSchema,
   authorityGrantListResponseSchema,
   authorityGrantSchema,
   createAuthorityGrantRequestSchema,
@@ -21,17 +27,26 @@ import {
   executionRunListResponseSchema,
   executionRunSchema,
   jsonObjectSchema,
+  knowledgeSourceSpecSchema,
   metricListResponseSchema,
   metricSampleSchema,
   outcomeListResponseSchema,
   outcomeRecordSchema,
+  pluginAuthorityScopeSchema,
+  pluginCallInputPathSchema,
+  pluginResourceSpecSchema,
   rejectExecutionRunRequestSchema,
   resourceManifestSchema,
+  runPluginRequirementSchema,
   skillSpecSchema,
   type AuthorityGrant,
   type ExecutionRun,
+  type PluginAuthorityScope,
+  type PlannedPluginCallRequest,
+  type RunPluginRequirement,
   type executionRunStateSchema,
   type JsonValue,
+  type requestedPluginAuthorityScopeSchema,
 } from '@agent-builder/contracts';
 import {
   collectModelStream,
@@ -76,6 +91,7 @@ const runStateWire = {
   [ExecutionRunState.FAILED]: 'failed',
   [ExecutionRunState.CANCELLED]: 'cancelled',
   [ExecutionRunState.PAUSED_BUDGET]: 'paused_budget',
+  [ExecutionRunState.PAUSED_PLUGIN]: 'paused_plugin',
 } as const;
 const grantStateWire = {
   [AuthorityGrantState.ACTIVE]: 'active',
@@ -88,6 +104,15 @@ const contextClassificationMap = {
   internal: ContextClassification.INTERNAL,
   private: ContextClassification.PRIVATE,
   restricted: ContextClassification.RESTRICTED,
+} as const;
+const pluginEffectMap = {
+  read: PluginEffect.READ,
+  write: PluginEffect.WRITE,
+  destructive: PluginEffect.DESTRUCTIVE,
+} as const;
+const pluginPlacementWire = {
+  [PluginResidency.CONTROL_PLANE]: 'control_plane',
+  [PluginResidency.WORKSTATION]: 'workstation',
 } as const;
 
 const SERIALIZABLE_TRANSACTION_ATTEMPTS = 3;
@@ -134,11 +159,14 @@ type ReleaseForExecution = Prisma.ReleaseBundleGetPayload<{
 }>;
 
 const stringArraySchema = z.array(z.string());
+const pluginAuthorityScopesSchema = z.array(pluginAuthorityScopeSchema);
+const runPluginRequirementsSchema = z.array(runPluginRequirementSchema);
 
 function toGrant(record: DatabaseAuthorityGrant): AuthorityGrant {
   return authorityGrantSchema.parse({
     id: record.id,
     releaseId: record.releaseId,
+    entryResourceVersionId: record.entryResourceVersionId,
     releaseDigest: record.releaseDigest,
     contextDigest: record.contextDigest,
     projectId: record.projectId,
@@ -148,6 +176,11 @@ function toGrant(record: DatabaseAuthorityGrant): AuthorityGrant {
       'AuthorityGrant.inputConstraints',
     ),
     toolScopes: parseJson(stringArraySchema, record.toolScopes, 'AuthorityGrant.toolScopes'),
+    pluginScopes: parseJson(
+      pluginAuthorityScopesSchema,
+      record.pluginScopes,
+      'AuthorityGrant.pluginScopes',
+    ),
     validFrom: record.validFrom.toISOString(),
     validUntil: record.validUntil.toISOString(),
     maxRuns: record.maxRuns,
@@ -168,6 +201,8 @@ function toRun(record: DatabaseExecutionRun): ExecutionRun {
   return executionRunSchema.parse({
     id: record.id,
     releaseId: record.releaseId,
+    entryResourceVersionId: record.entryResourceVersionId,
+    legacyEntrypointUnresolved: record.legacyEntrypointUnresolved,
     releaseDigest: record.releaseDigest,
     contextDigest: record.contextDigest,
     contextProvenance: parseJson(
@@ -183,6 +218,12 @@ function toRun(record: DatabaseExecutionRun): ExecutionRun {
       record.requiredToolScopes,
       'ExecutionRun.requiredToolScopes',
     ),
+    requiredPluginScopes: parseJson(
+      runPluginRequirementsSchema,
+      record.requiredPluginScopes,
+      'ExecutionRun.requiredPluginScopes',
+    ),
+    requiresPluginApproval: record.requiresPluginApproval,
     authorityGrantId: record.authorityGrantId,
     digestSnapshotId: record.digestSnapshotId,
     state: runStateWire[record.state],
@@ -234,24 +275,63 @@ function satisfiesConstraints(
   });
 }
 
-function releaseRequirements(release: ReleaseForExecution): {
-  requiredTools: string[];
-  isDailyBrief: boolean;
-} {
-  const tools = new Set<string>();
-  let isDailyBrief = false;
-  for (const item of release.resources) {
-    const manifest = parseJson(
-      resourceManifestSchema,
-      item.resourceVersion.definition,
-      'ResourceVersion.definition',
-    );
-    if (manifest.kind !== 'Skill') continue;
-    const spec = skillSpecSchema.parse(manifest.spec);
-    spec.tools.forEach((tool) => tools.add(tool));
-    if (manifest.metadata.slug === 'daily-brief') isDailyBrief = true;
+function pluginInputAtPath(
+  input: Record<string, JsonValue>,
+  pathInput: PlannedPluginCallRequest['inputPath'],
+): JsonValue {
+  const path = pluginCallInputPathSchema.parse(pathInput);
+  let current: JsonValue = input;
+  for (const segment of path) {
+    if (typeof segment === 'number') {
+      if (!Array.isArray(current) || segment >= current.length) {
+        throw new AppError(
+          422,
+          'PLUGIN_PLAN_INPUT_PATH_INVALID',
+          'A Plugin call input path does not resolve inside the run input',
+        );
+      }
+      const next: JsonValue | undefined = current[segment];
+      if (next === undefined) {
+        throw new AppError(
+          422,
+          'PLUGIN_PLAN_INPUT_PATH_INVALID',
+          'A Plugin call input path does not resolve inside the run input',
+        );
+      }
+      current = next;
+      continue;
+    }
+    if (
+      current === null ||
+      Array.isArray(current) ||
+      typeof current !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(current, segment)
+    ) {
+      throw new AppError(
+        422,
+        'PLUGIN_PLAN_INPUT_PATH_INVALID',
+        'A Plugin call input path does not resolve inside the run input',
+      );
+    }
+    const next: JsonValue | undefined = current[segment];
+    if (next === undefined) {
+      throw new AppError(
+        422,
+        'PLUGIN_PLAN_INPUT_PATH_INVALID',
+        'A Plugin call input path does not resolve inside the run input',
+      );
+    }
+    current = next;
   }
-  return { requiredTools: [...tools], isDailyBrief };
+  return current;
+}
+
+function pluginRequirementKey(input: {
+  installationId: string;
+  pluginVersionId: string;
+  tool: string;
+}): string {
+  return `${input.installationId}:${input.pluginVersionId}:${input.tool}`;
 }
 
 function extractJson(text: string): unknown {
@@ -309,13 +389,356 @@ export class ExecutionService implements ExecutionWorkerApi {
     return release;
   }
 
+  private async entryRequirements(
+    release: ReleaseForExecution,
+    entryResourceVersionId: string,
+    transaction: PrismaClient | Prisma.TransactionClient = this.prisma,
+  ): Promise<{
+    requiredTools: string[];
+    requiredPlugins: Array<{ familyId: string; version: string; tool: string }>;
+    reachableVersionIds: Set<string>;
+    isDailyBrief: boolean;
+  }> {
+    const releasedVersions = new Map(
+      release.resources.map(({ resourceVersion }) => [resourceVersion.id, resourceVersion]),
+    );
+    if (!releasedVersions.has(entryResourceVersionId)) {
+      throw new AppError(
+        422,
+        'ENTRYPOINT_RELEASE_MISMATCH',
+        'The exact entry resource is not part of this release',
+      );
+    }
+    const ids = [...releasedVersions.keys()];
+    const pins = await transaction.resourceDependencyPin.findMany({
+      where: { sourceVersionId: { in: ids } },
+      select: { sourceVersionId: true, targetVersionId: true },
+    });
+    const outgoing = new Map<string, string[]>();
+    for (const pin of pins) {
+      if (!releasedVersions.has(pin.targetVersionId)) {
+        throw new AppError(
+          409,
+          'RELEASE_DEPENDENCY_MISSING',
+          'The release no longer contains an exact dependency of its entrypoint',
+        );
+      }
+      const targets = outgoing.get(pin.sourceVersionId) ?? [];
+      targets.push(pin.targetVersionId);
+      outgoing.set(pin.sourceVersionId, targets);
+    }
+    const reachableVersionIds = new Set<string>();
+    const pending = [entryResourceVersionId];
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (current === undefined || reachableVersionIds.has(current)) continue;
+      reachableVersionIds.add(current);
+      pending.push(...(outgoing.get(current) ?? []));
+    }
+
+    const requiredTools = new Set<string>();
+    const requiredPlugins = new Map<string, { familyId: string; version: string; tool: string }>();
+    let isDailyBrief = false;
+    for (const id of reachableVersionIds) {
+      const resource = releasedVersions.get(id);
+      if (resource === undefined) continue;
+      const manifest = parseJson(
+        resourceManifestSchema,
+        resource.definition,
+        'ResourceVersion.definition',
+      );
+      if (manifest.metadata.slug === 'daily-brief') isDailyBrief = true;
+      if (manifest.kind === 'Skill' || manifest.kind === 'Agent') {
+        const tools =
+          manifest.kind === 'Skill'
+            ? skillSpecSchema.parse(manifest.spec).tools
+            : agentResourceSpecSchema.parse(manifest.spec).tools;
+        for (const tool of tools) {
+          if (typeof tool === 'string') {
+            requiredTools.add(tool);
+          } else {
+            const key = `${tool.plugin.familyId}:${tool.plugin.version}:${tool.tool}`;
+            requiredPlugins.set(key, {
+              familyId: tool.plugin.familyId,
+              version: tool.plugin.version,
+              tool: tool.tool,
+            });
+          }
+        }
+      } else if (manifest.kind === 'KnowledgeSource') {
+        const spec = knowledgeSourceSpecSchema.parse(manifest.spec);
+        if ('plugin' in spec) {
+          const key = `${spec.plugin.familyId}:${spec.plugin.version}:${spec.capability}`;
+          requiredPlugins.set(key, {
+            familyId: spec.plugin.familyId,
+            version: spec.plugin.version,
+            tool: spec.capability,
+          });
+        }
+      }
+    }
+    return {
+      requiredTools: [...requiredTools],
+      requiredPlugins: [...requiredPlugins.values()],
+      reachableVersionIds,
+      isDailyBrief,
+    };
+  }
+
+  private assertNarrowedPluginLimits(
+    requested: Record<string, number | undefined>,
+    declared: Record<string, number | undefined>,
+  ): void {
+    for (const [key, requestedValue] of Object.entries(requested)) {
+      const declaredValue = declared[key];
+      if (
+        requestedValue !== undefined &&
+        (declaredValue === undefined || requestedValue > declaredValue)
+      ) {
+        throw new AppError(
+          422,
+          'PLUGIN_SCOPE_BROADENED',
+          'A Plugin authority scope may narrow declared limits but cannot broaden them',
+        );
+      }
+    }
+  }
+
+  private async materializePluginScopes(
+    release: ReleaseForExecution,
+    entryResourceVersionId: string,
+    requestedScopes: z.infer<typeof requestedPluginAuthorityScopeSchema>[],
+    transaction: PrismaClient | Prisma.TransactionClient = this.prisma,
+  ): Promise<PluginAuthorityScope[]> {
+    const requirements = await this.entryRequirements(release, entryResourceVersionId, transaction);
+    const releasedVersions = release.resources.map(({ resourceVersion }) => resourceVersion);
+    const seen = new Set<string>();
+    const scopes: PluginAuthorityScope[] = [];
+    for (const requested of requestedScopes) {
+      const key = `${requested.installationId}:${requested.pluginVersionId}:${requested.tool}`;
+      if (seen.has(key)) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'Plugin authority scopes must be unique');
+      }
+      seen.add(key);
+      const installation = await transaction.pluginInstallation.findFirst({
+        where: {
+          id: requested.installationId,
+          pluginVersionId: requested.pluginVersionId,
+          state: PluginInstallationState.ENABLED,
+          ...aggregateScopeWhere(),
+        },
+        include: { pluginVersion: { include: { family: true } } },
+      });
+      if (installation === null) {
+        throw new AppError(
+          422,
+          'PLUGIN_INSTALLATION_UNAVAILABLE',
+          'The exact enabled Plugin installation is unavailable',
+        );
+      }
+      if (installation.residency !== PluginResidency.CONTROL_PLANE) {
+        throw new AppError(
+          422,
+          'WORKSTATION_PLUGIN_UNAVAILABLE',
+          'Workstation Plugin execution is not available in this checkpoint',
+        );
+      }
+      if (
+        !requirements.reachableVersionIds.has(installation.pluginVersionId) ||
+        !releasedVersions.some(
+          (resource) =>
+            resource.id === installation.pluginVersionId &&
+            resource.family.kind === ResourceKind.PLUGIN,
+        )
+      ) {
+        throw new AppError(
+          422,
+          'PLUGIN_OUTSIDE_ENTRYPOINT_CLOSURE',
+          'Plugin authority is limited to the entrypoint dependency closure',
+        );
+      }
+      if (installation.pluginDigest !== installation.pluginVersion.digest) {
+        throw new AppError(
+          409,
+          'PLUGIN_DIGEST_MISMATCH',
+          'The installed Plugin digest no longer matches its exact resource version',
+        );
+      }
+      const manifest = parseJson(
+        resourceManifestSchema,
+        installation.pluginVersion.definition,
+        'ResourceVersion.definition',
+      );
+      if (manifest.kind !== 'Plugin') {
+        throw new AppError(409, 'PLUGIN_DEFINITION_INVALID', 'The exact resource is not a Plugin');
+      }
+      const spec = pluginResourceSpecSchema.parse(manifest.spec);
+      const capability = spec.capabilities.find(({ tool }) => tool === requested.tool);
+      if (capability === undefined) {
+        throw new AppError(
+          422,
+          'PLUGIN_CAPABILITY_UNKNOWN',
+          'The requested capability is not declared by the exact Plugin version',
+        );
+      }
+      this.assertNarrowedPluginLimits(requested.limits, capability.limits);
+      scopes.push(
+        pluginAuthorityScopeSchema.parse({
+          ...requested,
+          pluginDigest: installation.pluginDigest,
+          effect: capability.effect,
+          scopeDescription: capability.scopeDescription,
+        }),
+      );
+    }
+    return scopes;
+  }
+
+  private async deriveRunPluginRequirements(
+    release: ReleaseForExecution,
+    entryResourceVersionId: string,
+    transaction: PrismaClient | Prisma.TransactionClient = this.prisma,
+  ): Promise<{ items: RunPluginRequirement[]; unavailableReasons: string[] }> {
+    const entry = await this.entryRequirements(release, entryResourceVersionId, transaction);
+    const result: RunPluginRequirement[] = [];
+    const unavailableReasons: string[] = [];
+    for (const required of entry.requiredPlugins) {
+      const pluginVersion = release.resources
+        .map(({ resourceVersion }) => resourceVersion)
+        .find(
+          (resource) =>
+            resource.familyId === required.familyId &&
+            resource.version === required.version &&
+            resource.family.kind === ResourceKind.PLUGIN &&
+            entry.reachableVersionIds.has(resource.id),
+        );
+      if (pluginVersion === undefined) {
+        throw new AppError(
+          409,
+          'RELEASE_DEPENDENCY_MISSING',
+          'The entrypoint omits an exact Plugin dependency',
+        );
+      }
+      const candidates = await transaction.pluginInstallation.findMany({
+        where: {
+          pluginVersionId: pluginVersion.id,
+          state: { not: PluginInstallationState.UNINSTALLED },
+          ...aggregateScopeWhere(),
+        },
+        orderBy: { installedAt: 'desc' },
+      });
+      const principalDepartment = aggregateScope().departmentId;
+      const installation =
+        candidates.find(({ departmentId }) => departmentId === principalDepartment) ??
+        candidates.find(({ departmentId }) => departmentId === null);
+      if (installation === undefined) {
+        throw new AppError(
+          422,
+          'PLUGIN_INSTALLATION_REQUIRED',
+          'The entrypoint requires an exact Plugin that is not installed',
+        );
+      }
+      const manifest = parseJson(
+        resourceManifestSchema,
+        pluginVersion.definition,
+        'ResourceVersion.definition',
+      );
+      if (manifest.kind !== 'Plugin') {
+        throw new AppError(409, 'PLUGIN_DEFINITION_INVALID', 'The dependency is not a Plugin');
+      }
+      const capability = pluginResourceSpecSchema
+        .parse(manifest.spec)
+        .capabilities.find(({ tool }) => tool === required.tool);
+      if (capability === undefined) {
+        throw new AppError(
+          422,
+          'PLUGIN_CAPABILITY_UNKNOWN',
+          'The entrypoint requires a capability absent from its exact Plugin dependency',
+        );
+      }
+      // Requirements snapshot the Plugin declaration's maximum authority. A grant is allowed to
+      // narrow this ceiling, and the worker executes with that narrower grant scope. Persisting
+      // the grant here would erase the independent maximum and make broadening undetectable.
+      const base = pluginAuthorityScopeSchema.parse({
+        installationId: installation.id,
+        pluginVersionId: pluginVersion.id,
+        pluginDigest: pluginVersion.digest,
+        tool: required.tool,
+        effect: capability.effect,
+        limits: capability.limits,
+        scopeDescription: capability.scopeDescription,
+      });
+      result.push(
+        runPluginRequirementSchema.parse({
+          ...base,
+          executionPlacement: pluginPlacementWire[installation.residency],
+          approvalRequired:
+            capability.approval === 'approval_required' || capability.effect !== 'read',
+        }),
+      );
+      if (
+        installation.state !== PluginInstallationState.ENABLED ||
+        installation.residency !== PluginResidency.CONTROL_PLANE
+      ) {
+        unavailableReasons.push(
+          installation.residency !== PluginResidency.CONTROL_PLANE
+            ? `Required Plugin capability ${required.tool} needs workstation execution, which is unavailable`
+            : `Required Plugin capability ${required.tool} is ${installation.state.toLowerCase()}`,
+        );
+      }
+    }
+    return { items: result, unavailableReasons };
+  }
+
+  private materializePluginCallPlans(
+    calls: PlannedPluginCallRequest[],
+    requirements: RunPluginRequirement[],
+    runInput: Record<string, JsonValue>,
+  ): {
+    calls: Array<PlannedPluginCallRequest & { requirementKey: string }>;
+    estimatedUpperCostUsd: number;
+  } {
+    const requirementsByKey = new Map(
+      requirements.map((requirement) => [pluginRequirementKey(requirement), requirement]),
+    );
+    const counts = new Map<string, number>();
+    let estimatedUpperCostUsd = 0;
+    const materialized = calls.map((call) => {
+      const requirementKey = pluginRequirementKey(call);
+      const requirement = requirementsByKey.get(requirementKey);
+      if (requirement === undefined) {
+        throw new AppError(
+          422,
+          'PLUGIN_PLAN_REQUIREMENT_MISMATCH',
+          'A Plugin call plan must reference an exact requirement of this run entrypoint',
+        );
+      }
+      pluginInputAtPath(runInput, call.inputPath);
+      const nextCount = (counts.get(requirementKey) ?? 0) + 1;
+      if (nextCount > requirement.limits.maxInvocationsPerRun) {
+        throw new AppError(
+          422,
+          'PLUGIN_INVOCATION_LIMIT_EXCEEDED',
+          'A Plugin call plan exceeds the exact capability invocation limit',
+        );
+      }
+      counts.set(requirementKey, nextCount);
+      estimatedUpperCostUsd += requirement.limits.maxEstimatedCostUsd ?? 0;
+      return { ...call, requirementKey };
+    });
+    return { calls: materialized, estimatedUpperCostUsd };
+  }
+
   private grantBlockers(
     grant: DatabaseAuthorityGrant | null,
     release: ReleaseForExecution,
+    entryResourceVersionId: string,
     contextDigest: string,
     input: Record<string, JsonValue>,
     requiredTools: string[],
+    requiredPluginScopes: RunPluginRequirement[],
     estimatedUpperCostUsd: number,
+    perRunPluginApproved: boolean,
   ): string[] {
     if (grant === null) return ['No authority grant is bound to this release'];
     const blockers: string[] = [];
@@ -324,6 +747,8 @@ export class ExecutionService implements ExecutionWorkerApi {
       blockers.push(`Authority grant is ${grantStateWire[grant.state]}`);
     if (grant.releaseId !== release.id || grant.releaseDigest !== release.digest)
       blockers.push('Authority grant release digest does not match');
+    if (grant.entryResourceVersionId !== entryResourceVersionId)
+      blockers.push('Authority grant entry resource does not match');
     if (grant.workspaceId !== release.workspaceId || grant.departmentId !== release.departmentId)
       blockers.push('Authority grant release scope does not match');
     if (grant.contextDigest !== contextDigest)
@@ -352,6 +777,32 @@ export class ExecutionService implements ExecutionWorkerApi {
     );
     if (requiredTools.some((tool) => !scopes.has(tool)))
       blockers.push('Run requires a tool scope not present in the authority grant');
+    const pluginScopes = parseJson(
+      pluginAuthorityScopesSchema,
+      grant.pluginScopes,
+      'AuthorityGrant.pluginScopes',
+    );
+    if (
+      requiredPluginScopes.some(
+        (required) =>
+          !pluginScopes.some(
+            (granted) =>
+              granted.installationId === required.installationId &&
+              granted.pluginVersionId === required.pluginVersionId &&
+              granted.pluginDigest === required.pluginDigest &&
+              granted.tool === required.tool &&
+              granted.effect === required.effect,
+          ),
+      )
+    ) {
+      blockers.push('Run requires a Plugin scope not present in the authority grant');
+    }
+    if (
+      requiredPluginScopes.some(({ approvalRequired }) => approvalRequired) &&
+      !perRunPluginApproved
+    ) {
+      blockers.push('A required Plugin action needs human approval for this exact run');
+    }
     return blockers;
   }
 
@@ -359,6 +810,7 @@ export class ExecutionService implements ExecutionWorkerApi {
     grant: DatabaseAuthorityGrant | null,
     run: DatabaseExecutionRun,
     release: ReleaseForExecution,
+    perRunPluginApproved: boolean,
   ): string[] {
     if (grant === null) return ['Authority grant is unavailable'];
     const blockers: string[] = [];
@@ -371,6 +823,14 @@ export class ExecutionService implements ExecutionWorkerApi {
     }
     if (grant.releaseId !== run.releaseId || grant.releaseDigest !== run.releaseDigest) {
       blockers.push('Authority grant release digest does not match');
+    }
+    if (
+      grant.entryResourceVersionId !== run.entryResourceVersionId ||
+      !release.resources.some(
+        ({ resourceVersion }) => resourceVersion.id === run.entryResourceVersionId,
+      )
+    ) {
+      blockers.push('Authority grant entry resource does not match');
     }
     if (
       grant.workspaceId !== run.workspaceId ||
@@ -417,6 +877,34 @@ export class ExecutionService implements ExecutionWorkerApi {
     );
     if (requiredScopes.some((scope) => !scopes.has(scope))) {
       blockers.push('Run requires a tool scope not present in the authority grant');
+    }
+    const pluginScopes = parseJson(
+      pluginAuthorityScopesSchema,
+      grant.pluginScopes,
+      'AuthorityGrant.pluginScopes',
+    );
+    const requiredPluginScopes = parseJson(
+      runPluginRequirementsSchema,
+      run.requiredPluginScopes,
+      'ExecutionRun.requiredPluginScopes',
+    );
+    if (
+      requiredPluginScopes.some(
+        (required) =>
+          !pluginScopes.some(
+            (granted) =>
+              granted.installationId === required.installationId &&
+              granted.pluginVersionId === required.pluginVersionId &&
+              granted.pluginDigest === required.pluginDigest &&
+              granted.tool === required.tool &&
+              granted.effect === required.effect,
+          ),
+      )
+    ) {
+      blockers.push('Run requires a Plugin scope not present in the authority grant');
+    }
+    if (run.requiresPluginApproval && !perRunPluginApproved) {
+      blockers.push('A required Plugin action lacks approval for this exact run');
     }
     return blockers;
   }
@@ -544,11 +1032,17 @@ export class ExecutionService implements ExecutionWorkerApi {
     if (new Date(parsed.validUntil).getTime() <= Date.now()) {
       throw new AppError(400, 'VALIDATION_ERROR', 'Authority grant must expire in the future');
     }
+    const pluginScopes = await this.materializePluginScopes(
+      release,
+      parsed.entryResourceVersionId,
+      parsed.pluginScopes,
+    );
     const record = await this.prisma.$transaction(async (transaction) => {
       const created = await transaction.authorityGrant.create({
         data: {
           ...aggregateScope(),
           releaseId: release.id,
+          entryResourceVersionId: parsed.entryResourceVersionId,
           releaseDigest: release.digest,
           contextDigest: parsed.contextDigest,
           projectId: parsed.projectId,
@@ -562,6 +1056,11 @@ export class ExecutionService implements ExecutionWorkerApi {
             parsed.toolScopes,
             'AuthorityGrant.toolScopes',
           ),
+          pluginScopes: toPrismaJson(
+            pluginAuthorityScopesSchema,
+            pluginScopes,
+            'AuthorityGrant.pluginScopes',
+          ),
           validUntil: new Date(parsed.validUntil),
           maxRuns: parsed.maxRuns,
           maxEstimatedCostPerRunUsd: parsed.maxEstimatedCostPerRunUsd,
@@ -574,7 +1073,12 @@ export class ExecutionService implements ExecutionWorkerApi {
         action: 'authority.granted',
         entityType: 'AuthorityGrant',
         entityId: created.id,
-        details: { releaseId: release.id, releaseDigest: release.digest },
+        details: {
+          releaseId: release.id,
+          releaseDigest: release.digest,
+          entryResourceVersionId: parsed.entryResourceVersionId,
+          pluginScopeCount: pluginScopes.length,
+        },
       });
       return created;
     });
@@ -732,14 +1236,28 @@ export class ExecutionService implements ExecutionWorkerApi {
     options: { digestSnapshotId?: string | null } = {},
   ): Promise<ExecutionRun> {
     const parsed = createExecutionRunRequestSchema.parse(input);
+    if (parsed.pluginCalls.length > 0 && this.config.execution.dispatchMode !== 'external') {
+      throw new AppError(
+        503,
+        'PLUGIN_WORKER_REQUIRED',
+        'Planned Plugin calls require the durable external worker and cannot use in-process dispatch',
+      );
+    }
     const executionContext = await this.executionContext();
     const contextSummary = summarizeExecutionContext(executionContext);
     const idempotent = await this.prisma.executionRun.findFirst({
       where: { idempotencyKey: parsed.idempotencyKey, ...aggregateScopeWhere() },
+      include: {
+        pluginCallPlans: {
+          orderBy: { ordinal: 'asc' },
+          include: { requirement: true },
+        },
+      },
     });
     if (idempotent !== null) {
       const sameRequest =
         idempotent.releaseId === parsed.releaseId &&
+        idempotent.entryResourceVersionId === parsed.entryResourceVersionId &&
         idempotent.authorityGrantId === parsed.authorityGrantId &&
         idempotent.contextDigest === executionContext.digest &&
         canonicalJson(parseJson(jsonObjectSchema, idempotent.input, 'ExecutionRun.input')) ===
@@ -749,7 +1267,17 @@ export class ExecutionService implements ExecutionWorkerApi {
         Number(idempotent.maxEstimatedCostUsd) === parsed.maxEstimatedCostUsd;
       const sameDevelopmentMode = idempotent.developmentDraft === parsed.developmentDraft;
       const sameDigestSnapshot = idempotent.digestSnapshotId === (options.digestSnapshotId ?? null);
-      if (!sameRequest || !sameDevelopmentMode || !sameDigestSnapshot) {
+      const samePluginCalls =
+        canonicalJson(
+          idempotent.pluginCallPlans.map((plan) => ({
+            installationId: plan.requirement.installationId,
+            pluginVersionId: plan.requirement.pluginVersionId,
+            tool: plan.requirement.capabilityName,
+            inputPath: pluginCallInputPathSchema.parse(plan.inputPath),
+            outputContextKey: plan.outputContextKey,
+          })),
+        ) === canonicalJson(parsed.pluginCalls);
+      if (!sameRequest || !sameDevelopmentMode || !sameDigestSnapshot || !samePluginCalls) {
         throw new AppError(
           409,
           'IDEMPOTENCY_KEY_REUSED',
@@ -801,7 +1329,7 @@ export class ExecutionService implements ExecutionWorkerApi {
         'Off-channel deterministic execution requires developmentDraft=true outside production',
       );
     }
-    const requirements = releaseRequirements(release);
+    const requirements = await this.entryRequirements(release, parsed.entryResourceVersionId);
     if (!requirements.isDailyBrief) {
       throw new AppError(
         422,
@@ -823,20 +1351,34 @@ export class ExecutionService implements ExecutionWorkerApi {
         },
       );
     }
-    const estimate = this.estimateUpperCost(parsed.maxInputTokens, parsed.maxOutputTokens);
+    const modelEstimate = this.estimateUpperCost(parsed.maxInputTokens, parsed.maxOutputTokens);
     const grant =
       parsed.authorityGrantId === null
         ? null
         : await this.prisma.authorityGrant.findFirst({
             where: { id: parsed.authorityGrantId, ...aggregateScopeWhere() },
           });
+    const pluginRequirements = await this.deriveRunPluginRequirements(
+      release,
+      parsed.entryResourceVersionId,
+    );
+    const requiredPluginScopes = pluginRequirements.items;
+    const pluginCallPlan = this.materializePluginCallPlans(
+      parsed.pluginCalls,
+      requiredPluginScopes,
+      parsed.input,
+    );
+    const estimate = modelEstimate + pluginCallPlan.estimatedUpperCostUsd;
     const blockers = this.grantBlockers(
       grant,
       release,
+      parsed.entryResourceVersionId,
       executionContext.digest,
       parsed.input,
       requirements.requiredTools,
+      requiredPluginScopes,
       estimate,
+      false,
     );
     if (!productionEpochApproved) {
       blockers.unshift('First run of this production release epoch requires human approval');
@@ -845,16 +1387,25 @@ export class ExecutionService implements ExecutionWorkerApi {
     if (budgetPaused) blockers.unshift('Estimated upper cost exceeds the run cost ceiling');
     const state = budgetPaused
       ? ExecutionRunState.PAUSED_BUDGET
-      : blockers.length === 0
-        ? ExecutionRunState.QUEUED
-        : ExecutionRunState.AWAITING_APPROVAL;
+      : pluginRequirements.unavailableReasons.length > 0
+        ? ExecutionRunState.PAUSED_PLUGIN
+        : blockers.length === 0
+          ? ExecutionRunState.QUEUED
+          : ExecutionRunState.AWAITING_APPROVAL;
     const actor = currentActorId();
+    const requirementRows = requiredPluginScopes.map((requirement) => ({
+      id: randomUUID(),
+      key: pluginRequirementKey(requirement),
+      requirement,
+    }));
     const record = await this.prisma.$transaction(
       async (transaction) => {
         const created = await transaction.executionRun.create({
           data: {
             ...aggregateScope(),
             releaseId: release.id,
+            entryResourceVersionId: parsed.entryResourceVersionId,
+            legacyEntrypointUnresolved: false,
             authorityGrantId: state === ExecutionRunState.QUEUED ? (grant?.id ?? null) : null,
             digestSnapshotId: options.digestSnapshotId ?? null,
             releaseDigest: release.digest,
@@ -871,6 +1422,14 @@ export class ExecutionService implements ExecutionWorkerApi {
               stringArraySchema,
               requirements.requiredTools,
               'ExecutionRun.requiredToolScopes',
+            ),
+            requiredPluginScopes: toPrismaJson(
+              runPluginRequirementsSchema,
+              requiredPluginScopes,
+              'ExecutionRun.requiredPluginScopes',
+            ),
+            requiresPluginApproval: requiredPluginScopes.some(
+              ({ approvalRequired }) => approvalRequired,
             ),
             state,
             input: toPrismaJson(jsonObjectSchema, parsed.input, 'ExecutionRun.input'),
@@ -894,7 +1453,10 @@ export class ExecutionService implements ExecutionWorkerApi {
                 ? 'Queued'
                 : state === ExecutionRunState.PAUSED_BUDGET
                   ? 'Paused by run cost budget'
-                  : 'Awaiting authority approval',
+                  : state === ExecutionRunState.PAUSED_PLUGIN
+                    ? (pluginRequirements.unavailableReasons[0] ??
+                      'Paused because a required Plugin is unavailable')
+                    : 'Awaiting authority approval',
             idempotencyKey: parsed.idempotencyKey,
             requestedBy: actor,
             ...(state === ExecutionRunState.AWAITING_APPROVAL
@@ -909,6 +1471,62 @@ export class ExecutionService implements ExecutionWorkerApi {
               : {}),
           },
         });
+        if (requiredPluginScopes.length > 0) {
+          await transaction.runPluginRequirement.createMany({
+            data: requirementRows.map(({ id, requirement }) => ({
+              id,
+              runId: created.id,
+              installationId: requirement.installationId,
+              pluginVersionId: requirement.pluginVersionId,
+              pluginDigest: requirement.pluginDigest,
+              capabilityName: requirement.tool,
+              effect: pluginEffectMap[requirement.effect],
+              approvalRequired: requirement.approvalRequired,
+              authorityScope: toPrismaJson(
+                pluginAuthorityScopeSchema,
+                {
+                  installationId: requirement.installationId,
+                  pluginVersionId: requirement.pluginVersionId,
+                  pluginDigest: requirement.pluginDigest,
+                  tool: requirement.tool,
+                  effect: requirement.effect,
+                  limits: requirement.limits,
+                  scopeDescription: requirement.scopeDescription,
+                },
+                'RunPluginRequirement.authorityScope',
+              ),
+              contextDigest: executionContext.digest,
+            })),
+          });
+        }
+        if (pluginCallPlan.calls.length > 0) {
+          const requirementIds = new Map(requirementRows.map(({ id, key }) => [key, id] as const));
+          await transaction.runPluginCallPlan.createMany({
+            data: pluginCallPlan.calls.map((call, ordinal) => {
+              const requirementId = requirementIds.get(call.requirementKey);
+              if (requirementId === undefined) {
+                throw new AppError(
+                  409,
+                  'PLUGIN_PLAN_REQUIREMENT_MISMATCH',
+                  'The Plugin call plan lost its exact immutable requirement',
+                );
+              }
+              return {
+                ...aggregateScope(),
+                runId: created.id,
+                requirementId,
+                ordinal,
+                invocationKey: `${created.id}:plugin:${ordinal}`,
+                inputPath: toPrismaJson(
+                  pluginCallInputPathSchema,
+                  call.inputPath,
+                  'RunPluginCallPlan.inputPath',
+                ),
+                outputContextKey: call.outputContextKey,
+              };
+            }),
+          });
+        }
         await appendAuditEvent(transaction, {
           action: 'execution.requested',
           entityType: 'ExecutionRun',
@@ -961,11 +1579,25 @@ export class ExecutionService implements ExecutionWorkerApi {
         if (release === null || release.digest !== run.releaseDigest) {
           throw new AppError(409, 'RELEASE_CHANGED', 'The exact release digest is unavailable');
         }
+        if (parsed.entryResourceVersionId !== run.entryResourceVersionId) {
+          throw new AppError(
+            422,
+            'ENTRYPOINT_RELEASE_MISMATCH',
+            'Approval must bind the exact entry resource requested by the run',
+          );
+        }
+        const pluginScopes = await this.materializePluginScopes(
+          release,
+          run.entryResourceVersionId,
+          parsed.pluginScopes,
+          transaction,
+        );
         const grant = await transaction.authorityGrant.create({
           data: {
             workspaceId: run.workspaceId,
             departmentId: run.departmentId,
             releaseId: release.id,
+            entryResourceVersionId: run.entryResourceVersionId,
             releaseDigest: release.digest,
             contextDigest: run.contextDigest,
             projectId: parsed.projectId,
@@ -979,6 +1611,11 @@ export class ExecutionService implements ExecutionWorkerApi {
               parsed.toolScopes,
               'AuthorityGrant.toolScopes',
             ),
+            pluginScopes: toPrismaJson(
+              pluginAuthorityScopesSchema,
+              pluginScopes,
+              'AuthorityGrant.pluginScopes',
+            ),
             validUntil: new Date(parsed.validUntil),
             maxRuns: parsed.maxRuns,
             maxEstimatedCostPerRunUsd: parsed.maxEstimatedCostPerRunUsd,
@@ -990,10 +1627,18 @@ export class ExecutionService implements ExecutionWorkerApi {
         const blockers = this.grantBlockers(
           grant,
           release,
+          run.entryResourceVersionId,
           run.contextDigest,
           parseJson(jsonObjectSchema, run.input, 'ExecutionRun.input'),
-          releaseRequirements(release).requiredTools,
+          (await this.entryRequirements(release, run.entryResourceVersionId, transaction))
+            .requiredTools,
+          parseJson(
+            runPluginRequirementsSchema,
+            run.requiredPluginScopes,
+            'ExecutionRun.requiredPluginScopes',
+          ),
           Number(run.estimatedUpperCostUsd),
+          true,
         );
         if (blockers.length > 0) {
           throw new AppError(
@@ -1352,7 +1997,9 @@ export class ExecutionService implements ExecutionWorkerApi {
         if (
           run === null ||
           run.state !== ExecutionRunState.QUEUED ||
-          run.authorityGrantId === null
+          run.authorityGrantId === null ||
+          run.legacyEntrypointUnresolved ||
+          run.entryResourceVersionId === null
         ) {
           return false;
         }
@@ -1378,10 +2025,26 @@ export class ExecutionService implements ExecutionWorkerApi {
         const blockers = this.grantBlockers(
           grant,
           run.release,
+          run.entryResourceVersionId,
           run.contextDigest,
           input,
           requiredTools,
+          parseJson(
+            runPluginRequirementsSchema,
+            run.requiredPluginScopes,
+            'ExecutionRun.requiredPluginScopes',
+          ),
           Number(run.estimatedUpperCostUsd),
+          !run.requiresPluginApproval ||
+            (await transaction.approvalRequest.findFirst({
+              where: {
+                runId: run.id,
+                state: ApprovalRequestState.APPROVED,
+                decidedBy: { not: null },
+                rationale: { not: null },
+              },
+              select: { id: true },
+            })) !== null,
         ).filter(
           (blocker) =>
             !(
@@ -1572,7 +2235,23 @@ export class ExecutionService implements ExecutionWorkerApi {
             departmentId: candidate.departmentId,
           },
         });
-        const blockers = this.claimedGrantBlockers(grant, candidate, candidate.release);
+        const perRunPluginApproved =
+          !candidate.requiresPluginApproval ||
+          (await transaction.approvalRequest.findFirst({
+            where: {
+              runId: candidate.id,
+              state: ApprovalRequestState.APPROVED,
+              decidedBy: { not: null },
+              rationale: { not: null },
+            },
+            select: { id: true },
+          })) !== null;
+        const blockers = this.claimedGrantBlockers(
+          grant,
+          candidate,
+          candidate.release,
+          perRunPluginApproved,
+        );
         if (blockers.length > 0) {
           await this.pauseClaimedForAuthority(transaction, candidate, blockers);
           return null;

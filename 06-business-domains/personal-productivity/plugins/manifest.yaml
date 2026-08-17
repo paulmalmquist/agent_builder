@@ -1,0 +1,28 @@
+apiVersion: paul-os/v1
+kind: PluginPack
+metadata:
+  id: d1000000-0000-4000-8000-000000000001
+  slug: personal-productivity-plugins
+  version: 1.0.0
+  name: Personal Productivity Plugins
+  owner: local-user
+  purpose: Provide a synthetic, read-only starter Plugin set for personal planning workflows.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: d0000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  description: Install the synthetic planning connector with a bounded read-only default scope.
+  plugins:
+    - plugin:
+        familyId: d0000000-0000-4000-8000-000000000001
+        version: 1.0.0
+      defaultScopes:
+        - tool: record_lookup
+          limits:
+            timeoutMs: 5000
+            maxResponseBytes: 1000000
+            maxRecords: 100
+            maxInvocationsPerRun: 5
+            maxEstimatedCostUsd: 0

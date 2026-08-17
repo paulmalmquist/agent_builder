@@ -32,6 +32,18 @@ import {
   memoryCandidateSchema,
   metricListQuerySchema,
   metricListResponseSchema,
+  configurePluginInstallationRequestSchema,
+  installPluginRequestSchema,
+  pluginCatalogItemSchema,
+  pluginCatalogQuerySchema,
+  pluginCatalogResponseSchema,
+  pluginHealthCheckSchema,
+  pluginInstallationListQuerySchema,
+  pluginInstallationListResponseSchema,
+  pluginInstallationSchema,
+  pluginStateChangeRequestSchema,
+  pluginUsedByResponseSchema,
+  uninstallPluginRequestSchema,
   observationListQuerySchema,
   observationListResponseSchema,
   observationSchema,
@@ -57,6 +69,22 @@ import {
   scheduleDueAutomationsResponseSchema,
   updateAutomationScheduleStateRequestSchema,
   uuidSchema,
+  appendConfigurationRevisionRequestSchema,
+  builderDecisionSchema,
+  builderDraftSchema,
+  builderIntakeResultsSchema,
+  builderIntakeSchema,
+  catalogPublicationListQuerySchema,
+  catalogPublicationListResponseSchema,
+  catalogPublicationSchema,
+  configurationRevisionSchema,
+  createBuilderDecisionRequestSchema,
+  createBuilderIntakeRequestSchema,
+  createDeploymentRequestSchema,
+  deploymentSchema,
+  idempotencyKeySchema,
+  resourceLineageListResponseSchema,
+  retireCatalogPublicationRequestSchema,
 } from '@agent-builder/contracts';
 import type { z } from 'zod';
 import type { PlatformServices } from './services/types.js';
@@ -69,7 +97,20 @@ const asyncRoute =
 
 const uuidParam =
   (
-    name: 'releaseId' | 'grantId' | 'runId' | 'evaluationId' | 'scheduleId' | 'candidateId',
+    name:
+      | 'releaseId'
+      | 'grantId'
+      | 'runId'
+      | 'evaluationId'
+      | 'scheduleId'
+      | 'candidateId'
+      | 'pluginVersionId'
+      | 'installationId'
+      | 'publicationId'
+      | 'intakeId'
+      | 'draftId'
+      | 'deploymentId'
+      | 'resourceVersionId',
   ): RequestHandler =>
   (request, _response, next: NextFunction) => {
     const value = request.params[name];
@@ -90,6 +131,261 @@ function send<TSchema extends z.ZodTypeAny>(
 }
 
 export function registerPlatformRoutes(router: Router, services: PlatformServices): void {
+  router.get(
+    '/v1/catalog/publications',
+    asyncRoute(async (request, response) => {
+      const query = catalogPublicationListQuerySchema.parse(request.query);
+      send(
+        response,
+        200,
+        catalogPublicationListResponseSchema,
+        await services.reuse.listPublications(query),
+      );
+    }),
+  );
+  router.get(
+    '/v1/catalog/publications/:publicationId',
+    uuidParam('publicationId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        catalogPublicationSchema,
+        await services.reuse.getPublication(request.params['publicationId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/catalog/publications/:publicationId/retirement',
+    uuidParam('publicationId'),
+    asyncRoute(async (request, response) => {
+      const input = retireCatalogPublicationRequestSchema.parse(request.body);
+      send(
+        response,
+        200,
+        catalogPublicationSchema,
+        await services.reuse.retirePublication(request.params['publicationId'] as string, input),
+      );
+    }),
+  );
+  router.post(
+    '/v1/builder/intakes',
+    asyncRoute(async (request, response) => {
+      const input = createBuilderIntakeRequestSchema.parse(request.body);
+      send(response, 201, builderIntakeSchema, await services.reuse.createIntake(input));
+    }),
+  );
+  router.get(
+    '/v1/builder/intakes/:intakeId',
+    uuidParam('intakeId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        builderIntakeSchema,
+        await services.reuse.getIntake(request.params['intakeId'] as string),
+      );
+    }),
+  );
+  router.get(
+    '/v1/builder/intakes/:intakeId/referred-choices',
+    uuidParam('intakeId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        builderIntakeResultsSchema,
+        await services.reuse.referredChoices(request.params['intakeId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/builder/intakes/:intakeId/decisions',
+    uuidParam('intakeId'),
+    asyncRoute(async (request, response) => {
+      const input = createBuilderDecisionRequestSchema.parse(request.body);
+      send(
+        response,
+        201,
+        builderDecisionSchema,
+        await services.reuse.createDecision(
+          request.params['intakeId'] as string,
+          input,
+          idempotencyKeySchema.parse(request.header('idempotency-key')),
+        ),
+      );
+    }),
+  );
+  router.get(
+    '/v1/builder/drafts/:draftId',
+    uuidParam('draftId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        builderDraftSchema,
+        await services.reuse.getDraft(request.params['draftId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/deployments',
+    asyncRoute(async (request, response) => {
+      const input = createDeploymentRequestSchema.parse(request.body);
+      send(response, 201, deploymentSchema, await services.reuse.createDeployment(input));
+    }),
+  );
+  router.get(
+    '/v1/deployments/:deploymentId',
+    uuidParam('deploymentId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        deploymentSchema,
+        await services.reuse.getDeployment(request.params['deploymentId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/deployments/:deploymentId/configuration-revisions',
+    uuidParam('deploymentId'),
+    asyncRoute(async (request, response) => {
+      const input = appendConfigurationRevisionRequestSchema.parse(request.body);
+      send(
+        response,
+        201,
+        configurationRevisionSchema,
+        await services.reuse.appendConfigurationRevision(
+          request.params['deploymentId'] as string,
+          input.configuration,
+        ),
+      );
+    }),
+  );
+  router.get(
+    '/v1/resources/:resourceVersionId/lineage',
+    uuidParam('resourceVersionId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        resourceLineageListResponseSchema,
+        await services.reuse.getLineage(request.params['resourceVersionId'] as string),
+      );
+    }),
+  );
+  router.get(
+    '/v1/plugins',
+    asyncRoute(async (request, response) => {
+      const query = pluginCatalogQuerySchema.parse(request.query);
+      send(response, 200, pluginCatalogResponseSchema, await services.plugins.listCatalog(query));
+    }),
+  );
+  router.get(
+    '/v1/plugins/:pluginVersionId',
+    uuidParam('pluginVersionId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        pluginCatalogItemSchema,
+        await services.plugins.getCatalogItem(request.params['pluginVersionId'] as string),
+      );
+    }),
+  );
+  router.get(
+    '/v1/plugin-installations',
+    asyncRoute(async (request, response) => {
+      const query = pluginInstallationListQuerySchema.parse(request.query);
+      send(
+        response,
+        200,
+        pluginInstallationListResponseSchema,
+        await services.plugins.listInstallations(query),
+      );
+    }),
+  );
+  router.post(
+    '/v1/plugin-installations',
+    asyncRoute(async (request, response) => {
+      const input = installPluginRequestSchema.parse(request.body);
+      send(response, 201, pluginInstallationSchema, await services.plugins.install(input));
+    }),
+  );
+  router.get(
+    '/v1/plugin-installations/:installationId',
+    uuidParam('installationId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        pluginInstallationSchema,
+        await services.plugins.getInstallation(request.params['installationId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/plugin-installations/:installationId/configure',
+    uuidParam('installationId'),
+    asyncRoute(async (request, response) => {
+      const input = configurePluginInstallationRequestSchema.parse(request.body);
+      send(
+        response,
+        200,
+        pluginInstallationSchema,
+        await services.plugins.configure(request.params['installationId'] as string, input),
+      );
+    }),
+  );
+  router.post(
+    '/v1/plugin-installations/:installationId/health-check',
+    uuidParam('installationId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        pluginHealthCheckSchema,
+        await services.plugins.checkHealth(request.params['installationId'] as string),
+      );
+    }),
+  );
+  for (const action of ['enable', 'disable'] as const) {
+    router.post(
+      `/v1/plugin-installations/:installationId/${action}`,
+      uuidParam('installationId'),
+      asyncRoute(async (request, response) => {
+        const input = pluginStateChangeRequestSchema.parse(request.body);
+        send(
+          response,
+          200,
+          pluginInstallationSchema,
+          await services.plugins[action](request.params['installationId'] as string, input),
+        );
+      }),
+    );
+  }
+  router.get(
+    '/v1/plugin-installations/:installationId/used-by',
+    uuidParam('installationId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        pluginUsedByResponseSchema,
+        await services.plugins.usedBy(request.params['installationId'] as string),
+      );
+    }),
+  );
+  router.post(
+    '/v1/plugin-installations/:installationId/uninstall',
+    uuidParam('installationId'),
+    asyncRoute(async (request, response) => {
+      const input = uninstallPluginRequestSchema.parse(request.body);
+      await services.plugins.uninstall(request.params['installationId'] as string, input);
+      response.status(204).end();
+    }),
+  );
   router.get(
     '/v1/attention',
     asyncRoute(async (_request, response) => {

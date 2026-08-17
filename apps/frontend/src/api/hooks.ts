@@ -20,6 +20,7 @@ import type {
 import {
   agentApi,
   ApiError,
+  builderApi,
   platformApi,
   type ApproveRunInput,
   type CatalogFilters,
@@ -29,7 +30,12 @@ import {
   type ReviewMemoryInput,
   type DeclineReleaseInput,
   type PromoteReleaseInput,
+  type ConfigurePluginInput,
+  type InstallPluginInput,
+  type PluginCatalogFilters,
   type RunFilters,
+  type CreateBuilderDecisionInput,
+  type CreateBuilderIntakeInput,
 } from './client';
 
 type InterpretationConfirmation = NonNullable<UpdateKnowledgeRequest['interpretationConfirmation']>;
@@ -60,7 +66,43 @@ export const queryKeys = {
   observations: ['observations'] as const,
   improvementCandidates: ['improvement-candidates'] as const,
   memoryCandidates: ['memory-candidates'] as const,
+  plugins: (filters: PluginCatalogFilters) => ['plugins', filters] as const,
+  pluginInstallations: ['plugin-installations'] as const,
+  pluginUsedBy: (installationId: string | null) => ['plugin-used-by', installationId] as const,
+  builderChoices: (intakeId: string | null) => ['builder-referred-choices', intakeId] as const,
 };
+
+export function useCreateBuilderIntake() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (value: CreateBuilderIntakeInput) => builderApi.createIntake(value),
+    onSuccess: (intake) =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.builderChoices(intake.id) }),
+  });
+}
+
+export function useBuilderReferredChoices(intakeId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.builderChoices(intakeId),
+    queryFn: () => builderApi.getReferredChoices(intakeId ?? ''),
+    enabled: intakeId !== null,
+  });
+}
+
+export function useCreateBuilderDecision(intakeId: string | null) {
+  return useMutation({
+    mutationFn: ({
+      value,
+      idempotencyKey,
+    }: {
+      value: CreateBuilderDecisionInput;
+      idempotencyKey: string;
+    }) => {
+      if (!intakeId) throw new Error('Confirm a Builder intake before choosing an option.');
+      return builderApi.createDecision(intakeId, value, idempotencyKey);
+    },
+  });
+}
 
 export function useAttention() {
   return useQuery({
@@ -104,6 +146,95 @@ export function usePlatformResources(filters: ResourceFilters) {
   return useQuery({
     queryKey: queryKeys.platformResources(filters),
     queryFn: () => platformApi.listResources(filters),
+  });
+}
+
+export function usePlugins(filters: PluginCatalogFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.plugins(filters),
+    queryFn: () => platformApi.listPlugins(filters),
+    refetchInterval: 30_000,
+  });
+}
+
+export function usePluginInstallations() {
+  return useQuery({
+    queryKey: queryKeys.pluginInstallations,
+    queryFn: () => platformApi.listPluginInstallations(),
+  });
+}
+
+export function usePluginUsedBy(installationId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.pluginUsedBy(installationId),
+    queryFn: () => platformApi.getPluginUsedBy(installationId ?? ''),
+    enabled: installationId !== null,
+  });
+}
+
+function useInvalidatePlugins() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['plugins'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.pluginInstallations }),
+      queryClient.invalidateQueries({ queryKey: ['plugin-used-by'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+    ]);
+}
+
+export function useInstallPlugin() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: (value: InstallPluginInput) => platformApi.installPlugin(value),
+    onSuccess: invalidate,
+  });
+}
+
+export function useConfigurePluginInstallation() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: ({
+      installationId,
+      value,
+    }: {
+      installationId: string;
+      value: ConfigurePluginInput;
+    }) => platformApi.configurePluginInstallation(installationId, value),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCheckPluginHealth() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: (installationId: string) => platformApi.checkPluginHealth(installationId),
+    onSuccess: invalidate,
+  });
+}
+
+export function useSetPluginInstallationState() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: ({
+      installationId,
+      action,
+      rationale,
+    }: {
+      installationId: string;
+      action: 'enable' | 'disable';
+      rationale: string;
+    }) => platformApi.setPluginInstallationState(installationId, action, rationale),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUninstallPlugin() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: ({ installationId, rationale }: { installationId: string; rationale: string }) =>
+      platformApi.uninstallPlugin(installationId, rationale),
+    onSuccess: invalidate,
   });
 }
 
@@ -349,7 +480,7 @@ export function useAgentDetail(agentId: string | null) {
 export function useSourceCatalog(role: SourceDescriptor['role'], enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.sources(role),
-    queryFn: () => agentApi.listSources(role),
+    queryFn: () => builderApi.listSources(role),
     enabled,
     staleTime: 5 * 60_000,
   });
@@ -358,7 +489,7 @@ export function useSourceCatalog(role: SourceDescriptor['role'], enabled: boolea
 export function useAgentSpec(specId: string | null) {
   return useQuery({
     queryKey: queryKeys.spec(specId),
-    queryFn: () => agentApi.getSpec(specId ?? ''),
+    queryFn: () => builderApi.getSpec(specId ?? ''),
     enabled: specId !== null,
   });
 }
@@ -376,7 +507,7 @@ export function useCreateSpec() {
       baseAgentId: string | null;
       derivationMode: DerivationMode;
       interpretationId: string | null;
-    }) => agentApi.createSpec(outcomes, baseAgentId, derivationMode, interpretationId),
+    }) => builderApi.createSpec(outcomes, baseAgentId, derivationMode, interpretationId),
     onSuccess: (spec) => {
       queryClient.setQueryData(queryKeys.spec(spec.id), spec);
     },
@@ -397,13 +528,13 @@ export function useUpdateSpecSection(specId: string | null) {
 
       switch (update.section) {
         case 'outcomes':
-          return agentApi.updateOutcomes(specId, update.value, update.confirmation);
+          return builderApi.updateOutcomes(specId, update.value, update.confirmation);
         case 'knowledge':
-          return agentApi.updateKnowledge(specId, update.value, update.confirmation);
+          return builderApi.updateKnowledge(specId, update.value, update.confirmation);
         case 'guardrails':
-          return agentApi.updateGuardrails(specId, update.value, update.confirmation);
+          return builderApi.updateGuardrails(specId, update.value, update.confirmation);
         case 'outputs':
-          return agentApi.updateOutputs(specId, update.value, update.confirmation);
+          return builderApi.updateOutputs(specId, update.value, update.confirmation);
       }
     },
     onSuccess: (spec: AgentSpec) => {
@@ -414,14 +545,14 @@ export function useUpdateSpecSection(specId: string | null) {
 
 export function useInterpretSpec() {
   return useMutation({
-    mutationFn: (value: InterpretSpecRequest) => agentApi.interpretSpec(value),
+    mutationFn: (value: InterpretSpecRequest) => builderApi.interpretSpec(value),
   });
 }
 
 export function useGenerationJob(jobId: string | null) {
   return useQuery({
     queryKey: queryKeys.generationJob(jobId),
-    queryFn: () => agentApi.getGenerationJob(jobId ?? ''),
+    queryFn: () => builderApi.getGenerationJob(jobId ?? ''),
     enabled: jobId !== null,
     retry: (failureCount, error) => {
       if (error instanceof ApiError && error.status === 404) return false;
@@ -443,7 +574,7 @@ export function useGenerationJob(jobId: string | null) {
 export function useEvaluation(agentId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.evaluation(agentId),
-    queryFn: () => agentApi.getEvaluation(agentId ?? ''),
+    queryFn: () => builderApi.getEvaluation(agentId ?? ''),
     enabled: enabled && agentId !== null,
     refetchInterval: (query) => {
       if (query.state.status === 'error' || query.state.data?.status === 'complete') {

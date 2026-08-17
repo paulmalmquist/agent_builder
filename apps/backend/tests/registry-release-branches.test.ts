@@ -266,6 +266,11 @@ describe('RegistryService release and import guard branches', () => {
   });
 
   it('detects a transitive exact-pin cycle before version mutation', async () => {
+    const resolvedDependency = databaseVersion({
+      id: SECOND_VERSION_ID,
+      familyId: DEPENDENCY_ID,
+      slug: 'dependency-skill',
+    });
     const transaction = {
       resourceFamily: {
         findUnique: jest.fn().mockResolvedValue({
@@ -277,7 +282,8 @@ describe('RegistryService release and import guard branches', () => {
         }),
       },
       resourceVersion: {
-        findUnique: jest.fn().mockResolvedValue({ id: SECOND_VERSION_ID }),
+        findFirst: jest.fn().mockResolvedValue(resolvedDependency),
+        findUnique: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([
           {
             familyId: DEPENDENCY_ID,
@@ -286,6 +292,7 @@ describe('RegistryService release and import guard branches', () => {
           },
         ]),
       },
+      resourceDependencyPin: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     await expect(
@@ -341,6 +348,7 @@ describe('RegistryService release and import guard branches', () => {
         findUnique: jest.fn().mockResolvedValue(experimental),
         update: jest.fn().mockResolvedValue(updated),
       },
+      resourceDependencyPin: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
       repositoryImport: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ ...importRecord, digest: changed.digest }),
@@ -386,6 +394,7 @@ describe('RegistryService release and import guard branches', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(createdVersion),
       },
+      resourceDependencyPin: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
       repositoryImport: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(importRecord),
@@ -1166,6 +1175,7 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
         findFirst: jest.fn().mockResolvedValue(earlier),
         create: jest.fn().mockResolvedValue(rollbackDecision),
       },
+      catalogPublication: { findMany: jest.fn().mockResolvedValue([]) },
       auditEvent: { create: jest.fn().mockResolvedValue({ id: 'audit-id' }) },
       platformEvent: { create: jest.fn().mockResolvedValue({ id: 'platform-event-id' }) },
     };

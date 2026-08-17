@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import {
+  exactPluginReferenceSchema,
+  pluginAuthorityScopeSchema,
+  pluginToolRequirementSchema,
+  requestedPluginAuthorityScopeSchema,
+  runPluginRequirementSchema,
+} from './plugin-schemas.js';
+import { capabilityProfileSchema, catalogVisibilitySchema } from './reuse-schemas.js';
+import { plannedPluginCallsRequestSchema } from './plugin-execution-plan.js';
 import { isoDateTimeSchema, jsonObjectSchema, jsonValueSchema, uuidSchema } from './schemas.js';
 
 export const resourceKindSchema = z.enum([
@@ -15,6 +24,8 @@ export const resourceKindSchema = z.enum([
   'MetricDefinition',
   'ImprovementCandidate',
   'Agent',
+  'Plugin',
+  'PluginPack',
 ]);
 export const resourceLifecycleSchema = z.enum([
   'experimental',
@@ -26,37 +37,58 @@ export const resourceLifecycleSchema = z.enum([
   'deprecated',
 ]);
 
-export const resourceDependencySchema = z.object({
-  familyId: uuidSchema,
-  version: z.string().trim().min(1).max(80),
-});
+export const resourceDependencySchema = z
+  .object({
+    familyId: uuidSchema,
+    version: z
+      .string()
+      .trim()
+      .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
+      .max(80),
+  })
+  .strict();
 
-const manifestMetadataSchema = z.object({
-  id: uuidSchema,
-  slug: z
-    .string()
-    .trim()
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    .max(160),
-  version: z
-    .string()
-    .trim()
-    .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
-    .max(80),
-  name: z.string().trim().min(2).max(160).optional(),
-  owner: z.string().trim().min(2).max(200),
-  purpose: z.string().trim().min(10).max(3000),
-  lifecycle: resourceLifecycleSchema,
-  provenance: z.union([z.string().trim().min(1).max(500), jsonObjectSchema]),
-});
+const manifestMetadataSchema = z
+  .object({
+    id: uuidSchema,
+    slug: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .max(160),
+    version: z
+      .string()
+      .trim()
+      .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
+      .max(80),
+    name: z.string().trim().min(2).max(160).optional(),
+    owner: z.string().trim().min(2).max(200),
+    purpose: z.string().trim().min(10).max(3000),
+    lifecycle: resourceLifecycleSchema,
+    provenance: z.union([z.string().trim().min(1).max(500), jsonObjectSchema]),
+    catalogVisibility: catalogVisibilitySchema.optional(),
+    capabilityProfile: capabilityProfileSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.catalogVisibility === undefined) !== (value.capabilityProfile === undefined)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['catalogVisibility'],
+        message: 'catalogVisibility and capabilityProfile must be declared together',
+      });
+    }
+  });
 
-export const resourceManifestSchema = z.object({
-  apiVersion: z.literal('paul-os/v1'),
-  kind: resourceKindSchema,
-  metadata: manifestMetadataSchema,
-  dependencies: z.array(resourceDependencySchema).max(100).default([]),
-  spec: jsonObjectSchema,
-});
+export const resourceManifestSchema = z
+  .object({
+    apiVersion: z.literal('paul-os/v1'),
+    kind: resourceKindSchema,
+    metadata: manifestMetadataSchema,
+    dependencies: z.array(resourceDependencySchema).max(100).default([]),
+    spec: jsonObjectSchema,
+  })
+  .strict();
 
 export const jsonSchemaDocumentSchema = jsonObjectSchema.refine(
   (value) => typeof value['type'] === 'string' || typeof value['$ref'] === 'string',
@@ -67,7 +99,7 @@ export const skillSpecSchema = z
   .object({
     inputSchema: jsonSchemaDocumentSchema,
     outputSchema: jsonSchemaDocumentSchema,
-    tools: z.array(z.string().trim().min(1).max(160)).max(50),
+    tools: z.array(pluginToolRequirementSchema).max(50),
     permissions: z.array(z.string().trim().min(1).max(160)).max(50),
     contextRequirements: z.array(z.string().trim().min(1).max(300)).max(50),
     successCriteria: z.array(z.string().trim().min(1).max(500)).min(1).max(50),
@@ -158,7 +190,7 @@ export const protocolSpecSchema = z
     rules: boundedStringListSchema,
   })
   .strict();
-export const knowledgeSourceSpecSchema = z
+export const legacyKnowledgeSourceSpecSchema = z
   .object({
     provider: z.string().trim().min(1).max(100),
     capabilities: boundedStringListSchema,
@@ -171,6 +203,37 @@ export const knowledgeSourceSpecSchema = z
     clientMaySelectIdentifiers: z.literal(false),
   })
   .strict();
+export const pluginKnowledgeSourceSpecSchema = z
+  .object({
+    plugin: exactPluginReferenceSchema,
+    capability: z
+      .string()
+      .trim()
+      .regex(/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/)
+      .max(160),
+    subset: z
+      .object({
+        descriptor: z
+          .string()
+          .trim()
+          .regex(/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/)
+          .max(160),
+        constraints: jsonObjectSchema,
+      })
+      .strict(),
+    access: z.literal('read_only'),
+    citationRequired: z.boolean(),
+    region: z.string().trim().min(1).max(100),
+    dataClassification: z.string().trim().min(1).max(100),
+    clientMaySelectIdentifiers: z.literal(false),
+  })
+  .strict();
+export const knowledgeSourceSpecSchema = z.union([
+  pluginKnowledgeSourceSpecSchema,
+  legacyKnowledgeSourceSpecSchema.describe(
+    'Deprecated provider-shaped KnowledgeSource. New definitions must pin an exact Plugin tool.',
+  ),
+]);
 export const platformEvaluationSuiteSpecSchema = z
   .object({
     subject: resourceReferenceSchema,
@@ -234,7 +297,7 @@ export const agentResourceSpecSchema = z
     protocols: z.array(resourceReferenceSchema).max(100),
     contextPolicy: resourceReferenceSchema,
     knowledgeSources: z.array(resourceReferenceSchema).max(100),
-    tools: boundedStringListSchema,
+    tools: z.array(pluginToolRequirementSchema).max(100),
     triggers: z
       .array(
         z
@@ -394,10 +457,12 @@ export const contextProvenanceSummarySchema = z.array(
 );
 const authorityGrantRequestObjectSchema = z.object({
   releaseId: uuidSchema,
+  entryResourceVersionId: uuidSchema,
   contextDigest: z.string().regex(/^[a-f0-9]{64}$/),
   projectId: z.string().trim().min(1).max(160).nullable().default(null),
   inputConstraints: jsonObjectSchema.default({}),
   toolScopes: z.array(z.string().trim().min(1).max(160)).max(100).default([]),
+  pluginScopes: z.array(requestedPluginAuthorityScopeSchema).max(100).default([]),
   validUntil: isoDateTimeSchema,
   maxRuns: z.number().int().min(1).max(1_000_000),
   maxEstimatedCostPerRunUsd: z.number().nonnegative().max(100_000),
@@ -415,11 +480,13 @@ export const createAuthorityGrantRequestSchema = authorityGrantRequestObjectSche
 export const authorityGrantSchema = z.object({
   id: uuidSchema,
   releaseId: uuidSchema,
+  entryResourceVersionId: uuidSchema,
   releaseDigest: z.string().regex(/^[a-f0-9]{64}$/),
   contextDigest: z.string().regex(/^[a-f0-9]{64}$/),
   projectId: z.string().nullable(),
   inputConstraints: jsonObjectSchema,
   toolScopes: z.array(z.string()),
+  pluginScopes: z.array(pluginAuthorityScopeSchema),
   validFrom: isoDateTimeSchema,
   validUntil: isoDateTimeSchema,
   maxRuns: z.number().int().positive(),
@@ -450,12 +517,15 @@ export const executionRunStateSchema = z.enum([
   'failed',
   'cancelled',
   'paused_budget',
+  'paused_plugin',
 ]);
 export const modelProviderKindSchema = z.enum(['deterministic', 'anthropic', 'gateway']);
 export const createExecutionRunRequestSchema = z.object({
   releaseId: uuidSchema,
+  entryResourceVersionId: uuidSchema,
   authorityGrantId: uuidSchema.nullable().default(null),
   input: jsonObjectSchema,
+  pluginCalls: plannedPluginCallsRequestSchema.default([]),
   maxInputTokens: z.number().int().min(1).max(1_000_000).default(8_000),
   maxOutputTokens: z.number().int().min(1).max(1_000_000).default(2_000),
   maxEstimatedCostUsd: z.number().nonnegative().max(100_000),
@@ -465,9 +535,11 @@ export const createExecutionRunRequestSchema = z.object({
 export const approveExecutionRunRequestSchema = authorityGrantRequestObjectSchema
   .omit({ releaseId: true, contextDigest: true })
   .refine(validGrantBudget, 'Total cost budget must cover at least one maximum-cost run');
-export const executionRunSchema = z.object({
+const currentExecutionRunSchema = z.object({
   id: uuidSchema,
   releaseId: uuidSchema,
+  entryResourceVersionId: uuidSchema,
+  legacyEntrypointUnresolved: z.literal(false),
   releaseDigest: z.string().regex(/^[a-f0-9]{64}$/),
   contextDigest: z.string().regex(/^[a-f0-9]{64}$/),
   contextProvenance: contextProvenanceSummarySchema,
@@ -475,6 +547,8 @@ export const executionRunSchema = z.object({
   contextEstimatedTokens: z.number().int().nonnegative(),
   projectId: z.string().nullable(),
   requiredToolScopes: z.array(z.string()),
+  requiredPluginScopes: z.array(runPluginRequirementSchema),
+  requiresPluginApproval: z.boolean().default(false),
   authorityGrantId: uuidSchema.nullable(),
   digestSnapshotId: uuidSchema.nullable().default(null),
   state: executionRunStateSchema,
@@ -500,6 +574,14 @@ export const executionRunSchema = z.object({
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
+const legacyExecutionRunSchema = currentExecutionRunSchema.extend({
+  entryResourceVersionId: z.null(),
+  legacyEntrypointUnresolved: z.literal(true),
+});
+export const executionRunSchema = z.discriminatedUnion('legacyEntrypointUnresolved', [
+  currentExecutionRunSchema,
+  legacyExecutionRunSchema,
+]);
 export const executionRunListQuerySchema = z.object({
   state: executionRunStateSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),

@@ -7,6 +7,7 @@ export interface ClaimedRun {
   id: string;
   releaseId: string;
   releaseDigest: string;
+  entryResourceVersionId: string;
   contextDigest: string;
   authorityGrantId: string;
   developmentDraft: boolean;
@@ -27,6 +28,7 @@ export interface ClaimedRun {
 export interface ProviderUsageSettlement {
   usage: ModelUsage;
   actualCostUsd: number;
+  pluginCostUsd?: number;
   latencyMs: number;
   pricingVersion: string;
   providerKind: ProviderKind;
@@ -67,6 +69,12 @@ export interface WorkerStore {
   cancelClaimed(
     runId: string,
     workerId: string,
+    incurred?: ProviderUsageSettlement,
+  ): Promise<boolean>;
+  pauseForPlugin(
+    runId: string,
+    workerId: string,
+    code: string,
     incurred?: ProviderUsageSettlement,
   ): Promise<boolean>;
   failOrRetry(

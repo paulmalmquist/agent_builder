@@ -473,6 +473,14 @@ function createFakeServices(): ServiceBundle {
       start: jest.fn(() => Promise.resolve()),
       stop: jest.fn(() => Promise.resolve()),
     },
+    pluginHealthScheduler: {
+      start: jest.fn(() => Promise.resolve()),
+      stop: jest.fn(),
+    },
+    catalogIndexScheduler: {
+      start: jest.fn(() => Promise.resolve()),
+      stop: jest.fn(),
+    },
   };
 }
 

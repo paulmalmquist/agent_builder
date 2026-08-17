@@ -8,6 +8,20 @@ metadata:
   purpose: Produce a concise, cited daily briefing from user-supplied planning inputs.
   lifecycle: candidate
   provenance: synthetic
+  catalogVisibility: organization
+  capabilityProfile:
+    schemaVersion: 1
+    intendedUsers: [knowledge workers]
+    businessDomain: personal productivity
+    triggers: [daily planning request]
+    tasks: [prioritize the day, identify schedule risks, identify decisions]
+    inputs: [priorities, calendar items, tasks, signals, user constraints]
+    outputs: [top priorities, schedule risks, decisions required, proposed actions]
+    knowledgeClasses: [user-supplied planning context]
+    tools: []
+    potentialActions: [propose actions without executing them]
+    successCriteria: [produce a validated cited daily briefing]
+    riskLevel: low
 dependencies:
   - familyId: 50000000-0000-4000-8000-000000000001
     version: 1.0.0

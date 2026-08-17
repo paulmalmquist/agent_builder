@@ -1,0 +1,59 @@
+apiVersion: paul-os/v1
+kind: Plugin
+metadata:
+  id: d0000000-0000-4000-8000-000000000001
+  slug: synthetic-planning-http
+  version: 1.0.0
+  name: Synthetic Planning API
+  owner: local-platform-owner
+  purpose: Demonstrate a manifest-only read connector without adding transport-specific core code.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies: []
+spec:
+  transport: http
+  executionPlacement: control_plane
+  classification: public
+  secretSlots: []
+  connection:
+    baseUrl: https://planning.example.invalid
+    allowedHosts: [planning.example.invalid]
+    defaultHeaders: {}
+  health:
+    kind: http
+    intervalSeconds: 60
+    timeoutMs: 3000
+    method: HEAD
+    path: /health
+    expectedStatuses: [200, 204]
+  capabilities:
+    - tool: record_lookup
+      description: Retrieve a bounded synthetic planning record by its governed descriptor.
+      effect: read
+      approval: not_required
+      scopeDescription: Read synthetic planning records only; it cannot write or delete anything.
+      inputSchema:
+        type: object
+        additionalProperties: false
+        required: [descriptor]
+        properties:
+          descriptor: { type: string, minLength: 1, maxLength: 160 }
+      outputSchema:
+        type: object
+        additionalProperties: false
+        required: [records]
+        properties:
+          records:
+            type: array
+            maxItems: 100
+            items: { type: object }
+      limits:
+        timeoutMs: 5000
+        maxResponseBytes: 1000000
+        maxRecords: 100
+        maxInvocationsPerRun: 5
+        maxEstimatedCostUsd: 0
+      invocation:
+        method: GET
+        path: /v1/records
+        headers: {}

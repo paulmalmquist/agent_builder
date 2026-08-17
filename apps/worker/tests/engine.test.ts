@@ -43,6 +43,7 @@ const claimedRun: ClaimedRun = {
   id: '00000000-0000-4000-8000-000000000001',
   releaseId: '00000000-0000-4000-8000-000000000002',
   releaseDigest: 'a'.repeat(64),
+  entryResourceVersionId: '00000000-0000-4000-8000-000000000004',
   contextDigest: defaultDailyBriefExecutionContext.digest,
   authorityGrantId: '00000000-0000-4000-8000-000000000003',
   developmentDraft: true,
@@ -90,6 +91,7 @@ class FakeStore implements WorkerStore {
   failures: Array<{ code: string; retryable: boolean }> = [];
   failureSettlements: Array<ProviderUsageSettlement | undefined> = [];
   cancellationSettlement: ProviderUsageSettlement | undefined;
+  pausedForPlugin: string | null = null;
   recovered = false;
 
   recoverExpiredLeases(): Promise<RecoverySummary> {
@@ -120,6 +122,17 @@ class FakeStore implements WorkerStore {
     incurred?: ProviderUsageSettlement,
   ): Promise<boolean> {
     this.cancelled = true;
+    this.cancellationSettlement = incurred;
+    return Promise.resolve(true);
+  }
+
+  pauseForPlugin(
+    _runId: string,
+    _workerId: string,
+    code: string,
+    incurred?: ProviderUsageSettlement,
+  ): Promise<boolean> {
+    this.pausedForPlugin = code;
     this.cancellationSettlement = incurred;
     return Promise.resolve(true);
   }

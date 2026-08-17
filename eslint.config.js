@@ -22,7 +22,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['scripts/*.mjs'],
+          allowDefaultProject: ['scripts/*.mjs', 'packages/contracts/test/*.mjs'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -56,6 +56,7 @@ export default tseslint.config(
       'packages/contracts/**/*.ts',
       'packages/runtime/**/*.ts',
       'scripts/**/*.mjs',
+      'packages/contracts/test/**/*.mjs',
     ],
     languageOptions: {
       globals: globals.node,
@@ -75,7 +76,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'packages/contracts/test/**/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
   },
 );

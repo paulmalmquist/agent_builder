@@ -18,6 +18,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",
+    "test": "node --test test/*.test.mjs",
     "clean": "tsc -b --clean"
   },
   "dependencies": {

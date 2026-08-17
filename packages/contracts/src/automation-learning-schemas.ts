@@ -10,6 +10,7 @@ const automationScheduleInputSchema = z.object({
   name: z.string().trim().min(2).max(160),
   channelKey: z.string().trim().min(1).max(160),
   releaseId: uuidSchema,
+  entryResourceVersionId: uuidSchema,
   authorityGrantId: uuidSchema.nullable().default(null),
   timezone: z.string().trim().min(1).max(100),
   intervalSeconds: z.number().int().min(60).max(31_536_000),

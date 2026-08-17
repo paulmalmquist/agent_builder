@@ -78,6 +78,7 @@ import {
   similarityRequestSchema,
   similarityResponseSchema,
   sourceListResponseSchema,
+  sourceRoleSchema,
   updateGuardrailsRequestSchema,
   updateKnowledgeRequestSchema,
   updateOutcomesRequestSchema,
@@ -108,6 +109,20 @@ import {
   resourceVersionSchema,
 } from './platform-schemas.js';
 import {
+  configurePluginInstallationRequestSchema,
+  installPluginRequestSchema,
+  pluginCatalogItemSchema,
+  pluginCatalogQuerySchema,
+  pluginCatalogResponseSchema,
+  pluginHealthCheckSchema,
+  pluginInstallationListQuerySchema,
+  pluginInstallationListResponseSchema,
+  pluginInstallationSchema,
+  pluginStateChangeRequestSchema,
+  pluginUsedByResponseSchema,
+  uninstallPluginRequestSchema,
+} from './plugin-schemas.js';
+import {
   createReleaseEvaluationRequestSchema,
   productionChannelKeySchema,
   productionChannelMutationResponseSchema,
@@ -117,6 +132,24 @@ import {
   releaseDeclineResponseSchema,
   rollbackReleaseRequestSchema,
 } from './release-governance-schemas.js';
+import {
+  appendConfigurationRevisionRequestSchema,
+  builderDecisionSchema,
+  builderDraftSchema,
+  builderIntakeResultsSchema,
+  builderIntakeSchema,
+  catalogPublicationListQuerySchema,
+  catalogPublicationListResponseSchema,
+  catalogPublicationSchema,
+  configurationRevisionSchema,
+  createBuilderDecisionRequestSchema,
+  createBuilderIntakeRequestSchema,
+  createDeploymentRequestSchema,
+  deploymentSchema,
+  resourceLineageListResponseSchema,
+  retireCatalogPublicationRequestSchema,
+} from './reuse-schemas.js';
+import { REUSE_OPENAPI_OPERATION_IDS } from './reuse-routes.js';
 
 extendZodWithOpenApi(z);
 
@@ -150,10 +183,307 @@ registry.register('ReleaseEvaluation', releaseEvaluationSchema);
 registry.register('ProductionChannel', productionChannelSchema);
 registry.register('AttentionResponse', attentionResponseSchema);
 registry.register('AttentionItemDetail', attentionItemDetailSchema);
+registry.register('PluginCatalogItem', pluginCatalogItemSchema);
+registry.register('PluginInstallation', pluginInstallationSchema);
+registry.register('PluginHealthCheck', pluginHealthCheckSchema);
+registry.register('CatalogPublication', catalogPublicationSchema);
+registry.register('BuilderIntake', builderIntakeSchema);
+registry.register('BuilderDecision', builderDecisionSchema);
+registry.register('BuilderDraft', builderDraftSchema);
+registry.register('Deployment', deploymentSchema);
+registry.register('ConfigurationRevision', configurationRevisionSchema);
 
 const platformIdParam = (
-  name: 'releaseId' | 'grantId' | 'runId' | 'scheduleId' | 'candidateId' | 'evaluationId',
+  name:
+    | 'releaseId'
+    | 'grantId'
+    | 'runId'
+    | 'scheduleId'
+    | 'candidateId'
+    | 'evaluationId'
+    | 'pluginVersionId'
+    | 'installationId'
+    | 'publicationId'
+    | 'intakeId'
+    | 'draftId'
+    | 'deploymentId'
+    | 'resourceVersionId',
 ) => z.object({ [name]: uuidSchema }) as z.ZodObject<Record<typeof name, typeof uuidSchema>>;
+
+registry.registerPath({
+  method: 'get',
+  path: '/v1/catalog/publications',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.listCatalogPublications,
+  request: { query: catalogPublicationListQuerySchema },
+  responses: {
+    200: {
+      description: 'Active governed catalog publications',
+      content: json(catalogPublicationListResponseSchema),
+    },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/catalog/publications/{publicationId}',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.getCatalogPublication,
+  request: { params: platformIdParam('publicationId') },
+  responses: {
+    200: { description: 'Governed catalog publication', content: json(catalogPublicationSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/catalog/publications/{publicationId}/retirement',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.retireCatalogPublication,
+  request: {
+    params: platformIdParam('publicationId'),
+    body: { content: json(retireCatalogPublicationRequestSchema) },
+  },
+  responses: {
+    200: {
+      description: 'Retired publication and queued index removal',
+      content: json(catalogPublicationSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/builder/intakes',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.createBuilderIntake,
+  request: { body: { content: json(createBuilderIntakeRequestSchema) } },
+  responses: {
+    201: {
+      description: 'Builder intake before specification creation',
+      content: json(builderIntakeSchema),
+    },
+    400: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/builder/intakes/{intakeId}',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.getBuilderIntake,
+  request: { params: platformIdParam('intakeId') },
+  responses: {
+    200: { description: 'Builder intake', content: json(builderIntakeSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/builder/intakes/{intakeId}/referred-choices',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.listReferredChoices,
+  request: { params: platformIdParam('intakeId') },
+  responses: {
+    200: {
+      description: 'Indexed reuse choices and bounded skill compositions',
+      content: json(builderIntakeResultsSchema),
+    },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/builder/intakes/{intakeId}/decisions',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.createBuilderDecision,
+  request: {
+    params: platformIdParam('intakeId'),
+    headers: z.object({ 'idempotency-key': z.string().min(8).max(200) }),
+    body: { content: json(createBuilderDecisionRequestSchema) },
+  },
+  responses: {
+    201: {
+      description: 'Immutable idempotent Builder decision',
+      content: json(builderDecisionSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
+    422: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/builder/drafts/{draftId}',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.getBuilderDraft,
+  request: { params: platformIdParam('draftId') },
+  responses: {
+    200: { description: 'Builder draft or lineage intent', content: json(builderDraftSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/deployments',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.createDeployment,
+  request: { body: { content: json(createDeploymentRequestSchema) } },
+  responses: {
+    201: {
+      description: 'Deployment materialized by a reuse decision',
+      content: json(deploymentSchema),
+    },
+    404: errorResponse,
+    409: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/deployments/{deploymentId}',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.getDeployment,
+  request: { params: platformIdParam('deploymentId') },
+  responses: {
+    200: { description: 'Deployment and retired-source warning', content: json(deploymentSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/deployments/{deploymentId}/configuration-revisions',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.appendConfigurationRevision,
+  request: {
+    params: platformIdParam('deploymentId'),
+    body: { content: json(appendConfigurationRevisionRequestSchema) },
+  },
+  responses: {
+    201: {
+      description: 'Append-only configuration overlay revision',
+      content: json(configurationRevisionSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/resources/{resourceVersionId}/lineage',
+  operationId: REUSE_OPENAPI_OPERATION_IDS.getResourceLineage,
+  request: { params: platformIdParam('resourceVersionId') },
+  responses: {
+    200: {
+      description: 'Materialized resource lineage',
+      content: json(resourceLineageListResponseSchema),
+    },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/v1/builder/sources',
+  operationId: 'listBuilderSources',
+  request: { query: z.object({ role: sourceRoleSchema.optional() }) },
+  responses: {
+    200: { description: 'Builder source registry facade', content: json(sourceListResponseSchema) },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/builder/specs/interpret',
+  operationId: 'interpretBuilderSpec',
+  request: { body: { content: json(interpretSpecRequestSchema) } },
+  responses: {
+    200: { description: 'Interpreted Builder scope', content: json(interpretSpecResponseSchema) },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/builder/specs',
+  operationId: 'createBuilderSpec',
+  request: { body: { content: json(createSpecRequestSchema) } },
+  responses: {
+    201: { description: 'Builder specification facade', content: json(agentSpecSchema) },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/builder/specs/{specId}',
+  operationId: 'getBuilderSpec',
+  request: { params: idParam('specId') },
+  responses: {
+    200: { description: 'Builder specification', content: json(agentSpecSchema) },
+    404: errorResponse,
+  },
+});
+for (const [section, schema] of [
+  ['outcomes', updateOutcomesRequestSchema],
+  ['knowledge', updateKnowledgeRequestSchema],
+  ['guardrails', updateGuardrailsRequestSchema],
+  ['outputs', updateOutputsRequestSchema],
+] as const) {
+  registry.registerPath({
+    method: 'put',
+    path: `/v1/builder/specs/{specId}/${section}`,
+    operationId: `updateBuilderSpec${section[0]!.toUpperCase()}${section.slice(1)}`,
+    request: { params: idParam('specId'), body: { content: json(schema) } },
+    responses: {
+      200: { description: `Updated Builder ${section}`, content: json(agentSpecSchema) },
+      404: errorResponse,
+    },
+  });
+}
+registry.registerPath({
+  method: 'post',
+  path: '/v1/builder/specs/{specId}/generate',
+  operationId: 'generateBuilderSpec',
+  request: { params: idParam('specId') },
+  responses: {
+    202: {
+      description: 'Accepted Builder generation job',
+      content: json(generationAcceptedSchema),
+    },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/builder/generation-jobs/{jobId}',
+  operationId: 'getBuilderGenerationJob',
+  request: { params: idParam('jobId') },
+  responses: {
+    200: { description: 'Builder generation job', content: json(generationJobSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/builder/agents/{agentId}/recover',
+  operationId: 'recoverBuilderAgent',
+  request: { params: idParam('agentId') },
+  responses: {
+    200: { description: 'Recovered Builder agent', content: json(recoverAgentResponseSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/builder/agents/{agentId}/shadow-deploy',
+  operationId: 'shadowDeployBuilderAgent',
+  request: { params: idParam('agentId') },
+  responses: {
+    200: {
+      description: 'Shadow-deployed Builder agent',
+      content: json(shadowDeployResponseSchema),
+    },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/builder/agents/{agentId}/evaluation',
+  operationId: 'getBuilderAgentEvaluation',
+  request: { params: idParam('agentId') },
+  responses: {
+    200: {
+      description: 'Builder agent evaluation facade',
+      content: json(evaluationResponseSchema),
+    },
+    404: errorResponse,
+  },
+});
 
 registry.registerPath({
   method: 'get',
@@ -213,6 +543,131 @@ registry.registerPath({
     404: errorResponse,
     409: errorResponse,
     422: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/plugins',
+  operationId: 'listPlugins',
+  request: { query: pluginCatalogQuerySchema },
+  responses: {
+    200: { description: 'Sanitized Plugin catalog', content: json(pluginCatalogResponseSchema) },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/plugins/{pluginVersionId}',
+  operationId: 'getPlugin',
+  request: { params: platformIdParam('pluginVersionId') },
+  responses: {
+    200: { description: 'Sanitized Plugin catalog item', content: json(pluginCatalogItemSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/plugin-installations',
+  operationId: 'listPluginInstallations',
+  request: { query: pluginInstallationListQuerySchema },
+  responses: {
+    200: {
+      description: 'Scoped Plugin installations',
+      content: json(pluginInstallationListResponseSchema),
+    },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/plugin-installations',
+  operationId: 'installPlugin',
+  request: { body: { content: json(installPluginRequestSchema) } },
+  responses: {
+    201: { description: 'Installed exact Plugin version', content: json(pluginInstallationSchema) },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
+    422: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/plugin-installations/{installationId}',
+  operationId: 'getPluginInstallation',
+  request: { params: platformIdParam('installationId') },
+  responses: {
+    200: { description: 'Plugin installation', content: json(pluginInstallationSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/plugin-installations/{installationId}/configure',
+  operationId: 'configurePluginInstallation',
+  request: {
+    params: platformIdParam('installationId'),
+    body: { content: json(configurePluginInstallationRequestSchema) },
+  },
+  responses: {
+    200: { description: 'Configured secret references', content: json(pluginInstallationSchema) },
+    403: errorResponse,
+    404: errorResponse,
+    422: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/plugin-installations/{installationId}/health-check',
+  operationId: 'checkPluginHealth',
+  request: { params: platformIdParam('installationId') },
+  responses: {
+    200: { description: 'Plugin health probe result', content: json(pluginHealthCheckSchema) },
+    404: errorResponse,
+    503: errorResponse,
+  },
+});
+for (const action of ['enable', 'disable'] as const) {
+  registry.registerPath({
+    method: 'post',
+    path: `/v1/plugin-installations/{installationId}/${action}`,
+    operationId: action === 'enable' ? 'enablePluginInstallation' : 'disablePluginInstallation',
+    request: {
+      params: platformIdParam('installationId'),
+      body: { content: json(pluginStateChangeRequestSchema) },
+    },
+    responses: {
+      200: {
+        description: `${action === 'enable' ? 'Enabled' : 'Disabled'} Plugin installation`,
+        content: json(pluginInstallationSchema),
+      },
+      403: errorResponse,
+      404: errorResponse,
+      409: errorResponse,
+    },
+  });
+}
+registry.registerPath({
+  method: 'get',
+  path: '/v1/plugin-installations/{installationId}/used-by',
+  operationId: 'getPluginUsedBy',
+  request: { params: platformIdParam('installationId') },
+  responses: {
+    200: { description: 'Exact Plugin dependents', content: json(pluginUsedByResponseSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/plugin-installations/{installationId}/uninstall',
+  operationId: 'uninstallPlugin',
+  request: {
+    params: platformIdParam('installationId'),
+    body: { content: json(uninstallPluginRequestSchema) },
+  },
+  responses: {
+    204: { description: 'Uninstalled unused Plugin version' },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
   },
 });
 registry.registerPath({

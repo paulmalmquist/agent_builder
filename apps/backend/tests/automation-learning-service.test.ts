@@ -22,6 +22,7 @@ import type { ServiceBundle } from '../src/services/types.js';
 const now = new Date('2026-08-16T12:00:00.000Z');
 const scheduleId = randomUUID();
 const releaseId = randomUUID();
+const entryResourceVersionId = randomUUID();
 const grantId = randomUUID();
 const runId = randomUUID();
 const outcomeId = randomUUID();
@@ -35,6 +36,7 @@ const schedule = {
   name: 'Daily briefing',
   channelKey: 'default',
   releaseId,
+  entryResourceVersionId,
   releaseDigest: 'a'.repeat(64),
   projectId: null,
   authorityGrantId: grantId,
@@ -157,13 +159,23 @@ function harness() {
       .mockResolvedValueOnce([{ id: dispatchId }]),
   };
   const releaseFind = jest.fn(() =>
-    Promise.resolve({ id: releaseId, digest: 'a'.repeat(64), projectId: null }),
+    Promise.resolve({
+      id: releaseId,
+      digest: 'a'.repeat(64),
+      projectId: null,
+      resources: [{ resourceVersionId: entryResourceVersionId }],
+    }),
   );
   const channelFind = jest.fn(() =>
     Promise.resolve({ key: 'default', currentReleaseId: releaseId }),
   );
   const grantFind = jest.fn(() =>
-    Promise.resolve({ id: grantId, releaseId, releaseDigest: 'a'.repeat(64) }),
+    Promise.resolve({
+      id: grantId,
+      releaseId,
+      entryResourceVersionId,
+      releaseDigest: 'a'.repeat(64),
+    }),
   );
   const topScheduleFind = jest.fn(() => Promise.resolve(schedule));
   const outcomeFind = jest.fn(() => Promise.resolve({ id: outcomeId, runId }));
@@ -257,6 +269,7 @@ function scheduleBody(overrides: Record<string, unknown> = {}) {
     name: schedule.name,
     channelKey: schedule.channelKey,
     releaseId,
+    entryResourceVersionId,
     authorityGrantId: grantId,
     timezone: schedule.timezone,
     intervalSeconds: schedule.intervalSeconds,
@@ -453,6 +466,7 @@ describe('AutomationLearningService', () => {
     mismatchedGrant.prisma.authorityGrant.findUnique.mockResolvedValueOnce({
       id: grantId,
       releaseId: randomUUID(),
+      entryResourceVersionId,
       releaseDigest: 'b'.repeat(64),
     });
     await request(appFor(mismatchedGrant.service))

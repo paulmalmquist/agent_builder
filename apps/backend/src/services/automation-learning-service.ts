@@ -145,6 +145,7 @@ function toSchedule(record: DatabaseSchedule): AutomationSchedule {
     name: record.name,
     channelKey: record.channelKey,
     releaseId: record.releaseId,
+    entryResourceVersionId: record.entryResourceVersionId,
     releaseDigest: record.releaseDigest,
     projectId: record.projectId,
     authorityGrantId: record.authorityGrantId,
@@ -344,6 +345,7 @@ export class AutomationLearningService {
     const [release, channel, grant] = await Promise.all([
       this.prisma.releaseBundle.findFirst({
         where: { id: parsed.releaseId, ...aggregateScopeWhere() },
+        include: { resources: { select: { resourceVersionId: true } } },
       }),
       this.prisma.productionChannel.findFirst({
         where: { key: parsed.channelKey, ...aggregateScopeWhere() },
@@ -355,6 +357,17 @@ export class AutomationLearningService {
           }),
     ]);
     if (release === null) throw new AppError(404, 'RELEASE_NOT_FOUND', 'Release was not found');
+    if (
+      !release.resources.some(
+        ({ resourceVersionId }) => resourceVersionId === parsed.entryResourceVersionId,
+      )
+    ) {
+      throw new AppError(
+        422,
+        'ENTRYPOINT_RELEASE_MISMATCH',
+        'The automation entry resource is not part of the exact release',
+      );
+    }
     if (channel === null)
       throw new AppError(404, 'PRODUCTION_CHANNEL_NOT_FOUND', 'Production channel was not found');
     if (channel.currentReleaseId !== release.id) {
@@ -369,7 +382,9 @@ export class AutomationLearningService {
     }
     if (
       grant !== null &&
-      (grant.releaseId !== release.id || grant.releaseDigest !== release.digest)
+      (grant.releaseId !== release.id ||
+        grant.releaseDigest !== release.digest ||
+        grant.entryResourceVersionId !== parsed.entryResourceVersionId)
     ) {
       throw new AppError(
         422,
@@ -384,6 +399,7 @@ export class AutomationLearningService {
           name: parsed.name,
           channelKey: parsed.channelKey,
           releaseId: release.id,
+          entryResourceVersionId: parsed.entryResourceVersionId,
           releaseDigest: release.digest,
           projectId: release.projectId,
           authorityGrantId: grant?.id ?? null,
@@ -650,7 +666,6 @@ export class AutomationLearningService {
           try {
             const snapshot = await this.attention.createDigestSnapshotForActor(
               dispatch.schedule.createdBy,
-              now,
             );
             appendPlatformDigestSignals(inputTemplate, snapshot.summary);
             digestSnapshotId = snapshot.id;
@@ -661,6 +676,7 @@ export class AutomationLearningService {
         const run = await this.execution.createRun(
           {
             releaseId: dispatch.schedule.releaseId,
+            entryResourceVersionId: dispatch.schedule.entryResourceVersionId,
             authorityGrantId: dispatch.schedule.authorityGrantId,
             input: inputTemplate,
             maxInputTokens: dispatch.schedule.maxInputTokens,
