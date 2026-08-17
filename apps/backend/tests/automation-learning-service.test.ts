@@ -18,6 +18,7 @@ import {
 } from '../src/services/automation-learning-service.js';
 import type { ExecutionService } from '../src/services/execution-service.js';
 import type { ServiceBundle } from '../src/services/types.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const now = new Date('2026-08-16T12:00:00.000Z');
 const scheduleId = randomUUID();
@@ -30,6 +31,10 @@ const observationId = randomUUID();
 const improvementId = randomUUID();
 const memoryId = randomUUID();
 const dispatchId = randomUUID();
+const VISIBLE_SCOPE = {
+  workspaceId: LOCAL_WORKSPACE_ID,
+  OR: [{ departmentId: null }, { departmentId: LOCAL_DEPARTMENT_ID }],
+};
 
 const schedule = {
   id: scheduleId,
@@ -196,6 +201,12 @@ function harness() {
     },
     automationSchedule: {
       findMany: jest.fn(() => Promise.resolve([schedule])),
+      groupBy: jest.fn(() =>
+        Promise.resolve([
+          { state: AutomationScheduleState.ACTIVE, _count: { _all: 6 } },
+          { state: AutomationScheduleState.PAUSED, _count: { _all: 2 } },
+        ]),
+      ),
       findUnique: topScheduleFind,
       findFirst: topScheduleFind,
     },
@@ -317,9 +328,16 @@ describe('AutomationLearningService', () => {
   });
 
   it('maps schedules and executes a restart-safe due scheduling pass', async () => {
-    const { service, execution, transaction } = harness();
+    const { service, execution, prisma, transaction } = harness();
     await expect(service.listSchedules({ state: 'active', limit: 20 })).resolves.toMatchObject({
       items: [{ id: scheduleId, state: 'active', retry: { backoff: 'exponential' } }],
+      total: 8,
+      activeTotal: 6,
+    });
+    expect(prisma.automationSchedule.groupBy).toHaveBeenCalledWith({
+      by: ['state'],
+      where: VISIBLE_SCOPE,
+      _count: { _all: true },
     });
     await expect(service.getSchedule(scheduleId)).resolves.toMatchObject({ id: scheduleId });
     const result = await service.scheduleDue(now, 25);

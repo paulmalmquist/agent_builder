@@ -251,6 +251,7 @@ function database() {
     findUnique: grantFind,
     findFirst: grantFind,
     findMany: asyncMock([] as DatabaseAuthorityGrant[]),
+    groupBy: asyncMock([] as Array<{ state: AuthorityGrantState; _count: { _all: number } }>),
     create: asyncMock(grantRecord()),
     update: asyncMock(grantRecord()),
     updateMany: asyncMock({ count: 1 }),
@@ -261,6 +262,7 @@ function database() {
     findUnique: runFind,
     findFirst: runFind,
     findMany: asyncMock([] as DatabaseExecutionRun[]),
+    groupBy: asyncMock([] as Array<{ state: ExecutionRunState; _count: { _all: number } }>),
     create: asyncMock(runRecord()),
     update: asyncMock(runRecord()),
     updateMany: asyncMock({ count: 1 }),
@@ -699,13 +701,24 @@ describe('ExecutionService authority and read operations', () => {
     db.authorityGrant.findMany.mockResolvedValue([
       grantRecord({ state: AuthorityGrantState.REVOKED, revokedAt: NOW }),
     ]);
+    db.authorityGrant.groupBy.mockResolvedValue([
+      { state: AuthorityGrantState.ACTIVE, _count: { _all: 7 } },
+      { state: AuthorityGrantState.REVOKED, _count: { _all: 3 } },
+    ]);
     const service = new ExecutionService(db.prisma, config(), modelProvider());
-    expect((await service.listGrants({ limit: 10 })).items[0]?.revokedAt).toBe(NOW.toISOString());
+    const unfiltered = await service.listGrants({ limit: 10 });
+    expect(unfiltered.items[0]?.revokedAt).toBe(NOW.toISOString());
+    expect(unfiltered).toMatchObject({ total: 10, activeTotal: 7 });
     await service.listGrants({ state: 'revoked', limit: 2 });
     expect(callArgument(db.authorityGrant.findMany)['where']).toEqual(VISIBLE_SCOPE);
     expect(callArgument(db.authorityGrant.findMany, 1)['where']).toEqual({
       ...VISIBLE_SCOPE,
       state: AuthorityGrantState.REVOKED,
+    });
+    expect(callArgument(db.authorityGrant.groupBy)).toEqual({
+      by: ['state'],
+      where: VISIBLE_SCOPE,
+      _count: { _all: true },
     });
     expect(db.authorityGrant.updateMany).toHaveBeenCalledTimes(2);
   });
@@ -855,17 +868,37 @@ describe('ExecutionService authority and read operations', () => {
       finishedAt: NOW,
     });
     db.executionRun.findMany.mockResolvedValue([terminal]);
+    db.executionRun.groupBy.mockResolvedValue([
+      { state: ExecutionRunState.AWAITING_APPROVAL, _count: { _all: 2 } },
+      { state: ExecutionRunState.FAILED, _count: { _all: 4 } },
+      { state: ExecutionRunState.SUCCEEDED, _count: { _all: 9 } },
+    ]);
     db.executionRun.findUnique.mockResolvedValue(terminal);
     const service = new ExecutionService(db.prisma, config(), modelProvider());
-    expect((await service.listRuns({ limit: 5 })).items[0]).toMatchObject({
+    const unfiltered = await service.listRuns({ limit: 5 });
+    expect(unfiltered.items[0]).toMatchObject({
       state: 'failed',
       actualCostUsd: 0.002,
       error: { code: 'FIXTURE_FAILURE' },
+    });
+    expect(unfiltered).toMatchObject({
+      total: 15,
+      countsByState: {
+        awaiting_approval: 2,
+        failed: 4,
+        succeeded: 9,
+        queued: 0,
+      },
     });
     await service.listRuns({ state: 'failed', limit: 1 });
     expect(callArgument(db.executionRun.findMany, 1)['where']).toEqual({
       ...VISIBLE_SCOPE,
       state: ExecutionRunState.FAILED,
+    });
+    expect(callArgument(db.executionRun.groupBy)).toEqual({
+      by: ['state'],
+      where: VISIBLE_SCOPE,
+      _count: { _all: true },
     });
     expect((await service.getRun(RUN_ID)).finishedAt).toBe(NOW.toISOString());
   });

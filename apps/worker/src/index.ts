@@ -61,7 +61,7 @@ process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
 daemon.start().catch(async (error: unknown) => {
-  logger.fatal({ error }, 'Worker failed to start');
+  logger.fatal({ err: error }, 'Worker failed to start');
   await prisma.$disconnect();
   process.exitCode = 1;
 });

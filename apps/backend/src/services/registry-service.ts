@@ -576,30 +576,55 @@ export class RegistryService {
     lifecycle?: keyof typeof lifecycleToDatabase | undefined;
     limit: number;
   }): Promise<z.infer<typeof resourceListResponseSchema>> {
-    const records = await this.prisma.resourceVersion.findMany({
-      where: {
-        family: {
-          ...aggregateScopeWhere(),
-          ...(query.kind === undefined ? {} : { kind: kindToDatabase[query.kind] }),
+    const scopeWhere = aggregateScopeWhere();
+    const [records, lifecycleTotals] = await Promise.all([
+      this.prisma.resourceVersion.findMany({
+        where: {
+          family: {
+            ...scopeWhere,
+            ...(query.kind === undefined ? {} : { kind: kindToDatabase[query.kind] }),
+          },
+          ...(query.lifecycle === undefined
+            ? {}
+            : { lifecycle: lifecycleToDatabase[query.lifecycle] }),
+          ...(query.query === undefined || query.query.length === 0
+            ? {}
+            : {
+                OR: [
+                  { family: { name: { contains: query.query, mode: 'insensitive' } } },
+                  { family: { slug: { contains: query.query, mode: 'insensitive' } } },
+                  { purpose: { contains: query.query, mode: 'insensitive' } },
+                ],
+              }),
         },
-        ...(query.lifecycle === undefined
-          ? {}
-          : { lifecycle: lifecycleToDatabase[query.lifecycle] }),
-        ...(query.query === undefined || query.query.length === 0
-          ? {}
-          : {
-              OR: [
-                { family: { name: { contains: query.query, mode: 'insensitive' } } },
-                { family: { slug: { contains: query.query, mode: 'insensitive' } } },
-                { purpose: { contains: query.query, mode: 'insensitive' } },
-              ],
-            }),
-      },
-      include: { family: true },
-      orderBy: [{ updatedAt: 'desc' }],
-      take: query.limit,
+        include: { family: true },
+        orderBy: [{ updatedAt: 'desc' }],
+        take: query.limit,
+      }),
+      this.prisma.resourceVersion.groupBy({
+        by: ['lifecycle'],
+        where: { family: scopeWhere },
+        _count: { _all: true },
+      }),
+    ]);
+    const countsByLifecycle = {
+      experimental: 0,
+      candidate: 0,
+      evaluating: 0,
+      evaluated: 0,
+      certified: 0,
+      production: 0,
+      deprecated: 0,
+    };
+    for (const group of lifecycleTotals) {
+      countsByLifecycle[lifecycleToWire[group.lifecycle]] = group._count._all;
+    }
+    const total = Object.values(countsByLifecycle).reduce((sum, count) => sum + count, 0);
+    return resourceListResponseSchema.parse({
+      items: records.map(toResource),
+      total,
+      countsByLifecycle,
     });
-    return resourceListResponseSchema.parse({ items: records.map(toResource) });
   }
 
   async createRelease(input: z.input<typeof createReleaseRequestSchema>): Promise<ReleaseBundle> {

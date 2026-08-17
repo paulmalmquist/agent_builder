@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/unbound-method */
+import { Writable } from 'node:stream';
 import request from 'supertest';
 import { pino } from 'pino';
 import {
@@ -30,6 +31,7 @@ import {
 } from '@agent-builder/contracts';
 import { createApp } from '../src/app.js';
 import { AppError } from '../src/errors.js';
+import { createLogger } from '../src/logger.js';
 import type { ServiceBundle } from '../src/services/types.js';
 import {
   LOCAL_DEPARTMENT_ID,
@@ -521,6 +523,56 @@ describe('Agent Builder HTTP API', () => {
     expect(openapi.body.paths['/agents']).toBeDefined();
     expect(openapi.body).toEqual(createOpenApiDocument());
     expect(openapi.body).toMatchSnapshot();
+  });
+
+  it('serializes unexpected errors through the Pino err path and redacts response bodies', async () => {
+    const chunks: string[] = [];
+    const destination = new Writable({
+      write(
+        chunk: string | Buffer,
+        _encoding: BufferEncoding,
+        callback: (error?: Error | null) => void,
+      ) {
+        chunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+        callback();
+      },
+    });
+    const capturedServices = createFakeServices();
+    const failure = Object.assign(new Error('Synthetic upstream request failed'), {
+      response: {
+        status: 503,
+        body: { token: 'fixture-response-value', rows: [{ private: 'fixture-row-value' }] },
+      },
+    });
+    jest.spyOn(capturedServices.health, 'check').mockRejectedValueOnce(failure);
+
+    const response = await request(
+      createApp(capturedServices, createLogger({ logLevel: 'error' }, destination)),
+    )
+      .get('/health')
+      .expect(500);
+
+    expect(response.body).toMatchObject({
+      error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+    });
+    const serialized = chunks.join('');
+    expect(serialized).not.toContain('fixture-response-value');
+    expect(serialized).not.toContain('fixture-row-value');
+    const records = serialized
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const event = records.find((record) => record['msg'] === 'Request failed');
+    expect(event).toBeDefined();
+    expect(event).not.toHaveProperty('error');
+    expect(event).toMatchObject({
+      err: {
+        type: 'Error',
+        message: 'Synthetic upstream request failed',
+        response: { status: 503, body: '[REDACTED]' },
+      },
+    });
+    expect((event?.['err'] as { stack?: unknown }).stack).toEqual(expect.any(String));
   });
 
   it('returns the resolved local session and inherited four-role authorization', async () => {

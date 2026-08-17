@@ -193,15 +193,10 @@ export function IncubatorPage() {
   const reviewImprovement = useReviewImprovementCandidate();
   const reviewMemory = useReviewMemoryCandidate();
   const [confirmation, setConfirmation] = useState<string | null>(null);
-  const observationItems = observations.data?.items ?? [];
-  const improvementItems = improvements.data?.items ?? [];
-  const memoryItems = memories.data?.items ?? [];
-  const combinedError =
-    observations.error ??
-    improvements.error ??
-    memories.error ??
-    reviewImprovement.error ??
-    reviewMemory.error;
+  const observationItems = observations.isError ? [] : (observations.data?.items ?? []);
+  const improvementItems = improvements.isError ? [] : (improvements.data?.items ?? []);
+  const memoryItems = memories.isError ? [] : (memories.data?.items ?? []);
+  const mutationError = reviewImprovement.error ?? reviewMemory.error;
 
   async function decideImprovement(
     candidate: ImprovementCandidate,
@@ -263,20 +258,30 @@ export function IncubatorPage() {
         ))}
       </div>
 
-      {combinedError ? <Notice tone="error">{getErrorMessage(combinedError)}</Notice> : null}
+      {mutationError ? <Notice tone="error">{getErrorMessage(mutationError)}</Notice> : null}
       {confirmation ? <Notice tone="success">{confirmation}</Notice> : null}
 
       <div className="incubator-ledger">
         <section aria-busy={observations.isLoading} className="os-panel">
           <header className="os-panel-heading">
             <h2>Observations</h2>
-            <small>{observationItems.length} SIGNALS · SUMMARY ONLY</small>
+            <small>
+              {observations.data !== undefined && !observations.isError
+                ? observationItems.length
+                : '—'}{' '}
+              SIGNALS SHOWN · SUMMARY ONLY
+            </small>
           </header>
+          {observations.isError ? (
+            <Notice tone="error">
+              Observations unavailable. {getErrorMessage(observations.error)}
+            </Notice>
+          ) : null}
           <div className="run-list">
             {observations.isLoading ? (
               <div className="os-empty-state">Loading observations…</div>
             ) : null}
-            {!observations.isLoading && observationItems.length === 0 ? (
+            {!observations.isLoading && !observations.isError && observationItems.length === 0 ? (
               <div className="os-empty-state">No governed observations recorded.</div>
             ) : null}
             {observationItems.map((observation) => (
@@ -305,11 +310,16 @@ export function IncubatorPage() {
             <h2>Improvement candidates</h2>
             <small>HUMAN CURATION REQUIRED</small>
           </header>
+          {improvements.isError ? (
+            <Notice tone="error">
+              Improvement candidates unavailable. {getErrorMessage(improvements.error)}
+            </Notice>
+          ) : null}
           <div className="run-list">
             {improvements.isLoading ? (
               <div className="os-empty-state">Loading candidates…</div>
             ) : null}
-            {!improvements.isLoading && improvementItems.length === 0 ? (
+            {!improvements.isLoading && !improvements.isError && improvementItems.length === 0 ? (
               <div className="os-empty-state">No improvement candidates are awaiting curation.</div>
             ) : null}
             {improvementItems.map((candidate) => (
@@ -350,11 +360,16 @@ export function IncubatorPage() {
             <h2>Staged memory</h2>
             <small>PAYLOADS WITHHELD · HUMAN DECISION</small>
           </header>
+          {memories.isError ? (
+            <Notice tone="error">
+              Staged memory unavailable. {getErrorMessage(memories.error)}
+            </Notice>
+          ) : null}
           <div className="run-list">
             {memories.isLoading ? (
               <div className="os-empty-state">Loading staged memory…</div>
             ) : null}
-            {!memories.isLoading && memoryItems.length === 0 ? (
+            {!memories.isLoading && !memories.isError && memoryItems.length === 0 ? (
               <div className="os-empty-state">No durable-memory writes are staged.</div>
             ) : null}
             {memoryItems.map((candidate) => (

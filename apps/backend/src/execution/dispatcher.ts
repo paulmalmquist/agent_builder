@@ -28,7 +28,9 @@ export class ExecutionDispatcher implements ExecutionDispatcherApi {
     this.scheduled.add(runId);
     void this.semaphore
       .use(() => runAsSystem(() => this.run(runId)))
-      .catch((error: unknown) => this.logger.error({ error, runId }, 'Execution dispatcher failed'))
+      .catch((error: unknown) =>
+        this.logger.error({ err: error, runId }, 'Execution dispatcher failed'),
+      )
       .finally(() => this.scheduled.delete(runId));
   }
 
@@ -46,7 +48,7 @@ export class ExecutionDispatcher implements ExecutionDispatcherApi {
       this.logger.info({ runId }, 'Paul OS execution succeeded');
     } catch (error: unknown) {
       await this.work.failClaimed(runId, this.workerId, 'EXECUTION_FAILED');
-      this.logger.warn({ error, runId }, 'Paul OS execution failed');
+      this.logger.warn({ err: error, runId }, 'Paul OS execution failed');
     }
   }
 }

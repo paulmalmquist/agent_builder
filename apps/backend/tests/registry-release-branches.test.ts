@@ -27,6 +27,10 @@ const DECISION_ID = '90000000-0000-4000-8000-000000000009';
 const CANDIDATE_ID = 'a0000000-0000-4000-8000-000000000010';
 const OTHER_CANDIDATE_ID = 'b0000000-0000-4000-8000-000000000011';
 const now = new Date('2026-08-16T12:00:00.000Z');
+const VISIBLE_SCOPE = {
+  workspaceId: LOCAL_WORKSPACE_ID,
+  OR: [{ departmentId: null }, { departmentId: LOCAL_DEPARTMENT_ID }],
+};
 
 function manifest(input: {
   familyId?: string;
@@ -655,7 +659,13 @@ describe('RegistryService release and import guard branches', () => {
     expect(createTransaction.auditEvent.create).toHaveBeenCalled();
 
     const listAndGetPrisma = {
-      resourceVersion: { findMany: jest.fn().mockResolvedValue([first]) },
+      resourceVersion: {
+        findMany: jest.fn().mockResolvedValue([first]),
+        groupBy: jest.fn().mockResolvedValue([
+          { lifecycle: ResourceLifecycle.CANDIDATE, _count: { _all: 11 } },
+          { lifecycle: ResourceLifecycle.PRODUCTION, _count: { _all: 4 } },
+        ]),
+      },
       releaseBundle: {
         findFirst: jest.fn().mockResolvedValueOnce(releaseRecord).mockResolvedValueOnce(null),
       },
@@ -668,9 +678,18 @@ describe('RegistryService release and import guard branches', () => {
       limit: 5,
     });
     expect(listed.items).toHaveLength(1);
+    expect(listed).toMatchObject({
+      total: 15,
+      countsByLifecycle: { candidate: 11, production: 4, experimental: 0 },
+    });
     expect(listAndGetPrisma.resourceVersion.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ OR: expect.any(Array) }) }),
     );
+    expect(listAndGetPrisma.resourceVersion.groupBy).toHaveBeenCalledWith({
+      by: ['lifecycle'],
+      where: { family: VISIBLE_SCOPE },
+      _count: { _all: true },
+    });
     expect((await queryService.getRelease(RELEASE_ID)).id).toBe(RELEASE_ID);
     await expect(queryService.getRelease(SECOND_RELEASE_ID)).rejects.toMatchObject({
       code: 'RELEASE_NOT_FOUND',

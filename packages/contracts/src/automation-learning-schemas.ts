@@ -69,9 +69,25 @@ export const automationScheduleListQuerySchema = z.object({
   state: automationScheduleStateSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
-export const automationScheduleListResponseSchema = z.object({
-  items: z.array(automationScheduleSchema),
-});
+export const automationScheduleListResponseSchema = z
+  .object({
+    items: z.array(automationScheduleSchema),
+    total: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe('All schedules in principal scope before the state filter and item cap'),
+    activeTotal: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe('Active schedules in the full principal scope'),
+  })
+  .strict()
+  .refine((value) => value.activeTotal <= value.total, {
+    path: ['activeTotal'],
+    message: 'Active schedules cannot exceed the total',
+  });
 export const updateAutomationScheduleStateRequestSchema = z.object({
   state: automationScheduleStateSchema,
   rationale: z.string().trim().min(10).max(2000),

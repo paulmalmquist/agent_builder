@@ -2,6 +2,7 @@
 module.exports = {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/../../test-support/database-integration-guard.cjs'],
   roots: ['<rootDir>/tests'],
   extensionsToTreatAsEsm: ['.ts'],
   transform: {

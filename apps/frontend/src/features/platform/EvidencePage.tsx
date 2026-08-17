@@ -49,9 +49,8 @@ export function EvidencePage() {
   const releaseEvaluation = useReleaseEvaluation(evaluationId);
   const outcomes = useOutcomes();
   const metrics = useMetrics();
-  const outcomeItems = outcomes.data?.items ?? [];
-  const metricItems = metrics.data?.items ?? [];
-  const error = outcomes.error ?? metrics.error;
+  const outcomeItems = outcomes.isError ? [] : (outcomes.data?.items ?? []);
+  const metricItems = metrics.isError ? [] : (metrics.data?.items ?? []);
 
   return (
     <main className="os-surface">
@@ -63,27 +62,39 @@ export function EvidencePage() {
       />
       <InstrumentStrip
         readings={[
-          { label: 'OUTCOMES', value: outcomeItems.length },
-          { label: 'METRIC SAMPLES', value: metricItems.length },
           {
-            label: 'CITED OUTCOMES',
-            value: outcomeItems.filter((outcome) => outcome.citations.length > 0).length,
+            label: 'OUTCOMES SHOWN',
+            value: outcomes.data !== undefined && !outcomes.isError ? outcomeItems.length : '—',
           },
           {
-            label: 'UNRESOLVED ITEMS',
-            value: outcomeItems.reduce(
-              (count, outcome) => count + outcome.unresolvedItems.length,
-              0,
-            ),
+            label: 'METRICS SHOWN',
+            value: metrics.data !== undefined && !metrics.isError ? metricItems.length : '—',
+          },
+          {
+            label: 'CITED SHOWN',
+            value:
+              outcomes.data !== undefined && !outcomes.isError
+                ? outcomeItems.filter((outcome) => outcome.citations.length > 0).length
+                : '—',
+          },
+          {
+            label: 'UNRESOLVED SHOWN',
+            value:
+              outcomes.data !== undefined && !outcomes.isError
+                ? outcomeItems.reduce((count, outcome) => count + outcome.unresolvedItems.length, 0)
+                : '—',
           },
         ]}
       />
-      {error ? <Notice tone="error">{getErrorMessage(error)}</Notice> : null}
       {productionChannel.error ? (
-        <Notice tone="error">{getErrorMessage(productionChannel.error)}</Notice>
+        <Notice tone="error">
+          Production authority unavailable. {getErrorMessage(productionChannel.error)}
+        </Notice>
       ) : null}
       {releaseEvaluation.error ? (
-        <Notice tone="error">{getErrorMessage(releaseEvaluation.error)}</Notice>
+        <Notice tone="error">
+          Evaluation evidence unavailable. {getErrorMessage(releaseEvaluation.error)}
+        </Notice>
       ) : null}
       <div className="os-toolbar">
         <div>
@@ -101,7 +112,7 @@ export function EvidencePage() {
         {productionChannel.isLoading ? (
           <div className="os-empty-state">Resolving production pointer…</div>
         ) : null}
-        {productionChannel.data ? (
+        {productionChannel.data && !productionChannel.isError ? (
           <div className="release-authority-grid">
             <article className="evidence-card">
               <header>
@@ -150,7 +161,7 @@ export function EvidencePage() {
           {releaseEvaluation.isLoading ? (
             <div className="os-empty-state">Loading immutable evaluation evidence…</div>
           ) : null}
-          {releaseEvaluation.data ? (
+          {releaseEvaluation.data && !releaseEvaluation.isError ? (
             <>
               <div className="evidence-verdict">
                 <span
@@ -274,9 +285,12 @@ export function EvidencePage() {
             <h2>Validated outcomes</h2>
             <small>OUTPUT PAYLOADS REMAIN CONTROLLED</small>
           </header>
+          {outcomes.isError ? (
+            <Notice tone="error">Outcomes unavailable. {getErrorMessage(outcomes.error)}</Notice>
+          ) : null}
           <div className="evidence-list">
             {outcomes.isLoading ? <div className="os-empty-state">Loading outcomes…</div> : null}
-            {!outcomes.isLoading && outcomeItems.length === 0 ? (
+            {!outcomes.isLoading && !outcomes.isError && outcomeItems.length === 0 ? (
               <div className="os-empty-state">
                 <strong>No outcomes have been recorded.</strong>
                 <span>Successful executions will write validated, provenance-bearing records.</span>
@@ -318,9 +332,12 @@ export function EvidencePage() {
             <h2>Metric samples</h2>
             <small>QUALITY · LATENCY · TOKENS · COST</small>
           </header>
+          {metrics.isError ? (
+            <Notice tone="error">Metrics unavailable. {getErrorMessage(metrics.error)}</Notice>
+          ) : null}
           <div className="evidence-list">
             {metrics.isLoading ? <div className="os-empty-state">Loading measurements…</div> : null}
-            {!metrics.isLoading && metricItems.length === 0 ? (
+            {!metrics.isLoading && !metrics.isError && metricItems.length === 0 ? (
               <div className="os-empty-state">
                 <strong>No metrics have been observed.</strong>
                 <span>Usage, latency, cost, and quality samples appear after execution.</span>

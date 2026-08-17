@@ -425,7 +425,35 @@ export const resourceListQuerySchema = z.object({
   lifecycle: resourceLifecycleSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
-export const resourceListResponseSchema = z.object({ items: z.array(resourceVersionSchema) });
+export const resourceLifecycleCountsSchema = z
+  .object({
+    experimental: z.number().int().nonnegative(),
+    candidate: z.number().int().nonnegative(),
+    evaluating: z.number().int().nonnegative(),
+    evaluated: z.number().int().nonnegative(),
+    certified: z.number().int().nonnegative(),
+    production: z.number().int().nonnegative(),
+    deprecated: z.number().int().nonnegative(),
+  })
+  .strict();
+export const resourceListResponseSchema = z
+  .object({
+    items: z.array(resourceVersionSchema),
+    total: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe('All resource versions in principal scope before item filters and the item cap'),
+    countsByLifecycle: resourceLifecycleCountsSchema.describe(
+      'Lifecycle totals for all resource versions in principal scope before item filters',
+    ),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.total === Object.values(value.countsByLifecycle).reduce((sum, count) => sum + count, 0),
+    { path: ['total'], message: 'Resource total must equal the lifecycle counts' },
+  );
 
 export const createReleaseRequestSchema = z.object({
   resourceVersionIds: z.array(uuidSchema).min(1).max(100),
@@ -505,9 +533,25 @@ export const authorityGrantListQuerySchema = z.object({
   state: authorityGrantStateSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
-export const authorityGrantListResponseSchema = z.object({
-  items: z.array(authorityGrantSchema),
-});
+export const authorityGrantListResponseSchema = z
+  .object({
+    items: z.array(authorityGrantSchema),
+    total: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe('All authority grants in principal scope before the state filter and item cap'),
+    activeTotal: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe('Active authority grants in the full principal scope'),
+  })
+  .strict()
+  .refine((value) => value.activeTotal <= value.total, {
+    path: ['activeTotal'],
+    message: 'Active authority grants cannot exceed the total',
+  });
 
 export const executionRunStateSchema = z.enum([
   'awaiting_approval',
@@ -586,7 +630,36 @@ export const executionRunListQuerySchema = z.object({
   state: executionRunStateSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
-export const executionRunListResponseSchema = z.object({ items: z.array(executionRunSchema) });
+export const executionRunStateCountsSchema = z
+  .object({
+    awaiting_approval: z.number().int().nonnegative(),
+    queued: z.number().int().nonnegative(),
+    running: z.number().int().nonnegative(),
+    succeeded: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    cancelled: z.number().int().nonnegative(),
+    paused_budget: z.number().int().nonnegative(),
+    paused_plugin: z.number().int().nonnegative(),
+  })
+  .strict();
+export const executionRunListResponseSchema = z
+  .object({
+    items: z.array(executionRunSchema),
+    total: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe('All execution runs in principal scope before the state filter and item cap'),
+    countsByState: executionRunStateCountsSchema.describe(
+      'State totals for all execution runs in the full principal scope',
+    ),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.total === Object.values(value.countsByState).reduce((sum, count) => sum + count, 0),
+    { path: ['total'], message: 'Execution total must equal the state counts' },
+  );
 export const approveExecutionRunResponseSchema = z.object({
   grant: authorityGrantSchema,
   run: executionRunSchema,

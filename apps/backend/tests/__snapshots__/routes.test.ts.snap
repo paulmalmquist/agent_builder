@@ -20016,7 +20016,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": false,
                   "properties": {
+                    "activeTotal": {
+                      "description": "Active authority grants in the full principal scope",
+                      "minimum": 0,
+                      "type": "integer",
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -20229,9 +20235,16 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       },
                       "type": "array",
                     },
+                    "total": {
+                      "description": "All authority grants in principal scope before the state filter and item cap",
+                      "minimum": 0,
+                      "type": "integer",
+                    },
                   },
                   "required": [
                     "items",
+                    "total",
+                    "activeTotal",
                   ],
                   "type": "object",
                 },
@@ -21085,7 +21098,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": false,
                   "properties": {
+                    "activeTotal": {
+                      "description": "Active schedules in the full principal scope",
+                      "minimum": 0,
+                      "type": "integer",
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -21275,9 +21294,16 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       },
                       "type": "array",
                     },
+                    "total": {
+                      "description": "All schedules in principal scope before the state filter and item cap",
+                      "minimum": 0,
+                      "type": "integer",
+                    },
                   },
                   "required": [
                     "items",
+                    "total",
+                    "activeTotal",
                   ],
                   "type": "object",
                 },
@@ -32456,7 +32482,57 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": false,
                   "properties": {
+                    "countsByState": {
+                      "additionalProperties": false,
+                      "description": "State totals for all execution runs in the full principal scope",
+                      "properties": {
+                        "awaiting_approval": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "cancelled": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "failed": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "paused_budget": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "paused_plugin": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "queued": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "running": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "succeeded": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                      },
+                      "required": [
+                        "awaiting_approval",
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed",
+                        "cancelled",
+                        "paused_budget",
+                        "paused_plugin",
+                      ],
+                      "type": "object",
+                    },
                     "items": {
                       "items": {
                         "oneOf": [
@@ -33155,9 +33231,16 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       },
                       "type": "array",
                     },
+                    "total": {
+                      "description": "All execution runs in principal scope before the state filter and item cap",
+                      "minimum": 0,
+                      "type": "integer",
+                    },
                   },
                   "required": [
                     "items",
+                    "total",
+                    "countsByState",
                   ],
                   "type": "object",
                 },
@@ -45021,7 +45104,52 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": false,
                   "properties": {
+                    "countsByLifecycle": {
+                      "additionalProperties": false,
+                      "description": "Lifecycle totals for all resource versions in principal scope before item filters",
+                      "properties": {
+                        "candidate": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "certified": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "deprecated": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "evaluated": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "evaluating": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "experimental": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "production": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                      },
+                      "required": [
+                        "experimental",
+                        "candidate",
+                        "evaluating",
+                        "evaluated",
+                        "certified",
+                        "production",
+                        "deprecated",
+                      ],
+                      "type": "object",
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -45426,9 +45554,16 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       },
                       "type": "array",
                     },
+                    "total": {
+                      "description": "All resource versions in principal scope before item filters and the item cap",
+                      "minimum": 0,
+                      "type": "integer",
+                    },
                   },
                   "required": [
                     "items",
+                    "total",
+                    "countsByLifecycle",
                   ],
                   "type": "object",
                 },

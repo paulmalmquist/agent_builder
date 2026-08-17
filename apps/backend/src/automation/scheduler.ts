@@ -87,7 +87,7 @@ export class AutomationScheduler implements AutomationSchedulerApi {
           'Automation scheduler tick completed',
         );
       } catch (error: unknown) {
-        this.logger.error({ error, reason }, 'Automation scheduler tick failed');
+        this.logger.error({ err: error, reason }, 'Automation scheduler tick failed');
       }
     });
     this.inFlight = operation;

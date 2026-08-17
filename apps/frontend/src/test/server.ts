@@ -729,6 +729,21 @@ function platformRun() {
   };
 }
 
+function executionRunCounts() {
+  const counts = {
+    awaiting_approval: 26,
+    queued: 4,
+    running: 3,
+    succeeded: 30,
+    failed: 8,
+    cancelled: 5,
+    paused_budget: 2,
+    paused_plugin: 1,
+  };
+  counts[platformRunState] += 1;
+  return counts;
+}
+
 export function platformRunFixture() {
   return platformRun();
 }
@@ -1038,7 +1053,21 @@ export const handlers = [
     });
   }),
 
-  http.get('http://localhost/v1/resources', () => HttpResponse.json({ items: [platformResource] })),
+  http.get('http://localhost/v1/resources', () =>
+    HttpResponse.json({
+      items: [platformResource],
+      total: 137,
+      countsByLifecycle: {
+        experimental: 50,
+        candidate: 12,
+        evaluating: 10,
+        evaluated: 12,
+        certified: 28,
+        production: 23,
+        deprecated: 2,
+      },
+    }),
+  ),
 
   http.get('http://localhost/v1/plugins', () => HttpResponse.json({ items: pluginCatalog() })),
 
@@ -1143,7 +1172,7 @@ export const handlers = [
   }),
 
   http.get('http://localhost/v1/execution-runs', () =>
-    HttpResponse.json({ items: [platformRun()] }),
+    HttpResponse.json({ items: [platformRun()], total: 80, countsByState: executionRunCounts() }),
   ),
 
   http.post(`http://localhost/v1/execution-runs/${executionRunId}/approve`, async ({ request }) => {
@@ -1204,7 +1233,11 @@ export const handlers = [
   }),
 
   http.get('http://localhost/v1/authority-grants', () =>
-    HttpResponse.json({ items: [authorityGrant()] }),
+    HttpResponse.json({
+      items: [authorityGrant()],
+      total: 33,
+      activeTotal: grantState === 'active' ? 19 : 18,
+    }),
   ),
 
   http.post(`http://localhost/v1/authority-grants/${authorityGrantId}/revoke`, () => {
@@ -1213,7 +1246,11 @@ export const handlers = [
   }),
 
   http.get('http://localhost/v1/automation-schedules', () =>
-    HttpResponse.json({ items: [automationSchedule()] }),
+    HttpResponse.json({
+      items: [automationSchedule()],
+      total: 12,
+      activeTotal: automationScheduleState === 'active' ? 8 : 7,
+    }),
   ),
 
   http.post(

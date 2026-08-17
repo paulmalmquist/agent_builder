@@ -1008,12 +1008,27 @@ export class ExecutionService implements ExecutionWorkerApi {
         : (Object.entries(grantStateWire).find(([, wire]) => wire === query.state)?.[0] as
             | AuthorityGrantState
             | undefined);
-    const records = await this.prisma.authorityGrant.findMany({
-      where: { ...aggregateScopeWhere(), ...(state === undefined ? {} : { state }) },
-      orderBy: { createdAt: 'desc' },
-      take: query.limit,
+    const scopeWhere = aggregateScopeWhere();
+    const [records, stateTotals] = await Promise.all([
+      this.prisma.authorityGrant.findMany({
+        where: { ...scopeWhere, ...(state === undefined ? {} : { state }) },
+        orderBy: { createdAt: 'desc' },
+        take: query.limit,
+      }),
+      this.prisma.authorityGrant.groupBy({
+        by: ['state'],
+        where: scopeWhere,
+        _count: { _all: true },
+      }),
+    ]);
+    const total = stateTotals.reduce((sum, group) => sum + group._count._all, 0);
+    const activeTotal =
+      stateTotals.find((group) => group.state === AuthorityGrantState.ACTIVE)?._count._all ?? 0;
+    return authorityGrantListResponseSchema.parse({
+      items: records.map(toGrant),
+      total,
+      activeTotal,
     });
-    return authorityGrantListResponseSchema.parse({ items: records.map(toGrant) });
   }
 
   async createGrant(
@@ -1220,15 +1235,41 @@ export class ExecutionService implements ExecutionWorkerApi {
         : (Object.entries(runStateWire).find(([, wire]) => wire === query.state)?.[0] as
             | ExecutionRunState
             | undefined);
-    const records = await this.prisma.executionRun.findMany({
-      where: {
-        ...aggregateScopeWhere(),
-        ...(databaseState === undefined ? {} : { state: databaseState }),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: query.limit,
+    const scopeWhere = aggregateScopeWhere();
+    const [records, stateTotals] = await Promise.all([
+      this.prisma.executionRun.findMany({
+        where: {
+          ...scopeWhere,
+          ...(databaseState === undefined ? {} : { state: databaseState }),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: query.limit,
+      }),
+      this.prisma.executionRun.groupBy({
+        by: ['state'],
+        where: scopeWhere,
+        _count: { _all: true },
+      }),
+    ]);
+    const countsByState = {
+      awaiting_approval: 0,
+      queued: 0,
+      running: 0,
+      succeeded: 0,
+      failed: 0,
+      cancelled: 0,
+      paused_budget: 0,
+      paused_plugin: 0,
+    };
+    for (const group of stateTotals) {
+      countsByState[runStateWire[group.state]] = group._count._all;
+    }
+    const total = Object.values(countsByState).reduce((sum, count) => sum + count, 0);
+    return executionRunListResponseSchema.parse({
+      items: records.map(toRun),
+      total,
+      countsByState,
     });
-    return executionRunListResponseSchema.parse({ items: records.map(toRun) });
   }
 
   async createRun(

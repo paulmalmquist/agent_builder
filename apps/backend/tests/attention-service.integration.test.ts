@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import {
+  jsonObjectSchema,
+  platformEvaluationSuiteSpecSchema,
+  resourceManifestSchema,
+  skillSpecSchema,
+  type ResourceManifest,
+} from '@agent-builder/contracts';
+import { canonicalJson, sha256 } from '@paul-os/runtime';
+import {
   ApprovalRequestState,
   ContextClassification,
   ExecutionRunState,
@@ -19,6 +27,7 @@ import {
 } from '../src/services/attention-service.js';
 import { ReleaseGovernanceService } from '../src/services/release-governance-service.js';
 import { ExecutionService } from '../src/services/execution-service.js';
+import { RegistryService } from '../src/services/registry-service.js';
 import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const runDatabaseIntegration =
@@ -44,6 +53,14 @@ function digest(seed: string): string {
   return Buffer.from(seed).toString('hex').slice(0, 64).padEnd(64, '0');
 }
 
+function canonicalManifest(manifest: ResourceManifest): {
+  definition: ResourceManifest;
+  digest: string;
+} {
+  const definition = resourceManifestSchema.parse(manifest);
+  return { definition, digest: sha256(canonicalJson(definition)) };
+}
+
 describeDatabase('Quiet Console Attention ledger', () => {
   const prisma = new PrismaClient();
 
@@ -56,6 +73,31 @@ describeDatabase('Quiet Console Attention ledger', () => {
     const familyId = randomUUID();
     const entryResourceVersionId = randomUUID();
     const projectId = `attention-${randomUUID()}`;
+    const slug = `attention-entry-${familyId}`;
+    const skillSpec = skillSpecSchema.parse({
+      inputSchema: { type: 'object', additionalProperties: false },
+      outputSchema: { type: 'object', additionalProperties: false },
+      tools: [],
+      permissions: [],
+      contextRequirements: [],
+      successCriteria: ['Return a schema-valid synthetic Attention fixture result.'],
+    });
+    const manifest = canonicalManifest({
+      apiVersion: 'paul-os/v1',
+      kind: 'Skill',
+      metadata: {
+        id: familyId,
+        slug,
+        version: '1.0.0',
+        name: 'Attention fixture entrypoint',
+        owner: actorId,
+        purpose: 'Provide an exact entrypoint for Attention integration runs.',
+        lifecycle: 'candidate',
+        provenance: { source: 'attention-service.integration.test' },
+      },
+      dependencies: [],
+      spec: skillSpec,
+    });
     const release = await prisma.$transaction(async (transaction) => {
       await transaction.resourceFamily.create({
         data: {
@@ -63,7 +105,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
           workspaceId: LOCAL_WORKSPACE_ID,
           departmentId,
           kind: ResourceKind.SKILL,
-          slug: `attention-entry-${familyId}`,
+          slug,
           name: 'Attention fixture entrypoint',
           createdBy: actorId,
           updatedBy: actorId,
@@ -77,10 +119,10 @@ describeDatabase('Quiet Console Attention ledger', () => {
           lifecycle: ResourceLifecycle.CANDIDATE,
           owner: actorId,
           purpose: 'Provide an exact entrypoint for Attention integration runs.',
-          definition: {},
-          digest: digest(`entry-${entryResourceVersionId}`),
+          definition: manifest.definition,
+          digest: manifest.digest,
           sourceCommit: 'a'.repeat(40),
-          provenance: {},
+          provenance: manifest.definition.metadata.provenance,
           dependencyPins: [],
           frozenAt: new Date(),
           createdBy: actorId,
@@ -99,7 +141,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
             create: {
               resourceVersionId: entryResourceVersionId,
               kind: ResourceKind.SKILL,
-              digest: digest(`entry-${entryResourceVersionId}`),
+              digest: manifest.digest,
               ordinal: 1,
             },
           },
@@ -160,15 +202,54 @@ describeDatabase('Quiet Console Attention ledger', () => {
   }
 
   async function createPassingEvaluation(releaseId: string, actorId: string) {
+    const entrypoint = await prisma.releaseResource.findFirstOrThrow({
+      where: { releaseId, kind: ResourceKind.SKILL },
+      include: { resourceVersion: { include: { family: true } } },
+    });
     const familyId = randomUUID();
     const suiteVersionId = randomUUID();
+    const slug = `attention-suite-${familyId}`;
+    const dependency = {
+      familyId: entrypoint.resourceVersion.familyId,
+      version: entrypoint.resourceVersion.version,
+    };
+    const suiteSpec = platformEvaluationSuiteSpecSchema.parse({
+      subject: `${entrypoint.resourceVersion.family.slug}@${entrypoint.resourceVersion.version}`,
+      executorKind: 'deterministic_contract',
+      evaluationMode: 'contract_validation',
+      corpusVersion: 7,
+      cases: [
+        {
+          key: 'attention-contract-shape',
+          fixture: 'synthetic',
+          assertions: ['output_schema_valid', 'no_attempted_actions'],
+        },
+      ],
+      gates: { schemaConformance: 1, citationCoverage: 1, unauthorizedActions: 0 },
+    });
+    const manifest = canonicalManifest({
+      apiVersion: 'paul-os/v1',
+      kind: 'EvaluationSuite',
+      metadata: {
+        id: familyId,
+        slug,
+        version: '1.0.0',
+        name: 'Attention fixture suite',
+        owner: actorId,
+        purpose: 'Provide immutable passing evidence for the Attention integration test.',
+        lifecycle: 'candidate',
+        provenance: { source: 'attention-service.integration.test' },
+      },
+      dependencies: [dependency],
+      spec: jsonObjectSchema.parse(suiteSpec),
+    });
     await prisma.resourceFamily.create({
       data: {
         id: familyId,
         workspaceId: LOCAL_WORKSPACE_ID,
         departmentId: LOCAL_DEPARTMENT_ID,
         kind: ResourceKind.EVALUATION_SUITE,
-        slug: `attention-suite-${familyId}`,
+        slug,
         name: 'Attention fixture suite',
         createdBy: actorId,
         updatedBy: actorId,
@@ -182,14 +263,21 @@ describeDatabase('Quiet Console Attention ledger', () => {
         lifecycle: ResourceLifecycle.CANDIDATE,
         owner: actorId,
         purpose: 'Provide immutable passing evidence for the Attention integration test.',
-        definition: {},
-        digest: digest(`suite-${suiteVersionId}`),
+        definition: manifest.definition,
+        digest: manifest.digest,
         sourceCommit: 'a'.repeat(40),
-        provenance: {},
-        dependencyPins: [],
+        provenance: manifest.definition.metadata.provenance,
+        dependencyPins: manifest.definition.dependencies,
         frozenAt: new Date(),
         createdBy: actorId,
         updatedBy: actorId,
+      },
+    });
+    await prisma.resourceDependencyPin.create({
+      data: {
+        sourceVersionId: suiteVersionId,
+        targetVersionId: entrypoint.resourceVersionId,
+        targetDigest: entrypoint.digest,
       },
     });
     await prisma.releaseResource.create({
@@ -197,7 +285,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
         releaseId,
         resourceVersionId: suiteVersionId,
         kind: ResourceKind.EVALUATION_SUITE,
-        digest: digest(`suite-${suiteVersionId}`),
+        digest: manifest.digest,
         ordinal: 0,
       },
     });
@@ -207,7 +295,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
         releaseDigest: (await prisma.releaseBundle.findUniqueOrThrow({ where: { id: releaseId } }))
           .digest,
         suiteVersionId,
-        suiteDigest: digest(`suite-${suiteVersionId}`),
+        suiteDigest: manifest.digest,
         executorKind: 'deterministic_contract',
         executorVersion: randomUUID(),
         evaluationMode: 'contract_validation',
@@ -279,6 +367,17 @@ describeDatabase('Quiet Console Attention ledger', () => {
       },
     });
     const evaluation = await createPassingEvaluation(release.id, actorId);
+    const registry = await runWithPrincipal(requestPrincipal, () =>
+      new RegistryService(prisma, 'a'.repeat(40)).listResources({ limit: 100 }),
+    );
+    expect(registry.items.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([release.entryResourceVersionId, evaluation.suiteVersionId]),
+    );
+    for (const resource of registry.items.filter(({ id }) =>
+      [release.entryResourceVersionId, evaluation.suiteVersionId].includes(id),
+    )) {
+      expect(() => resourceManifestSchema.parse(resource.definition)).not.toThrow();
+    }
     await runWithPrincipal(requestPrincipal, () =>
       prisma.$transaction((transaction) =>
         appendExecutionRunEvent(transaction, awaiting, {

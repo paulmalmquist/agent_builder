@@ -89,7 +89,7 @@ export function createApp(
       const principal = currentRequestPrincipal();
       logger.error(
         {
-          error,
+          err: error,
           requestId,
           actorId: principal.actorId,
           workspaceId: principal.workspaceId,

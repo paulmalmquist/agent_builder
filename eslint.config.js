@@ -26,6 +26,7 @@ export default tseslint.config(
         projectService: {
           allowDefaultProject: [
             'scripts/*.mjs',
+            'test-support/*.cjs',
             'apps/backend/tests/*.smoke.mjs',
             'apps/workstation-broker/scripts/*.mjs',
             'packages/contracts/test/*.mjs',
@@ -64,6 +65,7 @@ export default tseslint.config(
       'packages/contracts/**/*.ts',
       'packages/runtime/**/*.ts',
       'scripts/**/*.mjs',
+      'test-support/**/*.cjs',
       'apps/workstation-broker/scripts/**/*.mjs',
       'apps/backend/tests/**/*.smoke.mjs',
       'packages/contracts/test/**/*.mjs',

@@ -162,19 +162,10 @@ export function RunsPage() {
   const revoke = useRevokeAuthorityGrant();
   const updateSchedule = useUpdateAutomationScheduleState();
   const [approvalRun, setApprovalRun] = useState<ExecutionRun | null>(null);
-  const runItems = runs.data?.items ?? [];
-  const grantItems = grants.data?.items ?? [];
-  const scheduleItems = schedules.data?.items ?? [];
-  const awaiting = runItems.filter((run) => run.state === 'awaiting_approval');
-  const activeRuns = runItems.filter((run) => run.state === 'queued' || run.state === 'running');
-  const activeGrants = grantItems.filter((grant) => grant.state === 'active');
-  const combinedError =
-    runs.error ??
-    grants.error ??
-    schedules.error ??
-    cancel.error ??
-    revoke.error ??
-    updateSchedule.error;
+  const runItems = runs.isError ? [] : (runs.data?.items ?? []);
+  const grantItems = grants.isError ? [] : (grants.data?.items ?? []);
+  const scheduleItems = schedules.isError ? [] : (schedules.data?.items ?? []);
+  const mutationError = cancel.error ?? revoke.error ?? updateSchedule.error;
 
   return (
     <main className="os-surface">
@@ -186,25 +177,46 @@ export function RunsPage() {
       />
       <InstrumentStrip
         readings={[
-          { label: 'AWAITING APPROVAL', value: awaiting.length },
-          { label: 'ACTIVE RUNS', value: activeRuns.length },
-          { label: 'ACTIVE GRANTS', value: activeGrants.length },
+          {
+            label: 'AWAITING APPROVAL',
+            value:
+              runs.data !== undefined && !runs.isError
+                ? runs.data.countsByState.awaiting_approval
+                : '—',
+          },
+          {
+            label: 'ACTIVE RUNS',
+            value:
+              runs.data !== undefined && !runs.isError
+                ? runs.data.countsByState.queued + runs.data.countsByState.running
+                : '—',
+          },
+          {
+            label: 'ACTIVE GRANTS',
+            value: grants.data !== undefined && !grants.isError ? grants.data.activeTotal : '—',
+          },
           {
             label: 'ACTIVE SCHEDULES',
-            value: scheduleItems.filter((schedule) => schedule.state === 'active').length,
+            value:
+              schedules.data !== undefined && !schedules.isError ? schedules.data.activeTotal : '—',
           },
         ]}
       />
-      {combinedError ? <Notice tone="error">{getErrorMessage(combinedError)}</Notice> : null}
+      {mutationError ? <Notice tone="error">{getErrorMessage(mutationError)}</Notice> : null}
       <div className="runs-layout">
         <section aria-busy={runs.isLoading} className="os-panel">
           <header className="os-panel-heading">
             <h2>Execution ledger</h2>
             <small>NEWEST FIRST · AUTO REFRESH</small>
           </header>
+          {runs.isError ? (
+            <Notice tone="error">
+              Execution ledger unavailable. {getErrorMessage(runs.error)}
+            </Notice>
+          ) : null}
           <div className="run-list">
             {runs.isLoading ? <div className="os-empty-state">Loading durable runs…</div> : null}
-            {!runs.isLoading && runItems.length === 0 ? (
+            {!runs.isLoading && !runs.isError && runItems.length === 0 ? (
               <div className="os-empty-state">
                 <strong>No execution runs yet.</strong>
                 <span>Imported releases appear here after an execution is requested.</span>
@@ -263,11 +275,16 @@ export function RunsPage() {
             <h2>Authority envelopes</h2>
             <small>EXACT RELEASE DIGESTS</small>
           </header>
+          {grants.isError ? (
+            <Notice tone="error">
+              Authority envelopes unavailable. {getErrorMessage(grants.error)}
+            </Notice>
+          ) : null}
           <div className="approval-list">
             {grants.isLoading ? (
               <div className="os-empty-state">Loading authority grants…</div>
             ) : null}
-            {!grants.isLoading && grantItems.length === 0 ? (
+            {!grants.isLoading && !grants.isError && grantItems.length === 0 ? (
               <div className="os-empty-state">
                 <strong>No authority has been granted.</strong>
                 <span>The first production-shaped run must receive a human decision.</span>
@@ -330,11 +347,16 @@ export function RunsPage() {
           <h2>Durable schedules</h2>
           <small>PRODUCTION POINTER · DEDUPLICATED DISPATCH</small>
         </header>
+        {schedules.isError ? (
+          <Notice tone="error">
+            Durable schedules unavailable. {getErrorMessage(schedules.error)}
+          </Notice>
+        ) : null}
         <div className="resource-grid">
           {schedules.isLoading ? (
             <div className="os-empty-state">Loading automation schedules…</div>
           ) : null}
-          {!schedules.isLoading && scheduleItems.length === 0 ? (
+          {!schedules.isLoading && !schedules.isError && scheduleItems.length === 0 ? (
             <div className="os-empty-state">
               <strong>No durable schedules configured.</strong>
               <span>Published automation definitions can create bounded recurring execution.</span>

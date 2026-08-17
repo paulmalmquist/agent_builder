@@ -79,7 +79,7 @@ export class WorkerDaemon {
         const worked = await this.engine.runNext(slotId);
         if (!worked) await delay(this.config.pollMs, this.polling.signal);
       } catch (error: unknown) {
-        this.logger.error({ error, slotId }, 'Worker slot failed outside a claimed run');
+        this.logger.error({ err: error, slotId }, 'Worker slot failed outside a claimed run');
         await delay(this.config.pollMs, this.polling.signal);
       }
     }

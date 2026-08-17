@@ -55,20 +55,31 @@ export function RegistryPage() {
     limit: 100,
   });
   const plugins = usePlugins({ includeDisabled: true, limit: 100 });
-  const items = resources.data?.items ?? [];
-  const pluginItems = plugins.data?.items ?? [];
-  const production = items.filter((resource) => resource.lifecycle === 'production').length;
-  const candidates = items.filter((resource) => resource.lifecycle === 'candidate').length;
+  const items = resources.isError ? [] : (resources.data?.items ?? []);
+  const pluginItems = plugins.isError ? [] : (plugins.data?.items ?? []);
+  const resourceReadingsAvailable = resources.data !== undefined && !resources.isError;
+  const pluginReadingsAvailable = plugins.data !== undefined && !plugins.isError;
   const readings = [
-    { label: 'VERSIONED RESOURCES', value: items.length },
-    { label: 'PRODUCTION', value: production },
     {
-      label: 'PLUGINS READY',
-      value: pluginItems.filter((plugin) => plugin.healthStatus === 'healthy').length,
+      label: 'VERSIONED RESOURCES',
+      value: resourceReadingsAvailable ? resources.data.total : '—',
     },
     {
-      label: 'NEEDS REVIEW',
-      value: pluginItems.filter((plugin) => plugin.healthStatus === 'degraded').length + candidates,
+      label: 'PRODUCTION',
+      value: resourceReadingsAvailable ? resources.data.countsByLifecycle.production : '—',
+    },
+    {
+      label: 'PLUGINS READY SHOWN',
+      value: pluginReadingsAvailable
+        ? pluginItems.filter((plugin) => plugin.healthStatus === 'healthy').length
+        : '—',
+    },
+    {
+      label: 'REVIEW · ALL RESOURCES / SHOWN PLUGINS',
+      value:
+        resourceReadingsAvailable && pluginReadingsAvailable
+          ? `${resources.data.countsByLifecycle.candidate} / ${pluginItems.filter((plugin) => plugin.healthStatus === 'degraded').length}`
+          : '—',
     },
   ];
 
@@ -121,7 +132,7 @@ export function RegistryPage() {
             Reading governed Plugins…
           </div>
         ) : null}
-        {!plugins.isLoading && pluginItems.length === 0 ? (
+        {!plugins.isLoading && !plugins.isError && pluginItems.length === 0 ? (
           <div className="os-empty-state">
             <strong>No Plugin definitions are available.</strong>
             <span>Import a certified Plugin manifest to expose its typed tools here.</span>
@@ -176,7 +187,7 @@ export function RegistryPage() {
             Reading the definition registry…
           </div>
         ) : null}
-        {!resources.isLoading && items.length === 0 ? (
+        {!resources.isLoading && !resources.isError && items.length === 0 ? (
           <div className="os-empty-state">
             <strong>No imported definitions match.</strong>
             <span>Compile and import a manifest, or clear the current filters.</span>

@@ -298,22 +298,37 @@ export class AutomationLearningService {
     state?: 'active' | 'paused' | undefined;
     limit: number;
   }): Promise<z.infer<typeof automationScheduleListResponseSchema>> {
-    const records = await this.prisma.automationSchedule.findMany({
-      where: {
-        ...aggregateScopeWhere(),
-        ...(query.state === undefined
-          ? {}
-          : {
-              state:
-                query.state === 'active'
-                  ? AutomationScheduleState.ACTIVE
-                  : AutomationScheduleState.PAUSED,
-            }),
-      },
-      orderBy: { nextRunAt: 'asc' },
-      take: query.limit,
+    const scopeWhere = aggregateScopeWhere();
+    const [records, stateTotals] = await Promise.all([
+      this.prisma.automationSchedule.findMany({
+        where: {
+          ...scopeWhere,
+          ...(query.state === undefined
+            ? {}
+            : {
+                state:
+                  query.state === 'active'
+                    ? AutomationScheduleState.ACTIVE
+                    : AutomationScheduleState.PAUSED,
+              }),
+        },
+        orderBy: { nextRunAt: 'asc' },
+        take: query.limit,
+      }),
+      this.prisma.automationSchedule.groupBy({
+        by: ['state'],
+        where: scopeWhere,
+        _count: { _all: true },
+      }),
+    ]);
+    const total = stateTotals.reduce((sum, group) => sum + group._count._all, 0);
+    const activeTotal =
+      stateTotals.find((group) => group.state === AutomationScheduleState.ACTIVE)?._count._all ?? 0;
+    return automationScheduleListResponseSchema.parse({
+      items: records.map(toSchedule),
+      total,
+      activeTotal,
     });
-    return automationScheduleListResponseSchema.parse({ items: records.map(toSchedule) });
   }
 
   async getSchedule(scheduleId: string): Promise<AutomationSchedule> {
