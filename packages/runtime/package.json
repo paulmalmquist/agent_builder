@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./aim": {
+      "types": "./dist/aim/index.d.ts",
+      "import": "./dist/aim/index.js"
     }
   },
   "bin": {
@@ -17,6 +21,7 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false",
+    "test": "node --test test/*.test.mjs",
     "clean": "tsc -b --clean"
   },
   "dependencies": {

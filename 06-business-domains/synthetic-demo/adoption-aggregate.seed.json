@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "adoption.aggregate/v1",
+  "id": "d3000000-0000-4000-8000-000000000001",
+  "workspaceId": "d3000000-0000-4000-8000-000000000002",
+  "departmentId": "d3000000-0000-4000-8000-000000000003",
+  "periodStartedAt": "2026-08-10T00:00:00.000Z",
+  "periodEndedAt": "2026-08-17T00:00:00.000Z",
+  "generatedAt": "2026-08-17T00:05:00.000Z",
+  "aggregation": "department",
+  "containsIndividualRankings": false,
+  "metrics": {
+    "weeklyActiveUsers": 24,
+    "referredChoiceAcceptanceRate": 0.72,
+    "timeToFirstApprovedRunP50Minutes": 11,
+    "zeroEscalationRate": 0.91,
+    "costUsd": 38.42
+  }
+}

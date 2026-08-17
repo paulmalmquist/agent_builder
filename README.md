@@ -13,8 +13,10 @@ apps/frontend       React, Vite, TanStack Query, MSW
 apps/backend        Express, Prisma, PostgreSQL, BigQuery connector boundary
 apps/worker         Durable PostgreSQL lease/heartbeat execution worker
 apps/generator-cli  Deterministic subprocess generator
+apps/workstation-broker  Thin .NET 10 Windows proposal broker and companion
 packages/contracts  Zod wire contracts, state machines, generated OpenAPI
 packages/runtime    Manifest compiler, profile validation, model-provider boundary
+ops                 Helm/kind demo and validate-only GKE Terraform reference
 
 00-core ... 12-agents  Git-authored manifests, guidance, fixtures, and contract tests
 ```
@@ -80,10 +82,18 @@ window, run count, and cost ceilings. Revoked, expired, exhausted, or scope-mism
 closed. The deterministic provider is the default and is used in CI. Direct model access is opt-in,
 credential-gated, and rejected when `PROVIDER_POLICY=gateway_only`.
 
-The console preserves the matte-black and purple instrument design across five surfaces: Build,
-Registry, Runs & Approvals, Evidence, and Incubator. Existing builder, library, and certification
-routes remain available during the compatibility period described in
-`docs/adr/0009-legacy-api-sunset.md`.
+The console preserves the matte-black and purple instrument design. `/` is the keyboard-first
+Attention queue, `/build` is the reuse-first Builder, and Registry, Runs, Evidence, Incubator,
+Library, and Certification remain direct routes. The optional, offline AIM capability visualization
+is available at `/aim` when `VITE_AIM_ENABLED=true`. Legacy endpoints remain available only during
+the compatibility period described in `docs/adr/0009-legacy-api-sunset.md`.
+
+Phase 2 also includes strict Plugin manifests and control-plane HTTP execution, entrypoint-scoped
+authority, promotion-backed referred choices, workspace/department scoping, fixture OIDC, and a
+representative forced-RLS slice. The proposal-ready workstation and portable deployment artifacts
+are intentionally not an enterprise rollout: see `apps/workstation-broker/README.md`,
+`docs/deployment/CONTROL_PLANE_REFERENCE.md`, and
+`docs/deployment/ENTERPRISE_ACTIVATION_CHECKLIST.md` for the exact activation boundary.
 
 Critical screen copy has one shared TypeScript source that the Attention UI imports. Its governed
 Reference projection is regenerated with `npm run generate:console-copy`; every pull request runs

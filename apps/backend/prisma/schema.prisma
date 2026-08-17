@@ -229,11 +229,11 @@ enum PluginHealthStatus {
 }
 
 enum PluginInvocationState {
-  QUEUED    @map("queued")
-  RUNNING   @map("running")
-  SUCCEEDED @map("succeeded")
-  FAILED    @map("failed")
-  CANCELLED @map("cancelled")
+  QUEUED        @map("queued")
+  RUNNING       @map("running")
+  SUCCEEDED     @map("succeeded")
+  FAILED        @map("failed")
+  CANCELLED     @map("cancelled")
   PAUSED_PLUGIN @map("paused_plugin")
 }
 
@@ -398,6 +398,34 @@ enum DeploymentStatus {
   FAILED  @map("failed")
 }
 
+enum PrincipalKind {
+  HUMAN   @map("human")
+  SERVICE @map("service")
+}
+
+enum PlatformRole {
+  CONSUMER @map("consumer")
+  BUILDER  @map("builder")
+  OWNER    @map("owner")
+  ADMIN    @map("admin")
+}
+
+enum ExternalIdentityProvider {
+  LOCAL        @map("local")
+  FIXTURE_OIDC @map("fixture_oidc")
+  OIDC         @map("oidc")
+}
+
+enum ServicePrincipalState {
+  ACTIVE   @map("active")
+  DISABLED @map("disabled")
+}
+
+enum ProjectInstanceState {
+  ACTIVE   @map("active")
+  ARCHIVED @map("archived")
+}
+
 model Workspace {
   id        String   @id @db.Uuid
   slug      String   @unique @db.VarChar(120)
@@ -439,8 +467,13 @@ model Workspace {
   builderDecisions        BuilderDecision[]
   builderDrafts           BuilderDraft[]
   deployments             Deployment[]
-  configurationRevisions ConfigurationRevision[]
+  configurationRevisions  ConfigurationRevision[]
   resourceLineages        ResourceLineage[]
+  principals              Principal[]
+  externalIdentities      ExternalIdentity[]
+  roleBindings            RoleBinding[]
+  servicePrincipals       ServicePrincipal[]
+  projectInstances        ProjectInstance[]
 }
 
 model Department {
@@ -485,19 +518,129 @@ model Department {
   builderDecisions        BuilderDecision[]
   builderDrafts           BuilderDraft[]
   deployments             Deployment[]
-  configurationRevisions ConfigurationRevision[]
+  configurationRevisions  ConfigurationRevision[]
   resourceLineages        ResourceLineage[]
+  roleBindings            RoleBinding[]
+  projectInstances        ProjectInstance[]
+  principals              Principal[]
 
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
   @@index([workspaceId, name])
 }
 
+/// A workspace-owned actor. Human and service identities share one authorization subject.
+model Principal {
+  id               String        @id @default(uuid()) @db.Uuid
+  workspaceId      String        @db.Uuid
+  homeDepartmentId String?       @db.Uuid
+  actorId          String        @db.VarChar(200)
+  kind             PrincipalKind
+  displayName      String        @db.VarChar(200)
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  homeDepartment     Department?        @relation(fields: [homeDepartmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  externalIdentities ExternalIdentity[]
+  roleBindings       RoleBinding[]
+  servicePrincipal   ServicePrincipal?
+
+  @@unique([workspaceId, actorId])
+  @@unique([id, workspaceId])
+  @@index([workspaceId, active, kind])
+  @@index([workspaceId, homeDepartmentId, active])
+}
+
+/// Verified issuer/subject mappings. Tokens and claims are never persisted here.
+model ExternalIdentity {
+  id          String                   @id @default(uuid()) @db.Uuid
+  workspaceId String                   @db.Uuid
+  principalId String                   @db.Uuid
+  provider    ExternalIdentityProvider
+  issuer      String                   @db.VarChar(500)
+  subject     String                   @db.VarChar(500)
+  createdAt   DateTime                 @default(now()) @db.Timestamptz(3)
+  lastSeenAt  DateTime?                @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  principal Principal @relation(fields: [principalId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+
+  @@unique([workspaceId, issuer, subject])
+  @@index([principalId, workspaceId])
+}
+
+/// Role assignment scoped to a workspace, department, or project instance.
+/// scopeKey is canonicalized by the service and closes PostgreSQL nullable-unique gaps.
+model RoleBinding {
+  id                String       @id @default(uuid()) @db.Uuid
+  workspaceId       String       @db.Uuid
+  principalId       String       @db.Uuid
+  departmentId      String?      @db.Uuid
+  projectInstanceId String?      @db.Uuid
+  role              PlatformRole
+  scopeKey          String       @db.VarChar(220)
+  grantedBy         String       @db.VarChar(200)
+  grantedAt         DateTime     @default(now()) @db.Timestamptz(3)
+  revokedAt         DateTime?    @db.Timestamptz(3)
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  principal       Principal        @relation(fields: [principalId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  department      Department?      @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  projectInstance ProjectInstance? @relation(fields: [projectInstanceId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+
+  @@unique([workspaceId, principalId, role, scopeKey])
+  @@index([workspaceId, departmentId, role, revokedAt])
+  @@index([projectInstanceId, role, revokedAt])
+}
+
+/// Thin machine identity metadata. credentialRef is an opaque secret-manager reference.
+model ServicePrincipal {
+  id            String                @id @default(uuid()) @db.Uuid
+  workspaceId   String                @db.Uuid
+  principalId   String                @unique @db.Uuid
+  slug          String                @db.VarChar(120)
+  purpose       String                @db.VarChar(500)
+  credentialRef String?               @db.VarChar(500)
+  state         ServicePrincipalState @default(ACTIVE)
+  createdAt     DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime              @updatedAt @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  principal Principal @relation(fields: [principalId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+
+  @@unique([workspaceId, slug])
+  @@unique([principalId, workspaceId])
+  @@index([workspaceId, state])
+}
+
+/// A project overlay instance. This is the representative FORCE-RLS protected slice.
+model ProjectInstance {
+  id           String               @id @default(uuid()) @db.Uuid
+  workspaceId  String               @db.Uuid
+  departmentId String?              @db.Uuid
+  slug         String               @db.VarChar(120)
+  name         String               @db.VarChar(200)
+  state        ProjectInstanceState @default(ACTIVE)
+  createdBy    String               @db.VarChar(200)
+  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(3)
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department   Department?   @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  roleBindings RoleBinding[]
+
+  @@unique([workspaceId, slug])
+  @@unique([id, workspaceId])
+  @@index([workspaceId, departmentId, state])
+}
+
 model AgentFamily {
   id              String   @id @default(uuid()) @db.Uuid
   workspaceId     String   @db.Uuid
   departmentId    String?  @db.Uuid
-  slug            String   @unique @db.VarChar(160)
+  slug            String   @db.VarChar(160)
   name            String   @db.VarChar(120)
   department      String   @db.VarChar(120)
   owner           String   @db.VarChar(160)
@@ -514,6 +657,7 @@ model AgentFamily {
   certificationRuns  CertificationRun[]
   promotionDecisions PromotionDecision[]
 
+  @@unique([workspaceId, slug])
   @@index([department])
   @@index([workspaceId, departmentId])
 }
@@ -521,7 +665,7 @@ model AgentFamily {
 model Agent {
   id                   String              @id @default(uuid()) @db.Uuid
   familyId             String              @db.Uuid
-  slug                 String              @unique @db.VarChar(160)
+  slug                 String              @db.VarChar(160)
   versionNumber        Int
   predecessorAgentId   String?             @db.Uuid
   derivationMode       AgentDerivationMode @default(NEW)
@@ -568,6 +712,7 @@ model Agent {
   platformResourceVersion ResourceVersion?       @relation("LegacyAgentResource")
 
   @@unique([familyId, versionNumber])
+  @@unique([familyId, slug])
   @@index([familyId, status])
   @@index([status])
   @@index([department])
@@ -604,7 +749,7 @@ model AgentSpec {
 }
 
 model KnowledgeSource {
-  id               String                 @id @db.VarChar(100)
+  id               String                 @db.VarChar(100)
   workspaceId      String                 @db.Uuid
   departmentId     String?                @db.Uuid
   role             SourceRole
@@ -625,21 +770,23 @@ model KnowledgeSource {
   workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   departmentScope  Department?            @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@id([workspaceId, id])
   @@index([role])
   @@index([provider])
   @@index([workspaceId, departmentId])
 }
 
 model AgentKnowledgeSource {
-  agentId   String          @db.Uuid
-  sourceId  String          @db.VarChar(100)
-  purpose   String          @db.VarChar(500)
-  citations Boolean
-  agent     Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  source    KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  agentId     String          @db.Uuid
+  workspaceId String          @db.Uuid
+  sourceId    String          @db.VarChar(100)
+  purpose     String          @db.VarChar(500)
+  citations   Boolean
+  agent       Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  source      KnowledgeSource @relation(fields: [workspaceId, sourceId], references: [workspaceId, id], onDelete: Restrict)
 
-  @@id([agentId, sourceId])
-  @@index([sourceId])
+  @@id([agentId, workspaceId, sourceId])
+  @@index([workspaceId, sourceId])
 }
 
 model Guardrail {
@@ -699,7 +846,7 @@ model CertificationGateConfig {
   id                      String                       @id @default(uuid()) @db.Uuid
   workspaceId             String                       @db.Uuid
   departmentId            String?                      @db.Uuid
-  version                 Int                          @unique
+  version                 Int
   state                   CertificationGateConfigState @default(ACTIVE)
   promotionFreshnessHours Int                          @default(24)
   gates                   Json
@@ -713,6 +860,7 @@ model CertificationGateConfig {
   workspace               Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department              Department?                  @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, version])
   @@index([state, version])
   @@index([workspaceId, departmentId])
 }
@@ -721,7 +869,7 @@ model EvalCase {
   id                    String           @id @default(uuid()) @db.Uuid
   workspaceId           String           @db.Uuid
   departmentId          String?          @db.Uuid
-  key                   String           @unique @db.VarChar(160)
+  key                   String           @db.VarChar(160)
   name                  String           @db.VarChar(200)
   input                 Json
   expectedOutput        Json
@@ -742,6 +890,7 @@ model EvalCase {
   workspace             Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department            Department?      @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, key])
   @@index([active, source])
   @@index([tags], type: Gin)
   @@index([workspaceId, departmentId])
@@ -751,7 +900,7 @@ model EvalCorpusVersion {
   id                String             @id @default(uuid()) @db.Uuid
   workspaceId       String             @db.Uuid
   departmentId      String?            @db.Uuid
-  version           Int                @unique
+  version           Int
   contentHash       String             @unique @db.VarChar(128)
   publishedBy       String             @db.VarChar(200)
   rationale         String             @db.Text
@@ -761,6 +910,7 @@ model EvalCorpusVersion {
   workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department        Department?        @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, version])
   @@index([workspaceId, departmentId])
 }
 
@@ -819,7 +969,7 @@ model CertificationRun {
   startedAt                   DateTime?                        @db.Timestamptz(3)
   finishedAt                  DateTime?                        @db.Timestamptz(3)
   promotionExpiresAt          DateTime?                        @db.Timestamptz(3)
-  nightlyScheduleKey          String?                          @unique @db.VarChar(160)
+  nightlyScheduleKey          String?                          @db.VarChar(160)
   isPromotionEvidence         Boolean                          @default(false)
   resultsAvailability         CertificationResultsAvailability @default(FULL)
   caseResultsPrunedAt         DateTime?                        @db.Timestamptz(3)
@@ -834,6 +984,7 @@ model CertificationRun {
   subjectResourceVersion      ResourceVersion?                 @relation("CertificationResourceSubject", fields: [subjectResourceVersionId], references: [id], onDelete: Restrict)
   comparisonResourceVersion   ResourceVersion?                 @relation("CertificationResourceComparison", fields: [comparisonResourceVersionId], references: [id], onDelete: Restrict)
 
+  @@unique([familyId, nightlyScheduleKey])
   @@index([agentVersionId, requestedAt])
   @@index([familyId, requestedAt])
   @@index([state, requestedAt])
@@ -994,7 +1145,7 @@ model ResourceFamily {
   workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department   Department?       @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
-  @@unique([kind, slug])
+  @@unique([workspaceId, kind, slug])
   @@index([kind, name])
   @@index([workspaceId, departmentId])
 }
@@ -1033,12 +1184,12 @@ model ResourceVersion {
   automationEntrypoints       AutomationSchedule[]    @relation("AutomationScheduleEntrypoint")
   pluginRequirements          RunPluginRequirement[]
   pluginInvocations           PluginInvocation[]
-  capabilityProfile          CapabilityProfile?
+  capabilityProfile           CapabilityProfile?
   catalogPublications         CatalogPublication[]
   deployedInstances           Deployment[]
-  materializedDrafts          BuilderDraft[]        @relation("BuilderDraftMaterializedResource")
-  childLineage                ResourceLineage[]      @relation("ResourceLineageChild")
-  parentLineage               ResourceLineage[]      @relation("ResourceLineageParent")
+  materializedDrafts          BuilderDraft[]          @relation("BuilderDraftMaterializedResource")
+  childLineage                ResourceLineage[]       @relation("ResourceLineageChild")
+  parentLineage               ResourceLineage[]       @relation("ResourceLineageParent")
 
   @@unique([familyId, version])
   @@index([familyId, lifecycle])
@@ -1144,10 +1295,10 @@ model ReleaseEvaluation {
 }
 
 model ProductionChannel {
-  key                 String                     @id @db.VarChar(160)
+  key                 String                     @db.VarChar(160)
   workspaceId         String                     @db.Uuid
   departmentId        String?                    @db.Uuid
-  projectId           String?                    @unique @db.VarChar(160)
+  projectId           String?                    @db.VarChar(160)
   currentReleaseId    String?                    @db.Uuid
   priorReleaseId      String?                    @db.Uuid
   promotedBy          String?                    @db.VarChar(200)
@@ -1160,26 +1311,29 @@ model ProductionChannel {
   workspace           Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department          Department?                @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@id([workspaceId, key])
+  @@unique([workspaceId, projectId])
   @@index([workspaceId, departmentId])
 }
 
 model ReleasePromotionDecision {
-  id                String                 @id @default(uuid()) @db.Uuid
-  channelKey        String                 @db.VarChar(160)
-  action            ReleasePromotionAction
-  releaseId         String                 @db.Uuid
-  previousReleaseId String?                @db.Uuid
-  evaluationId      String                 @db.Uuid
-  rationale         String                 @db.Text
-  decidedBy         String                 @db.VarChar(200)
-  decidedAt         DateTime               @default(now()) @db.Timestamptz(3)
-  channel           ProductionChannel      @relation(fields: [channelKey], references: [key], onDelete: Restrict)
-  release           ReleaseBundle          @relation("ReleasePromotionTarget", fields: [releaseId], references: [id], onDelete: Restrict)
-  previousRelease   ReleaseBundle?         @relation("ReleasePromotionPrevious", fields: [previousReleaseId], references: [id], onDelete: Restrict)
-  evaluation        ReleaseEvaluation      @relation(fields: [evaluationId], references: [id], onDelete: Restrict)
+  id                  String                 @id @default(uuid()) @db.Uuid
+  workspaceId         String                 @db.Uuid
+  channelKey          String                 @db.VarChar(160)
+  action              ReleasePromotionAction
+  releaseId           String                 @db.Uuid
+  previousReleaseId   String?                @db.Uuid
+  evaluationId        String                 @db.Uuid
+  rationale           String                 @db.Text
+  decidedBy           String                 @db.VarChar(200)
+  decidedAt           DateTime               @default(now()) @db.Timestamptz(3)
+  channel             ProductionChannel      @relation(fields: [workspaceId, channelKey], references: [workspaceId, key], onDelete: Restrict)
+  release             ReleaseBundle          @relation("ReleasePromotionTarget", fields: [releaseId], references: [id], onDelete: Restrict)
+  previousRelease     ReleaseBundle?         @relation("ReleasePromotionPrevious", fields: [previousReleaseId], references: [id], onDelete: Restrict)
+  evaluation          ReleaseEvaluation      @relation(fields: [evaluationId], references: [id], onDelete: Restrict)
   catalogPublications CatalogPublication[]
 
-  @@index([channelKey, decidedAt])
+  @@index([workspaceId, channelKey, decidedAt])
   @@index([releaseId, decidedAt])
 }
 
@@ -1200,7 +1354,7 @@ model ReleaseDeclineDecision {
   department   Department?       @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
   @@index([workspaceId, departmentId, decidedAt])
-  @@index([channelKey, decidedAt])
+  @@index([workspaceId, channelKey, decidedAt])
   @@index([releaseId, decidedAt])
 }
 
@@ -1245,70 +1399,71 @@ model AuthorityGrant {
 }
 
 model ExecutionRun {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  workspaceId            String                  @db.Uuid
-  departmentId           String?                 @db.Uuid
-  releaseId              String                  @db.Uuid
-  entryResourceVersionId String?                 @db.Uuid
-  legacyEntrypointUnresolved Boolean             @default(false)
-  authorityGrantId       String?                 @db.Uuid
-  digestSnapshotId       String?                 @db.Uuid
-  releaseDigest          String                  @db.VarChar(64)
-  contextDigest          String                  @db.VarChar(64)
-  contextProvenance      Json                    @default("[]")
-  contextClassification  ContextClassification   @default(PUBLIC)
-  contextEstimatedTokens Int                     @default(0)
-  projectId              String?                 @db.VarChar(160)
-  requiredToolScopes     Json                    @default("[]")
-  requiredPluginScopes   Json                    @default("[]")
-  requiresPluginApproval Boolean                 @default(false)
-  state                  ExecutionRunState       @default(AWAITING_APPROVAL)
-  input                  Json
-  providerKind           ModelProviderKind
-  developmentDraft       Boolean                 @default(false)
-  providerVersion        String                  @db.VarChar(80)
-  model                  String                  @db.VarChar(160)
-  maxInputTokens         Int
-  maxOutputTokens        Int
-  maxEstimatedCostUsd    Decimal                 @db.Decimal(18, 8)
-  estimatedUpperCostUsd  Decimal                 @db.Decimal(18, 8)
-  actualCostUsd          Decimal?                @db.Decimal(18, 8)
-  pricingVersion         String                  @db.VarChar(80)
-  approvalReasons        Json                    @default("[]")
-  progress               Int                     @default(0)
-  message                String                  @default("Awaiting approval") @db.VarChar(500)
-  idempotencyKey         String                  @unique @db.VarChar(200)
-  requestedBy            String                  @db.VarChar(200)
-  attempts               Int                     @default(0)
-  maxAttempts            Int                     @default(3)
-  leaseOwner             String?                 @db.VarChar(200)
-  leaseExpiresAt         DateTime?               @db.Timestamptz(3)
-  heartbeatAt            DateTime?               @db.Timestamptz(3)
-  cancelRequestedAt      DateTime?               @db.Timestamptz(3)
-  error                  Json?
-  startedAt              DateTime?               @db.Timestamptz(3)
-  finishedAt             DateTime?               @db.Timestamptz(3)
-  createdAt              DateTime                @default(now()) @db.Timestamptz(3)
-  updatedAt              DateTime                @updatedAt @db.Timestamptz(3)
-  release                ReleaseBundle           @relation(fields: [releaseId], references: [id], onDelete: Restrict)
-  entryResourceVersion   ResourceVersion?        @relation("ExecutionRunEntrypoint", fields: [entryResourceVersionId], references: [id], onDelete: Restrict)
-  authorityGrant         AuthorityGrant?         @relation(fields: [authorityGrantId], references: [id], onDelete: Restrict)
-  outcome                OutcomeRecord?
-  metrics                MetricSample[]
-  steps                  RunStep[]
-  approvalRequest        ApprovalRequest?
-  automationDispatch     AutomationDispatch?
-  observations           Observation[]
-  memoryCandidates       MemoryCandidate[]
-  events                 ExecutionRunEvent[]
-  digestDeliveryAttempts DigestDeliveryAttempt[]
-  digestSnapshot         DigestSnapshot?         @relation("BriefingDigestSnapshot", fields: [digestSnapshotId], references: [id], onDelete: Restrict)
-  pluginRequirements     RunPluginRequirement[]
-  pluginCallPlans        RunPluginCallPlan[]
-  pluginInvocations      PluginInvocation[]
-  workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department             Department?             @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  id                         String                  @id @default(uuid()) @db.Uuid
+  workspaceId                String                  @db.Uuid
+  departmentId               String?                 @db.Uuid
+  releaseId                  String                  @db.Uuid
+  entryResourceVersionId     String?                 @db.Uuid
+  legacyEntrypointUnresolved Boolean                 @default(false)
+  authorityGrantId           String?                 @db.Uuid
+  digestSnapshotId           String?                 @db.Uuid
+  releaseDigest              String                  @db.VarChar(64)
+  contextDigest              String                  @db.VarChar(64)
+  contextProvenance          Json                    @default("[]")
+  contextClassification      ContextClassification   @default(PUBLIC)
+  contextEstimatedTokens     Int                     @default(0)
+  projectId                  String?                 @db.VarChar(160)
+  requiredToolScopes         Json                    @default("[]")
+  requiredPluginScopes       Json                    @default("[]")
+  requiresPluginApproval     Boolean                 @default(false)
+  state                      ExecutionRunState       @default(AWAITING_APPROVAL)
+  input                      Json
+  providerKind               ModelProviderKind
+  developmentDraft           Boolean                 @default(false)
+  providerVersion            String                  @db.VarChar(80)
+  model                      String                  @db.VarChar(160)
+  maxInputTokens             Int
+  maxOutputTokens            Int
+  maxEstimatedCostUsd        Decimal                 @db.Decimal(18, 8)
+  estimatedUpperCostUsd      Decimal                 @db.Decimal(18, 8)
+  actualCostUsd              Decimal?                @db.Decimal(18, 8)
+  pricingVersion             String                  @db.VarChar(80)
+  approvalReasons            Json                    @default("[]")
+  progress                   Int                     @default(0)
+  message                    String                  @default("Awaiting approval") @db.VarChar(500)
+  idempotencyKey             String                  @db.VarChar(200)
+  requestedBy                String                  @db.VarChar(200)
+  attempts                   Int                     @default(0)
+  maxAttempts                Int                     @default(3)
+  leaseOwner                 String?                 @db.VarChar(200)
+  leaseExpiresAt             DateTime?               @db.Timestamptz(3)
+  heartbeatAt                DateTime?               @db.Timestamptz(3)
+  cancelRequestedAt          DateTime?               @db.Timestamptz(3)
+  error                      Json?
+  startedAt                  DateTime?               @db.Timestamptz(3)
+  finishedAt                 DateTime?               @db.Timestamptz(3)
+  createdAt                  DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime                @updatedAt @db.Timestamptz(3)
+  release                    ReleaseBundle           @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  entryResourceVersion       ResourceVersion?        @relation("ExecutionRunEntrypoint", fields: [entryResourceVersionId], references: [id], onDelete: Restrict)
+  authorityGrant             AuthorityGrant?         @relation(fields: [authorityGrantId], references: [id], onDelete: Restrict)
+  outcome                    OutcomeRecord?
+  metrics                    MetricSample[]
+  steps                      RunStep[]
+  approvalRequest            ApprovalRequest?
+  automationDispatch         AutomationDispatch?
+  observations               Observation[]
+  memoryCandidates           MemoryCandidate[]
+  events                     ExecutionRunEvent[]
+  digestDeliveryAttempts     DigestDeliveryAttempt[]
+  digestSnapshot             DigestSnapshot?         @relation("BriefingDigestSnapshot", fields: [digestSnapshotId], references: [id], onDelete: Restrict)
+  pluginRequirements         RunPluginRequirement[]
+  pluginCallPlans            RunPluginCallPlan[]
+  pluginInvocations          PluginInvocation[]
+  workspace                  Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department                 Department?             @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, idempotencyKey])
   @@index([state, createdAt])
   @@index([leaseExpiresAt])
   @@index([authorityGrantId, createdAt])
@@ -1359,7 +1514,7 @@ model RunStep {
   id             String       @id @default(uuid()) @db.Uuid
   runId          String       @db.Uuid
   stepKey        String       @db.VarChar(160)
-  idempotencyKey String       @unique @db.VarChar(240)
+  idempotencyKey String       @db.VarChar(240)
   state          String       @db.VarChar(40)
   result         Json?
   createdAt      DateTime     @default(now()) @db.Timestamptz(3)
@@ -1367,6 +1522,7 @@ model RunStep {
   run            ExecutionRun @relation(fields: [runId], references: [id], onDelete: Restrict)
 
   @@unique([runId, stepKey])
+  @@unique([runId, idempotencyKey])
   @@index([runId, state])
 }
 
@@ -1434,7 +1590,7 @@ model AutomationSchedule {
   updatedBy                  String                  @db.VarChar(200)
   createdAt                  DateTime                @default(now()) @db.Timestamptz(3)
   updatedAt                  DateTime                @updatedAt @db.Timestamptz(3)
-  channel                    ProductionChannel       @relation(fields: [channelKey], references: [key], onDelete: Restrict)
+  channel                    ProductionChannel       @relation(fields: [workspaceId, channelKey], references: [workspaceId, key], onDelete: Restrict)
   release                    ReleaseBundle           @relation(fields: [releaseId], references: [id], onDelete: Restrict)
   entryResourceVersion       ResourceVersion         @relation("AutomationScheduleEntrypoint", fields: [entryResourceVersionId], references: [id], onDelete: Restrict)
   authorityGrant             AuthorityGrant?         @relation(fields: [authorityGrantId], references: [id], onDelete: Restrict)
@@ -1443,7 +1599,7 @@ model AutomationSchedule {
   department                 Department?             @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
   @@index([state, nextRunAt])
-  @@index([channelKey, state])
+  @@index([workspaceId, channelKey, state])
   @@index([authorityGrantId])
   @@index([entryResourceVersionId])
   @@index([workspaceId, departmentId])
@@ -1516,37 +1672,37 @@ model PluginHealthCheck {
 
 /// Append-only invocation metadata. Inputs and outputs are represented only by digests.
 model PluginInvocation {
-  id              String                @id @default(uuid()) @db.Uuid
-  invocationKey   String                @db.VarChar(200)
-  sequence        Int                   @default(1)
-  workspaceId     String                @db.Uuid
-  departmentId    String?               @db.Uuid
-  installationId  String                @db.Uuid
-  runId           String?               @db.Uuid
-  planId          String?               @db.Uuid
-  legacyPlanUnresolved Boolean          @default(false)
-  pluginVersionId String                @db.Uuid
-  pluginDigest    String                @db.VarChar(64)
-  toolName        String                @db.VarChar(160)
-  effect          PluginEffect
-  state           PluginInvocationState
-  requestDigest   String                @db.VarChar(64)
-  responseDigest  String?               @db.VarChar(64)
-  errorCode       String?               @db.VarChar(160)
-  summary         String?               @db.VarChar(500)
-  latencyMs       Int?
-  costUsd         Decimal?              @db.Decimal(18, 8)
-  startedAt       DateTime?             @db.Timestamptz(3)
-  finishedAt      DateTime?             @db.Timestamptz(3)
-  createdAt       DateTime              @default(now()) @db.Timestamptz(3)
-  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department      Department?           @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
-  installation    PluginInstallation    @relation(fields: [installationId], references: [id], onDelete: Restrict)
-  run             ExecutionRun?         @relation(fields: [runId], references: [id], onDelete: Restrict)
-  plan            RunPluginCallPlan?    @relation(fields: [planId], references: [id], onDelete: Restrict)
-  pluginVersion   ResourceVersion       @relation(fields: [pluginVersionId], references: [id], onDelete: Restrict)
+  id                   String                @id @default(uuid()) @db.Uuid
+  invocationKey        String                @db.VarChar(200)
+  sequence             Int                   @default(1)
+  workspaceId          String                @db.Uuid
+  departmentId         String?               @db.Uuid
+  installationId       String                @db.Uuid
+  runId                String?               @db.Uuid
+  planId               String?               @db.Uuid
+  legacyPlanUnresolved Boolean               @default(false)
+  pluginVersionId      String                @db.Uuid
+  pluginDigest         String                @db.VarChar(64)
+  toolName             String                @db.VarChar(160)
+  effect               PluginEffect
+  state                PluginInvocationState
+  requestDigest        String                @db.VarChar(64)
+  responseDigest       String?               @db.VarChar(64)
+  errorCode            String?               @db.VarChar(160)
+  summary              String?               @db.VarChar(500)
+  latencyMs            Int?
+  costUsd              Decimal?              @db.Decimal(18, 8)
+  startedAt            DateTime?             @db.Timestamptz(3)
+  finishedAt           DateTime?             @db.Timestamptz(3)
+  createdAt            DateTime              @default(now()) @db.Timestamptz(3)
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department           Department?           @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  installation         PluginInstallation    @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  run                  ExecutionRun?         @relation(fields: [runId], references: [id], onDelete: Restrict)
+  plan                 RunPluginCallPlan?    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  pluginVersion        ResourceVersion       @relation(fields: [pluginVersionId], references: [id], onDelete: Restrict)
 
-  @@unique([invocationKey, sequence])
+  @@unique([workspaceId, invocationKey, sequence])
   @@unique([planId, sequence])
   @@index([workspaceId, departmentId, createdAt])
   @@index([installationId, createdAt])
@@ -1554,21 +1710,21 @@ model PluginInvocation {
 }
 
 model RunPluginRequirement {
-  id              String             @id @default(uuid()) @db.Uuid
-  runId           String             @db.Uuid
-  installationId  String             @db.Uuid
-  pluginVersionId String             @db.Uuid
-  pluginDigest    String             @db.VarChar(64)
-  capabilityName  String             @db.VarChar(160)
-  effect          PluginEffect
-  approvalRequired Boolean            @default(false)
-  authorityScope  Json
-  contextDigest   String             @db.VarChar(64)
-  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
-  run             ExecutionRun       @relation(fields: [runId], references: [id], onDelete: Restrict)
-  installation    PluginInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
-  pluginVersion   ResourceVersion    @relation(fields: [pluginVersionId], references: [id], onDelete: Restrict)
-  callPlans       RunPluginCallPlan[]
+  id               String              @id @default(uuid()) @db.Uuid
+  runId            String              @db.Uuid
+  installationId   String              @db.Uuid
+  pluginVersionId  String              @db.Uuid
+  pluginDigest     String              @db.VarChar(64)
+  capabilityName   String              @db.VarChar(160)
+  effect           PluginEffect
+  approvalRequired Boolean             @default(false)
+  authorityScope   Json
+  contextDigest    String              @db.VarChar(64)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  run              ExecutionRun        @relation(fields: [runId], references: [id], onDelete: Restrict)
+  installation     PluginInstallation  @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  pluginVersion    ResourceVersion     @relation(fields: [pluginVersionId], references: [id], onDelete: Restrict)
+  callPlans        RunPluginCallPlan[]
 
   @@unique([runId, installationId, pluginVersionId, capabilityName])
   @@index([installationId, runId])
@@ -1582,18 +1738,19 @@ model RunPluginCallPlan {
   departmentId     String?              @db.Uuid
   runId            String               @db.Uuid
   requirementId    String               @db.Uuid
-  ordinal           Int
-  invocationKey    String               @unique @db.VarChar(200)
-  inputPath         Json
+  ordinal          Int
+  invocationKey    String               @db.VarChar(200)
+  inputPath        Json
   outputContextKey String               @db.VarChar(80)
-  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
-  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department        Department?          @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
-  run               ExecutionRun         @relation(fields: [runId], references: [id], onDelete: Restrict)
-  requirement       RunPluginRequirement @relation(fields: [requirementId], references: [id], onDelete: Restrict)
-  invocations       PluginInvocation[]
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  workspace        Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department       Department?          @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  run              ExecutionRun         @relation(fields: [runId], references: [id], onDelete: Restrict)
+  requirement      RunPluginRequirement @relation(fields: [requirementId], references: [id], onDelete: Restrict)
+  invocations      PluginInvocation[]
 
   @@unique([runId, ordinal])
+  @@unique([workspaceId, invocationKey])
   @@unique([runId, outputContextKey])
   @@index([requirementId])
   @@index([workspaceId, departmentId, createdAt])
@@ -1603,7 +1760,7 @@ model AutomationDispatch {
   id             String                  @id @default(uuid()) @db.Uuid
   scheduleId     String                  @db.Uuid
   scheduledFor   DateTime                @db.Timestamptz(3)
-  idempotencyKey String                  @unique @db.VarChar(200)
+  idempotencyKey String                  @db.VarChar(200)
   state          AutomationDispatchState @default(PENDING)
   claimToken     String?                 @db.VarChar(100)
   leaseExpiresAt DateTime?               @db.Timestamptz(3)
@@ -1615,6 +1772,7 @@ model AutomationDispatch {
   run            ExecutionRun?           @relation(fields: [runId], references: [id], onDelete: Restrict)
 
   @@unique([scheduleId, scheduledFor])
+  @@unique([scheduleId, idempotencyKey])
   @@index([state, createdAt])
   @@index([state, leaseExpiresAt])
 }
@@ -1623,7 +1781,7 @@ model Observation {
   id              String                 @id @default(uuid()) @db.Uuid
   workspaceId     String                 @db.Uuid
   departmentId    String?                @db.Uuid
-  signalKey       String                 @unique @db.VarChar(200)
+  signalKey       String                 @db.VarChar(200)
   signalType      String                 @db.VarChar(120)
   summary         String                 @db.Text
   evidence        Json                   @default("{}")
@@ -1639,6 +1797,7 @@ model Observation {
   workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department      Department?            @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, signalKey])
   @@index([sourceRunId, observedAt])
   @@index([signalType, observedAt])
   @@index([workspaceId, departmentId, observedAt])
@@ -1749,7 +1908,7 @@ model DigestDeliveryAttempt {
   workspaceId   String                     @db.Uuid
   departmentId  String?                    @db.Uuid
   snapshotId    String                     @db.Uuid
-  attemptKey    String                     @unique @db.VarChar(240)
+  attemptKey    String                     @db.VarChar(240)
   state         DigestDeliveryAttemptState
   briefingRunId String?                    @db.Uuid
   error         Json?
@@ -1760,6 +1919,7 @@ model DigestDeliveryAttempt {
   workspace     Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department    Department?                @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, attemptKey])
   @@index([workspaceId, departmentId, createdAt])
   @@index([snapshotId, createdAt])
 }
@@ -1783,19 +1943,19 @@ model AttentionResolution {
 
 /// Governed capability metadata for an exact Agent or Skill resource version.
 model CapabilityProfile {
-  id                String             @id @default(uuid()) @db.Uuid
-  workspaceId       String             @db.Uuid
-  departmentId      String?            @db.Uuid
-  resourceVersionId String             @unique @db.Uuid
-  schemaVersion     Int                @default(1)
+  id                String               @id @default(uuid()) @db.Uuid
+  workspaceId       String               @db.Uuid
+  departmentId      String?              @db.Uuid
+  resourceVersionId String               @unique @db.Uuid
+  schemaVersion     Int                  @default(1)
   profile           Json
-  digest            String             @db.VarChar(64)
-  createdBy         String             @db.VarChar(200)
-  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
-  resourceVersion   ResourceVersion    @relation(fields: [resourceVersionId], references: [id], onDelete: Restrict)
+  digest            String               @db.VarChar(64)
+  createdBy         String               @db.VarChar(200)
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  resourceVersion   ResourceVersion      @relation(fields: [resourceVersionId], references: [id], onDelete: Restrict)
   publications      CatalogPublication[]
-  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department        Department?        @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department        Department?          @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
   @@index([workspaceId, departmentId, createdAt])
   @@index([digest])
@@ -1843,25 +2003,26 @@ model CatalogPublication {
 
 /// Transactional indexing request. Payloads contain only governed catalog metadata.
 model CatalogIndexOutbox {
-  id                    String                  @id @default(uuid()) @db.Uuid
-  workspaceId           String                  @db.Uuid
-  departmentId          String?                 @db.Uuid
-  publicationId         String                  @db.Uuid
-  publicationRevision   Int
-  idempotencyKey        String                  @unique @db.VarChar(500)
-  operation             CatalogIndexOperation
-  resource              Json
-  state                 CatalogIndexOutboxState @default(PENDING)
-  attempts              Int                     @default(0)
-  occurredAt            DateTime                @default(now()) @db.Timestamptz(3)
-  availableAt           DateTime                @default(now()) @db.Timestamptz(3)
-  claimedAt             DateTime?               @db.Timestamptz(3)
-  publishedAt           DateTime?               @db.Timestamptz(3)
-  lastError             String?                 @db.VarChar(2000)
-  publication           CatalogPublication      @relation(fields: [publicationId], references: [id], onDelete: Restrict)
-  workspace             Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department            Department?             @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  id                  String                  @id @default(uuid()) @db.Uuid
+  workspaceId         String                  @db.Uuid
+  departmentId        String?                 @db.Uuid
+  publicationId       String                  @db.Uuid
+  publicationRevision Int
+  idempotencyKey      String                  @db.VarChar(500)
+  operation           CatalogIndexOperation
+  resource            Json
+  state               CatalogIndexOutboxState @default(PENDING)
+  attempts            Int                     @default(0)
+  occurredAt          DateTime                @default(now()) @db.Timestamptz(3)
+  availableAt         DateTime                @default(now()) @db.Timestamptz(3)
+  claimedAt           DateTime?               @db.Timestamptz(3)
+  publishedAt         DateTime?               @db.Timestamptz(3)
+  lastError           String?                 @db.VarChar(2000)
+  publication         CatalogPublication      @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+  workspace           Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department          Department?             @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, idempotencyKey])
   @@index([state, availableAt, occurredAt])
   @@index([workspaceId, departmentId, occurredAt])
   @@index([publicationId, publicationRevision])
@@ -1901,12 +2062,12 @@ model BuilderIntake {
   departmentLabel   String             @db.VarChar(160)
   state             BuilderIntakeState
   capabilityProfile Json
-  confirmedAt       DateTime?           @db.Timestamptz(3)
-  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+  confirmedAt       DateTime?          @db.Timestamptz(3)
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
   decisions         BuilderDecision[]
   drafts            BuilderDraft[]
-  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department        Department?         @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department        Department?        @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
   @@index([workspaceId, departmentId, createdAt])
   @@index([state, createdAt])
@@ -1918,7 +2079,7 @@ model BuilderDecision {
   workspaceId               String                @db.Uuid
   departmentId              String?               @db.Uuid
   intakeId                  String                @unique @db.Uuid
-  idempotencyKey            String                @unique @db.VarChar(200)
+  idempotencyKey            String                @db.VarChar(200)
   action                    BuilderDecisionAction
   selectedPublicationId     String?               @db.Uuid
   buildNewReason            String?               @db.VarChar(500)
@@ -1935,32 +2096,33 @@ model BuilderDecision {
   workspace                 Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   department                Department?           @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
+  @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, departmentId, decidedAt])
   @@index([selectedPublicationId, decidedAt])
 }
 
 model BuilderDraft {
-  id                            String            @id @default(uuid()) @db.Uuid
-  workspaceId                   String            @db.Uuid
-  departmentId                  String?           @db.Uuid
-  intakeId                      String            @db.Uuid
-  decisionId                    String            @db.Uuid
+  id                            String              @id @default(uuid()) @db.Uuid
+  workspaceId                   String              @db.Uuid
+  departmentId                  String?             @db.Uuid
+  intakeId                      String              @db.Uuid
+  decisionId                    String              @db.Uuid
   draftKind                     BuilderDraftKind
-  basePublicationId             String?           @db.Uuid
-  materializedResourceVersionId String?           @db.Uuid
+  basePublicationId             String?             @db.Uuid
+  materializedResourceVersionId String?             @db.Uuid
   capabilityProfile             Json
-  definition                    Json              @default("{}")
-  revision                      Int               @default(1)
-  state                         BuilderDraftState @default(DRAFT)
-  createdBy                     String            @db.VarChar(200)
-  createdAt                     DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt                     DateTime          @updatedAt @db.Timestamptz(3)
-  intake                        BuilderIntake     @relation(fields: [intakeId], references: [id], onDelete: Restrict)
-  decision                      BuilderDecision   @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+  definition                    Json                @default("{}")
+  revision                      Int                 @default(1)
+  state                         BuilderDraftState   @default(DRAFT)
+  createdBy                     String              @db.VarChar(200)
+  createdAt                     DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt                     DateTime            @updatedAt @db.Timestamptz(3)
+  intake                        BuilderIntake       @relation(fields: [intakeId], references: [id], onDelete: Restrict)
+  decision                      BuilderDecision     @relation(fields: [decisionId], references: [id], onDelete: Restrict)
   basePublication               CatalogPublication? @relation("BuilderDraftBasePublication", fields: [basePublicationId], references: [id], onDelete: Restrict)
-  materializedResourceVersion   ResourceVersion? @relation("BuilderDraftMaterializedResource", fields: [materializedResourceVersionId], references: [id], onDelete: Restrict)
-  workspace                     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department                    Department?       @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  materializedResourceVersion   ResourceVersion?    @relation("BuilderDraftMaterializedResource", fields: [materializedResourceVersionId], references: [id], onDelete: Restrict)
+  workspace                     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department                    Department?         @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
   @@unique([decisionId, draftKind])
   @@index([workspaceId, departmentId, state, updatedAt])
@@ -1968,25 +2130,25 @@ model BuilderDraft {
 }
 
 model Deployment {
-  id                             String              @id @default(uuid()) @db.Uuid
-  workspaceId                    String              @db.Uuid
-  departmentId                   String?             @db.Uuid
-  decisionId                     String              @unique @db.Uuid
-  deployedResourceVersionId      String              @db.Uuid
-  sourcePublicationId            String?             @db.Uuid
-  projectId                      String              @db.VarChar(200)
-  currentConfigurationRevisionId String?             @db.Uuid
-  status                         DeploymentStatus    @default(ACTIVE)
-  sourceRetiredAt                DateTime?           @db.Timestamptz(3)
-  deployedBy                     String              @db.VarChar(200)
-  deployedAt                     DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt                      DateTime            @updatedAt @db.Timestamptz(3)
-  decision                       BuilderDecision     @relation(fields: [decisionId], references: [id], onDelete: Restrict)
-  deployedResourceVersion        ResourceVersion     @relation(fields: [deployedResourceVersionId], references: [id], onDelete: Restrict)
-  sourcePublication              CatalogPublication? @relation("DeploymentSourcePublication", fields: [sourcePublicationId], references: [id], onDelete: Restrict)
+  id                             String                  @id @default(uuid()) @db.Uuid
+  workspaceId                    String                  @db.Uuid
+  departmentId                   String?                 @db.Uuid
+  decisionId                     String                  @unique @db.Uuid
+  deployedResourceVersionId      String                  @db.Uuid
+  sourcePublicationId            String?                 @db.Uuid
+  projectId                      String                  @db.VarChar(200)
+  currentConfigurationRevisionId String?                 @db.Uuid
+  status                         DeploymentStatus        @default(ACTIVE)
+  sourceRetiredAt                DateTime?               @db.Timestamptz(3)
+  deployedBy                     String                  @db.VarChar(200)
+  deployedAt                     DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt                      DateTime                @updatedAt @db.Timestamptz(3)
+  decision                       BuilderDecision         @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+  deployedResourceVersion        ResourceVersion         @relation(fields: [deployedResourceVersionId], references: [id], onDelete: Restrict)
+  sourcePublication              CatalogPublication?     @relation("DeploymentSourcePublication", fields: [sourcePublicationId], references: [id], onDelete: Restrict)
   configurationRevisions         ConfigurationRevision[]
-  workspace                      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  department                     Department?          @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  workspace                      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  department                     Department?             @relation(fields: [departmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
 
   @@index([workspaceId, departmentId, status, deployedAt])
   @@index([sourcePublicationId, status])

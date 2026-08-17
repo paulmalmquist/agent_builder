@@ -156,7 +156,9 @@ export class SpecService implements SpecApi {
           familyId = randomUUID();
           const preferred = slugBase(request.outcomes.name);
           const collision = await transaction.agentFamily.findUnique({
-            where: { slug: preferred },
+            where: {
+              workspaceId_slug: { workspaceId: scope.workspaceId, slug: preferred },
+            },
           });
           familySlug = collision ? `${preferred}-${randomUUID().slice(0, 8)}` : preferred;
           versionNumber = 1;
@@ -540,6 +542,7 @@ export class SpecService implements SpecApi {
       await transaction.agentKnowledgeSource.createMany({
         data: knowledge.sources.map((source) => ({
           agentId,
+          workspaceId: aggregateScope().workspaceId,
           sourceId: source.descriptorId,
           purpose: source.purpose,
           citations: source.requiredCitations,

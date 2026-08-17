@@ -41,10 +41,12 @@ const scopedRoots = [
 
 function principal(workspaceId: string, departmentId: string | null): RequestPrincipal {
   return {
+    principalId: randomUUID(),
     actorId: 'human:workspace-scope-integration',
     workspaceId,
     departmentId,
     authentication: 'local',
+    roles: ['admin'],
     requestId: randomUUID(),
   };
 }
@@ -150,7 +152,7 @@ describeDatabase('workspace scope seam', () => {
     });
     await expect(
       prisma.knowledgeSource.update({
-        where: { id: sourceId },
+        where: { workspaceId_id: { workspaceId: workspaceA, id: sourceId } },
         data: { workspaceId: workspaceB, departmentId: null },
       }),
     ).rejects.toThrow(/scope is immutable/i);

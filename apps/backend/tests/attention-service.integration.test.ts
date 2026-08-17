@@ -30,10 +30,12 @@ function principal(
   departmentId: string | null = LOCAL_DEPARTMENT_ID,
 ): RequestPrincipal {
   return {
+    principalId: randomUUID(),
     actorId,
     workspaceId: LOCAL_WORKSPACE_ID,
     departmentId,
     authentication: 'local',
+    roles: ['admin'],
     requestId: randomUUID(),
   };
 }
@@ -336,7 +338,7 @@ describeDatabase('Quiet Console Attention ledger', () => {
     expect(detail.details).toMatchObject({ runId: awaiting.id, requiredScopes: ['calendar.read'] });
 
     const channelCountBefore = await prisma.productionChannel.count({
-      where: { key: release.projectId as string },
+      where: { workspaceId: requestPrincipal.workspaceId, key: release.projectId as string },
     });
     const governance = new ReleaseGovernanceService(prisma);
     const decline = await runWithPrincipal(requestPrincipal, () =>
@@ -349,7 +351,9 @@ describeDatabase('Quiet Console Attention ledger', () => {
     expect(decline.channel).toBeNull();
     expect(decline.decision.action).toBe('declined');
     expect(
-      await prisma.productionChannel.count({ where: { key: release.projectId as string } }),
+      await prisma.productionChannel.count({
+        where: { workspaceId: requestPrincipal.workspaceId, key: release.projectId as string },
+      }),
     ).toBe(channelCountBefore);
     await expect(
       runWithPrincipal(requestPrincipal, () =>
@@ -664,10 +668,12 @@ describeDatabase('Quiet Console Attention ledger', () => {
     const departmentId = randomUUID();
     const actorId = `human:digest-overflow-${randomUUID()}`;
     const requestPrincipal: RequestPrincipal = {
+      principalId: randomUUID(),
       actorId,
       workspaceId,
       departmentId,
       authentication: 'local',
+      roles: ['admin'],
       requestId: randomUUID(),
     };
     await prisma.workspace.create({
@@ -754,10 +760,12 @@ describeDatabase('Quiet Console Attention ledger', () => {
     const departmentId = randomUUID();
     const actorId = `human:digest-race-${randomUUID()}`;
     const requestPrincipal: RequestPrincipal = {
+      principalId: randomUUID(),
       actorId,
       workspaceId,
       departmentId,
       authentication: 'local',
+      roles: ['admin'],
       requestId: randomUUID(),
     };
     await prisma.workspace.create({

@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paul-os.fullname" . }}-frontend
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "paul-os.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: frontend
+          image: {{ .Values.images.frontend | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: temporary
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "paul-os.fullname" . }}-frontend
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.frontend.service.type }}
+  selector:
+    {{- include "paul-os.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+  ports:
+    - name: http
+      port: {{ .Values.frontend.service.port }}
+      targetPort: http
+      {{- if .Values.frontend.service.nodePort }}
+      nodePort: {{ .Values.frontend.service.nodePort }}
+      {{- end }}

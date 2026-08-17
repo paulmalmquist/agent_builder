@@ -1,6 +1,19 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import { NotFoundPage } from './components/NotFoundPage';
 import { PlatformShell } from './components/PlatformShell';
+import { featureFlags } from './config/feature-flags';
+
+const aimRoutes: RouteObject[] = featureFlags.aimEnabled
+  ? [
+      {
+        path: 'aim',
+        lazy: async () => {
+          const { AimRoute } = await import('./features/aim/AimRoute');
+          return { Component: AimRoute };
+        },
+      },
+    ]
+  : [];
 
 export const router = createBrowserRouter([
   {
@@ -56,6 +69,7 @@ export const router = createBrowserRouter([
           return { Component: IncubatorPage };
         },
       },
+      ...aimRoutes,
       {
         path: 'certification/:agentId',
         lazy: async () => {

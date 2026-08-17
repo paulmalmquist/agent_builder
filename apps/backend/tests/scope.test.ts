@@ -2,10 +2,12 @@ import type { RequestPrincipal } from '../src/request-context.js';
 import { aggregateScope, aggregateScopeWhere, isInPrincipalScope } from '../src/scope.js';
 
 const principal = (departmentId: string | null): RequestPrincipal => ({
+  principalId: '10000000-0000-4000-8000-000000000003',
   actorId: 'human:scope-test',
   workspaceId: '10000000-0000-4000-8000-000000000001',
   departmentId,
   authentication: 'local',
+  roles: ['admin'],
   requestId: 'scope-request',
 });
 

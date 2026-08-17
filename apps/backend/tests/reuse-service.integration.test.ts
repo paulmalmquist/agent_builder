@@ -45,10 +45,12 @@ async function fixture() {
   const agentFamilyId = randomUUID();
   const suiteFamilyId = randomUUID();
   const principal: RequestPrincipal = {
+    principalId: randomUUID(),
     actorId: `human:reuse-${suffix}`,
     workspaceId,
     departmentId,
     authentication: 'local',
+    roles: ['admin'],
     requestId: randomUUID(),
   };
   await prisma.workspace.create({

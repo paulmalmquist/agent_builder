@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../PaulOs.WorkstationBroker.Contracts/PaulOs.WorkstationBroker.Contracts.csproj" />
+  </ItemGroup>
+</Project>

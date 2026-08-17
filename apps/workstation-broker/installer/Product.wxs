@@ -1,0 +1,66 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Paul OS Workstation Broker"
+    Manufacturer="Paul OS"
+    Version="0.1.0"
+    UpgradeCode="1A4A9DAF-3FBE-4E52-A32B-69006EF4F1B8"
+    Scope="perMachine"
+  >
+    <MajorUpgrade DowngradeErrorMessage="A newer Paul OS Workstation Broker is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="PaulOsFolder" Name="Paul OS">
+        <Directory Id="INSTALLFOLDER" Name="Workstation Broker" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Complete" Title="Paul OS Workstation Broker" Level="1">
+      <ComponentGroupRef Id="BrokerComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="BrokerComponents" Directory="INSTALLFOLDER">
+      <Component Id="BrokerServiceComponent" Guid="*">
+        <File
+          Id="BrokerServiceExecutable"
+          Source="$(var.ServicePublishDir)\PaulOs.WorkstationBroker.Service.exe"
+          KeyPath="yes"
+        />
+        <ServiceInstall
+          Id="BrokerServiceInstall"
+          Name="PaulOsWorkstationBroker"
+          DisplayName="Paul OS Workstation Broker"
+          Description="Fail-closed workstation identity and local Plugin transport broker."
+          Type="ownProcess"
+          Start="auto"
+          ErrorControl="normal"
+          Account="LocalSystem"
+        />
+        <ServiceControl
+          Id="BrokerServiceControl"
+          Name="PaulOsWorkstationBroker"
+          Start="install"
+          Stop="both"
+          Remove="uninstall"
+          Wait="yes"
+        />
+      </Component>
+      <Component Id="BrokerConfigurationComponent" Guid="*">
+        <File
+          Id="BrokerConfiguration"
+          Source="$(var.ServicePublishDir)\appsettings.json"
+          KeyPath="yes"
+        />
+      </Component>
+      <Component Id="BrokerCompanionComponent" Guid="*">
+        <File
+          Id="BrokerCompanionExecutable"
+          Source="$(var.CompanionPublishDir)\PaulOs.WorkstationBroker.Companion.exe"
+          KeyPath="yes"
+        />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

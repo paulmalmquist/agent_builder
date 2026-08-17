@@ -3,7 +3,7 @@ kind: Project
 metadata:
   id: 30000000-0000-4000-8000-000000000001
   slug: personal-operations
-  version: 1.0.0
+  version: 1.1.0
   owner: local-user
   purpose: Provide a sanitized project boundary for personal planning workflows.
   lifecycle: candidate
@@ -12,7 +12,7 @@ dependencies:
   - familyId: 10000000-0000-4000-8000-000000000001
     version: 1.0.0
   - familyId: 20000000-0000-4000-8000-000000000001
-    version: 1.0.0
+    version: 1.1.0
   - familyId: 60000000-0000-4000-8000-000000000001
     version: 1.0.0
   - familyId: 70000000-0000-4000-8000-000000000001
@@ -24,7 +24,7 @@ spec:
   resourcePins:
     contextPolicy: default-context@1.0.0
     protocol: safe-execution@1.0.0
-    skill: daily-brief@1.0.0
+    skill: daily-brief@1.1.0
     agent: daily-briefing-agent@1.0.0
   overlays:
     maxPriorities: 5

@@ -1,0 +1,1648 @@
+{
+  "schemaVersion": "aim.program/v1",
+  "program": {
+    "id": "aim_capability_vehicle",
+    "label": "AIM Capability Vehicle",
+    "description": "A synthetic two-stage capability vehicle for demonstrating evidence-gated, incremental program transformation.",
+    "asOf": "2026-08-17T12:00:00Z",
+    "geometryDisclaimer": "CONCEPTUAL GEOMETRY — NOT VEHICLE CAD",
+    "synthetic": true
+  },
+  "displayPolicy": {
+    "showOwnerNames": false,
+    "groupGranularity": "aggregate",
+    "showNoGoAsFailure": false,
+    "showEvidenceLinks": false,
+    "showInternalSourceIds": false,
+    "showDetailedAgentLists": false,
+    "showDecisionLoopPerformance": true,
+    "defaultEvidenceFreshnessSlaHours": 8760,
+    "factoryMaturityMetricId": "factory_maturity"
+  },
+  "timeline": {
+    "startAt": "2026-08-01T00:00:00Z",
+    "endAt": "2027-06-30T23:59:59Z",
+    "markers": [
+      { "id": "marker_today", "label": "Baseline", "at": "2026-08-17T12:00:00Z", "kind": "today" },
+      {
+        "id": "marker_day_30",
+        "label": "30 days",
+        "at": "2026-09-16T12:00:00Z",
+        "kind": "relative"
+      },
+      {
+        "id": "marker_day_60",
+        "label": "60 days",
+        "at": "2026-10-16T12:00:00Z",
+        "kind": "relative"
+      },
+      {
+        "id": "marker_day_90",
+        "label": "90 days",
+        "at": "2026-11-15T12:00:00Z",
+        "kind": "relative"
+      },
+      {
+        "id": "marker_q1",
+        "label": "Q1 planning view",
+        "at": "2027-01-01T12:00:00Z",
+        "kind": "quarter"
+      },
+      {
+        "id": "marker_q2",
+        "label": "Q2 planning view",
+        "at": "2027-04-01T12:00:00Z",
+        "kind": "quarter"
+      }
+    ]
+  },
+  "anchors": [
+    {
+      "id": "stage_one_region",
+      "label": "Stage one fallback region",
+      "kind": "region",
+      "description": "Generic fallback placement for conceptual stage one capability nodes.",
+      "aliases": []
+    },
+    {
+      "id": "stage_two_region",
+      "label": "Stage two fallback region",
+      "kind": "region",
+      "description": "Generic fallback placement for conceptual stage two capability nodes.",
+      "aliases": []
+    },
+    {
+      "id": "ground_region",
+      "label": "Ground fallback region",
+      "kind": "region",
+      "description": "Generic fallback placement for conceptual ground capability nodes.",
+      "aliases": []
+    },
+    {
+      "id": "s1_engines",
+      "label": "Stage 1 engine cluster",
+      "kind": "vehicle",
+      "aliases": ["booster_engine_cluster"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_thrust",
+      "label": "Stage 1 thrust structure",
+      "kind": "vehicle",
+      "aliases": ["booster_thrust_structure"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_fuel_tank",
+      "label": "Stage 1 fuel tank",
+      "kind": "vehicle",
+      "aliases": ["booster_fuel_volume"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_lox_tank",
+      "label": "Stage 1 oxidizer tank",
+      "kind": "vehicle",
+      "aliases": ["booster_oxidizer_volume"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_intertank",
+      "label": "Stage 1 intertank",
+      "kind": "vehicle",
+      "aliases": ["booster_intertank"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_feedlines",
+      "label": "Stage 1 feedlines",
+      "kind": "vehicle",
+      "aliases": ["booster_feedline_proxy"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "interstage",
+      "label": "Interstage",
+      "kind": "vehicle",
+      "aliases": ["stage_transition"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s2_engine",
+      "label": "Stage 2 engine",
+      "kind": "vehicle",
+      "aliases": ["upper_engine_proxy"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "s2_fuel_tank",
+      "label": "Stage 2 fuel tank",
+      "kind": "vehicle",
+      "aliases": ["upper_fuel_volume"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "s2_lox_tank",
+      "label": "Stage 2 oxidizer tank",
+      "kind": "vehicle",
+      "aliases": ["upper_oxidizer_volume"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "avionics_bay",
+      "label": "Avionics bay",
+      "kind": "vehicle",
+      "aliases": ["guidance_section"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "fts",
+      "label": "Safety policy proxy",
+      "kind": "vehicle",
+      "aliases": ["safety_control_proxy"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "payload_adapter",
+      "label": "Payload adapter",
+      "kind": "vehicle",
+      "aliases": ["outcome_adapter"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "fairing",
+      "label": "Fairing",
+      "kind": "vehicle",
+      "aliases": ["mission_shell"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "payload",
+      "label": "Payload",
+      "kind": "vehicle",
+      "aliases": ["outcome_payload"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "stargate",
+      "label": "Additive printer proxy",
+      "kind": "ground",
+      "aliases": ["factory_printer"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "gantries",
+      "label": "Automation gantries",
+      "kind": "ground",
+      "aliases": ["factory_gantries"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "scanner",
+      "label": "Quality scanner",
+      "kind": "ground",
+      "aliases": ["quality_scanner"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "sensors",
+      "label": "Observation sensors",
+      "kind": "ground",
+      "aliases": ["sensor_field"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "test_stand",
+      "label": "Capability test stand",
+      "kind": "ground",
+      "aliases": ["validation_stand"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "gse",
+      "label": "Platform support equipment",
+      "kind": "ground",
+      "aliases": ["platform_support"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "prop_farm",
+      "label": "Resource allocation farm",
+      "kind": "ground",
+      "aliases": ["resource_farm"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "range_safety",
+      "label": "Policy hold console",
+      "kind": "ground",
+      "aliases": ["policy_console"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "fd_console",
+      "label": "Readiness console",
+      "kind": "ground",
+      "aliases": ["program_console"],
+      "fallbackRegion": "ground_region"
+    }
+  ],
+  "groups": [
+    {
+      "id": "group_propulsion",
+      "label": "Propulsion",
+      "description": "Synthetic aggregate participating group for propulsion-related capability work.",
+      "ownedAnchorIds": ["s1_engines", "s2_engine"],
+      "participatingCapabilityIds": ["agent_operations", "simulation_loop"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_structures",
+      "label": "Structures",
+      "description": "Synthetic aggregate participating group for structural and interface work.",
+      "ownedAnchorIds": ["s1_thrust", "s1_intertank", "interstage", "fairing"],
+      "participatingCapabilityIds": ["data_foundation", "connected_systems"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_knowledge",
+      "label": "Knowledge",
+      "description": "Synthetic aggregate participating group for governed coverage and context.",
+      "ownedAnchorIds": ["s1_fuel_tank", "s1_lox_tank", "s2_fuel_tank", "s2_lox_tank"],
+      "participatingCapabilityIds": ["governed_knowledge"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_supply_chain",
+      "label": "Supply chain",
+      "description": "Synthetic aggregate participating group for material and information flow.",
+      "ownedAnchorIds": ["s1_feedlines", "prop_farm"],
+      "participatingCapabilityIds": ["connected_systems"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_integration",
+      "label": "Integration and test",
+      "description": "Synthetic aggregate participating group for evidence and graduation gates.",
+      "ownedAnchorIds": ["payload_adapter", "scanner", "test_stand"],
+      "participatingCapabilityIds": ["simulation_loop", "governed_decisions"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_platform",
+      "label": "Platform",
+      "description": "Synthetic aggregate participating group for shared observation and runtime services.",
+      "ownedAnchorIds": ["avionics_bay", "sensors", "gse"],
+      "participatingCapabilityIds": ["data_foundation", "connected_systems", "agent_operations"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_policy",
+      "label": "Policy and safety",
+      "description": "Synthetic aggregate participating group for holds, authority, and auditability.",
+      "ownedAnchorIds": ["fts", "range_safety"],
+      "participatingCapabilityIds": ["governed_decisions"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_program",
+      "label": "Program outcomes",
+      "description": "Synthetic aggregate participating group for outcomes and readiness decisions.",
+      "ownedAnchorIds": ["payload", "fd_console"],
+      "participatingCapabilityIds": ["measurable_outcomes"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_factory",
+      "label": "Factory operations",
+      "description": "Synthetic aggregate participating group for incremental capability construction.",
+      "ownedAnchorIds": ["stargate", "gantries"],
+      "participatingCapabilityIds": ["data_foundation", "connected_systems"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "data_foundation",
+      "label": "Data foundation",
+      "layer": "foundation",
+      "description": "Stable definitions, provenance, and governed operational records.",
+      "dependencyIds": []
+    },
+    {
+      "id": "connected_systems",
+      "label": "Connected systems",
+      "layer": "connectivity",
+      "description": "Typed, bounded connections joining operational information flows.",
+      "dependencyIds": ["data_foundation"]
+    },
+    {
+      "id": "governed_knowledge",
+      "label": "Governed knowledge",
+      "layer": "knowledge",
+      "description": "Traceable context and knowledge with measurable coverage and freshness.",
+      "dependencyIds": ["data_foundation", "connected_systems"]
+    },
+    {
+      "id": "simulation_loop",
+      "label": "Simulation loop",
+      "layer": "simulation",
+      "description": "Testable alternatives evaluated before production-facing decisions.",
+      "dependencyIds": ["governed_knowledge"]
+    },
+    {
+      "id": "governed_decisions",
+      "label": "Governed decisions",
+      "layer": "decision",
+      "description": "Explainable decisions bounded by evidence, policy, and human authority.",
+      "dependencyIds": ["governed_knowledge", "simulation_loop"]
+    },
+    {
+      "id": "agent_operations",
+      "label": "Agent operations",
+      "layer": "agent",
+      "description": "Certified agent capabilities operating within governed authority envelopes.",
+      "dependencyIds": ["governed_decisions"]
+    },
+    {
+      "id": "measurable_outcomes",
+      "label": "Measurable outcomes",
+      "layer": "outcome",
+      "description": "Observable outcomes tied back to decisions, evidence, and cost.",
+      "dependencyIds": ["agent_operations"]
+    }
+  ],
+  "parts": [
+    {
+      "id": "s1_engines",
+      "label": "Resilient agent fleet",
+      "anchorId": "s1_engines",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["agent_operations"],
+      "participatingGroupIds": ["group_propulsion", "group_platform"],
+      "primaryGroupId": "group_propulsion",
+      "problem": "Critical workflows need resilient capability coverage without a single execution point.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["s2_engine"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "go",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "agentStatusMetricId": "qualifying_agents_active",
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "s1_thrust",
+      "label": "Governed data foundation",
+      "anchorId": "s1_thrust",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["data_foundation"],
+      "participatingGroupIds": ["group_structures", "group_platform"],
+      "primaryGroupId": "group_structures",
+      "problem": "Program decisions require consistent definitions and traceable operational records.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["s1_engines", "s1_fuel_tank", "s1_lox_tank"],
+      "dependencyPartIds": [],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-08-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "s1_fuel_tank",
+      "label": "Primary knowledge coverage",
+      "anchorId": "s1_fuel_tank",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_knowledge"],
+      "primaryGroupId": "group_knowledge",
+      "problem": "Users need governed context coverage for recurring operational decisions.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["s2_fuel_tank"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_metric_snapshot_60"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"]
+    },
+    {
+      "id": "s1_lox_tank",
+      "label": "Operational knowledge coverage",
+      "anchorId": "s1_lox_tank",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_knowledge"],
+      "primaryGroupId": "group_knowledge",
+      "problem": "Operational knowledge must remain measurable, current, and linked to evidence.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"]
+    },
+    {
+      "id": "s1_intertank",
+      "label": "Semantic integration",
+      "anchorId": "s1_intertank",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["data_foundation", "connected_systems"],
+      "participatingGroupIds": ["group_structures", "group_integration"],
+      "primaryGroupId": "group_structures",
+      "problem": "Definitions and interfaces need one governed integration boundary.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "s1_feedlines",
+      "label": "Connected material flow",
+      "anchorId": "s1_feedlines",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["connected_systems"],
+      "participatingGroupIds": ["group_supply_chain", "group_platform"],
+      "primaryGroupId": "group_supply_chain",
+      "problem": "Material and information flow across tools must be observable and bounded.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "interstage",
+      "label": "Capability graduation boundary",
+      "anchorId": "interstage",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["connected_systems", "governed_decisions"],
+      "participatingGroupIds": ["group_structures", "group_integration"],
+      "primaryGroupId": "group_integration",
+      "problem": "Candidates need explicit evidence gates before crossing into trusted operation.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["s2_engine", "avionics_bay"],
+      "dependencyPartIds": ["s1_intertank", "s1_lox_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "s2_engine",
+      "label": "Decision simulation",
+      "anchorId": "s2_engine",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["simulation_loop"],
+      "participatingGroupIds": ["group_propulsion", "group_integration"],
+      "primaryGroupId": "group_propulsion",
+      "problem": "Teams need testable alternatives before acting on consequential decisions.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["avionics_bay"],
+      "dependencyPartIds": ["interstage"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "s2_fuel_tank",
+      "label": "Specialized knowledge",
+      "anchorId": "s2_fuel_tank",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_knowledge"],
+      "primaryGroupId": "group_knowledge",
+      "problem": "Specialized workflows need focused knowledge coverage with explicit freshness.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["s1_fuel_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"]
+    },
+    {
+      "id": "s2_lox_tank",
+      "label": "Decision context reserve",
+      "anchorId": "s2_lox_tank",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_knowledge"],
+      "primaryGroupId": "group_knowledge",
+      "problem": "Decision workflows need a traceable reserve of validated contextual knowledge.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["s1_lox_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"]
+    },
+    {
+      "id": "avionics_bay",
+      "label": "Agent decision loop",
+      "anchorId": "avionics_bay",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["agent_operations", "governed_decisions"],
+      "participatingGroupIds": ["group_platform", "group_integration", "group_policy"],
+      "primaryGroupId": "group_platform",
+      "problem": "Recurring decisions need an explainable observe-to-measure execution loop.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["interstage", "s2_engine"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "agentStatusMetricId": "qualifying_agents_active",
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"]
+    },
+    {
+      "id": "fts",
+      "label": "Human hold authority",
+      "anchorId": "fts",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_decisions"],
+      "participatingGroupIds": ["group_policy"],
+      "primaryGroupId": "group_policy",
+      "problem": "Every consequential workflow needs explicit hold, abort, and audit boundaries.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "payload_adapter",
+      "label": "Outcome integration",
+      "anchorId": "payload_adapter",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_decisions", "measurable_outcomes"],
+      "participatingGroupIds": ["group_integration", "group_program"],
+      "primaryGroupId": "group_integration",
+      "problem": "Certified capabilities must connect decisions to observable outcomes and review.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload"],
+      "dependencyPartIds": ["avionics_bay", "s2_fuel_tank", "s2_lox_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "fairing",
+      "label": "Mission framing",
+      "anchorId": "fairing",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["measurable_outcomes"],
+      "participatingGroupIds": ["group_structures", "group_program"],
+      "primaryGroupId": "group_program",
+      "problem": "Capability work needs a clear, shared frame for intended program outcomes.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["payload"],
+      "dependencyPartIds": ["payload_adapter"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-04-01T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "payload",
+      "label": "Measured production outcomes",
+      "anchorId": "payload",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["measurable_outcomes"],
+      "participatingGroupIds": ["group_program"],
+      "primaryGroupId": "group_program",
+      "problem": "The program needs measurable outcomes instead of unverified activity signals.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": [],
+      "dependencyPartIds": ["payload_adapter", "fairing"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-04-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_outcome_report"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "stargate",
+      "label": "Incremental capability factory",
+      "anchorId": "stargate",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["data_foundation"],
+      "participatingGroupIds": ["group_factory"],
+      "primaryGroupId": "group_factory",
+      "problem": "Capability delivery should be incremental, inspectable, and evidence gated.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["gantries", "s1_thrust"],
+      "dependencyPartIds": [],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"]
+    },
+    {
+      "id": "gantries",
+      "label": "Factory automation experiments",
+      "anchorId": "gantries",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["connected_systems"],
+      "participatingGroupIds": ["group_factory", "group_platform"],
+      "primaryGroupId": "group_factory",
+      "problem": "Repeated assembly work should become bounded, observable automation.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["scanner"],
+      "dependencyPartIds": ["stargate"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "retired",
+          "readiness": "unknown",
+          "note": "Synthetic legacy path retired after capability consolidation.",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "scanner",
+      "label": "Quality evidence scanner",
+      "anchorId": "scanner",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["simulation_loop", "governed_decisions"],
+      "participatingGroupIds": ["group_integration"],
+      "primaryGroupId": "group_integration",
+      "problem": "Candidates need visible quality evidence before advancing through a gate.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["test_stand"],
+      "dependencyPartIds": ["gantries"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "sensors",
+      "label": "Operational observation layer",
+      "anchorId": "sensors",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["data_foundation", "connected_systems"],
+      "participatingGroupIds": ["group_platform"],
+      "primaryGroupId": "group_platform",
+      "problem": "Decision loops need traceable observations rather than silent assumptions.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["avionics_bay"],
+      "dependencyPartIds": ["gse"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "go",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "test_stand",
+      "label": "Certification test stand",
+      "anchorId": "test_stand",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["simulation_loop", "governed_decisions"],
+      "participatingGroupIds": ["group_integration"],
+      "primaryGroupId": "group_integration",
+      "problem": "Capability releases need repeatable tests and immutable evidence before promotion.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["scanner"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "gse",
+      "label": "Shared platform services",
+      "anchorId": "gse",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["connected_systems"],
+      "participatingGroupIds": ["group_platform"],
+      "primaryGroupId": "group_platform",
+      "problem": "Every subsystem needs shared services without transferring business ownership.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["sensors", "s1_feedlines"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "prop_farm",
+      "label": "Resource allocation",
+      "anchorId": "prop_farm",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["measurable_outcomes"],
+      "participatingGroupIds": ["group_supply_chain", "group_program"],
+      "primaryGroupId": "group_program",
+      "problem": "Resources should follow measurable program needs and bounded operating budgets.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["s1_feedlines"],
+      "dependencyPartIds": [],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_outcome_report"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "range_safety",
+      "label": "Governed safety stop",
+      "anchorId": "range_safety",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["governed_decisions"],
+      "participatingGroupIds": ["group_policy"],
+      "primaryGroupId": "group_policy",
+      "problem": "Unsafe or out-of-scope execution must stop visibly and fail closed.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["fts"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "fd_console",
+      "label": "Program readiness poll",
+      "anchorId": "fd_console",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["governed_decisions", "measurable_outcomes"],
+      "participatingGroupIds": ["group_program", "group_policy"],
+      "primaryGroupId": "group_program",
+      "problem": "Reviewers need one evidence-backed readiness view with explainable holds.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload"],
+      "dependencyPartIds": ["test_stand", "range_safety"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "no_go",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"]
+    }
+  ],
+  "milestones": [
+    {
+      "id": "milestone_foundation_gate",
+      "label": "Foundation evidence gate",
+      "date": "2026-10-15T00:00:00Z",
+      "ownerGroupIds": ["group_integration", "group_platform"],
+      "affectedPartIds": ["s1_thrust", "stargate", "test_stand"],
+      "gateCriteria": [
+        {
+          "id": "criterion_foundation_verified",
+          "label": "Foundation contract and test evidence verified",
+          "required": true,
+          "affectedPartIds": ["s1_thrust", "stargate", "test_stand"],
+          "requiredMetricIds": ["factory_maturity"],
+          "evidenceRefs": ["ev_foundation_test"],
+          "resultHistory": [
+            {
+              "effectiveAt": "2026-08-15T00:00:00Z",
+              "state": "unsatisfied",
+              "evidenceRefs": ["ev_foundation_test"],
+              "sourceRef": "synthetic_evidence_registry"
+            },
+            {
+              "effectiveAt": "2026-10-15T00:00:00Z",
+              "state": "satisfied",
+              "evidenceRefs": ["ev_production_gate"],
+              "sourceRef": "synthetic_evidence_registry"
+            }
+          ]
+        }
+      ],
+      "evidenceRefs": ["ev_foundation_test", "ev_production_gate"],
+      "sourceRefs": ["synthetic_evidence_registry"]
+    },
+    {
+      "id": "milestone_decision_gate",
+      "label": "First governed production decision",
+      "date": "2027-01-01T00:00:00Z",
+      "ownerGroupIds": ["group_program", "group_policy"],
+      "affectedPartIds": ["avionics_bay", "fd_console"],
+      "gateCriteria": [
+        {
+          "id": "criterion_decision_loop_verified",
+          "label": "Decision loop has evidence and measured latency",
+          "required": true,
+          "affectedPartIds": ["avionics_bay", "fd_console"],
+          "requiredMetricIds": [
+            "decision_latency_baseline",
+            "decision_latency_current",
+            "decision_latency_target"
+          ],
+          "evidenceRefs": ["ev_pilot_review", "ev_production_gate"],
+          "resultHistory": [
+            {
+              "effectiveAt": "2026-10-15T00:00:00Z",
+              "state": "unsatisfied",
+              "evidenceRefs": ["ev_pilot_review"],
+              "sourceRef": "synthetic_evidence_registry"
+            },
+            {
+              "effectiveAt": "2027-01-01T00:00:00Z",
+              "state": "satisfied",
+              "evidenceRefs": ["ev_production_gate"],
+              "sourceRef": "synthetic_evidence_registry"
+            }
+          ]
+        }
+      ],
+      "evidenceRefs": ["ev_pilot_review", "ev_production_gate"],
+      "sourceRefs": ["synthetic_evidence_registry"]
+    }
+  ],
+  "decisionLoops": [
+    {
+      "id": "loop_primary_decision",
+      "label": "Primary governed decision loop",
+      "ownerGroupIds": [
+        "group_integration",
+        "group_platform",
+        "group_program",
+        "group_policy",
+        "group_propulsion"
+      ],
+      "sourceSystemIds": ["synthetic_metric_registry", "synthetic_program_plan"],
+      "partIds": ["sensors", "avionics_bay", "s2_engine", "fd_console", "payload"],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "steps": [
+        { "id": "step_observe", "label": "Observe", "phase": "observe", "sequence": 0 },
+        {
+          "id": "step_contextualize",
+          "label": "Contextualize",
+          "phase": "contextualize",
+          "sequence": 1
+        },
+        { "id": "step_explain", "label": "Explain", "phase": "explain", "sequence": 2 },
+        { "id": "step_simulate", "label": "Simulate", "phase": "simulate", "sequence": 3 },
+        { "id": "step_decide", "label": "Decide", "phase": "decide", "sequence": 4 },
+        { "id": "step_act", "label": "Act", "phase": "act", "sequence": 5 },
+        { "id": "step_measure", "label": "Measure", "phase": "measure", "sequence": 6 }
+      ],
+      "manualHandoffs": [
+        {
+          "id": "handoff_context_to_explain",
+          "label": "Context-to-explanation handoff",
+          "fromStepId": "step_contextualize",
+          "toStepId": "step_explain",
+          "statusHistory": [
+            {
+              "effectiveAt": "2026-08-01T00:00:00Z",
+              "state": "manual",
+              "sourceRef": "synthetic_program_plan"
+            },
+            {
+              "effectiveAt": "2026-11-15T00:00:00Z",
+              "state": "governed",
+              "sourceRef": "synthetic_program_plan"
+            }
+          ]
+        }
+      ],
+      "sourceRefs": ["synthetic_metric_registry", "synthetic_program_plan"]
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "seam_s1_thrust_s1_fuel_tank",
+      "label": "Foundation-to-knowledge interface",
+      "partIds": ["s1_thrust", "s1_fuel_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "manual",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_interface_test"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "seam_s1_lox_tank_interstage",
+      "label": "Knowledge-to-graduation interface",
+      "partIds": ["s1_lox_tank", "interstage"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "planned",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_interface_test"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "seam_interstage_s2_engine",
+      "label": "Graduation-to-simulation interface",
+      "partIds": ["interstage", "s2_engine"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "planned",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_production_gate"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "seam_avionics_bay_payload_adapter",
+      "label": "Decision-to-outcome interface",
+      "partIds": ["avionics_bay", "payload_adapter"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "planned",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_production_gate"],
+      "sourceRefs": ["synthetic_program_plan"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_seed_contract",
+      "label": "Synthetic manifest contract review",
+      "type": "artifact",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-contract-001",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_foundation_test",
+      "label": "Synthetic foundation contract test",
+      "type": "test",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-test-001",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_interface_test",
+      "label": "Synthetic interface verification",
+      "type": "test",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-test-002",
+      "observedAt": "2026-09-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_metric_snapshot_30",
+      "label": "Synthetic 30-day metric snapshot",
+      "type": "metric",
+      "sourceId": "synthetic_metric_registry",
+      "externalId": "synthetic-metric-030",
+      "observedAt": "2026-09-16T12:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_pilot_review",
+      "label": "Synthetic pilot review",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-review-060",
+      "observedAt": "2026-10-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_metric_snapshot_60",
+      "label": "Synthetic 60-day metric snapshot",
+      "type": "metric",
+      "sourceId": "synthetic_metric_registry",
+      "externalId": "synthetic-metric-060",
+      "observedAt": "2026-10-16T12:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_production_gate",
+      "label": "Synthetic production gate decision",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-gate-090",
+      "observedAt": "2026-11-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_metric_snapshot_90",
+      "label": "Synthetic 90-day metric snapshot",
+      "type": "metric",
+      "sourceId": "synthetic_metric_registry",
+      "externalId": "synthetic-metric-090",
+      "observedAt": "2026-11-15T12:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_outcome_report",
+      "label": "Synthetic outcome report",
+      "type": "report",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-outcome-001",
+      "observedAt": "2027-01-01T00:00:00Z",
+      "freshnessSlaHours": 4380
+    }
+  ],
+  "sources": [
+    {
+      "id": "synthetic_program_plan",
+      "label": "Synthetic program plan",
+      "kind": "seed",
+      "adapterVersion": "static-manifest@1.0.0",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760,
+      "classification": "public",
+      "synthetic": true,
+      "reconciliationStatus": "authoritative"
+    },
+    {
+      "id": "synthetic_metric_registry",
+      "label": "Synthetic metric registry",
+      "kind": "metric_registry",
+      "adapterVersion": "static-manifest@1.0.0",
+      "observedAt": "2026-08-16T00:00:00Z",
+      "freshnessSlaHours": 8760,
+      "classification": "public",
+      "synthetic": true,
+      "reconciliationStatus": "authoritative"
+    },
+    {
+      "id": "synthetic_evidence_registry",
+      "label": "Synthetic evidence registry",
+      "kind": "deployment_registry",
+      "adapterVersion": "static-manifest@1.0.0",
+      "observedAt": "2026-08-16T00:00:00Z",
+      "freshnessSlaHours": 8760,
+      "classification": "public",
+      "synthetic": true,
+      "reconciliationStatus": "authoritative"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "factory_maturity",
+      "label": "Factory capability maturity",
+      "kind": "maturity",
+      "unit": "score",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 20,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-09-16T12:00:00Z",
+          "value": 50,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-10-16T12:00:00Z",
+          "value": 85,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_60"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "knowledge_coverage",
+      "label": "Governed knowledge coverage",
+      "kind": "percentage",
+      "unit": "percent",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 25,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-09-16T12:00:00Z",
+          "value": 63,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-11-15T12:00:00Z",
+          "value": 90,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "qualifying_agents_active",
+      "label": "Qualifying agents active",
+      "kind": "count",
+      "unit": "count",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 0,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-11-15T12:00:00Z",
+          "value": 1,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "decision_latency_baseline",
+      "label": "Decision latency baseline",
+      "kind": "duration_hours",
+      "unit": "hours",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 120,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        }
+      ]
+    },
+    {
+      "id": "decision_latency_current",
+      "label": "Current decision latency",
+      "kind": "duration_hours",
+      "unit": "hours",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 120,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-09-16T12:00:00Z",
+          "value": 48,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-11-15T12:00:00Z",
+          "value": 16,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "decision_latency_target",
+      "label": "Target decision latency",
+      "kind": "duration_hours",
+      "unit": "hours",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 8,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "high"
+        }
+      ]
+    }
+  ]
+}

@@ -2,6 +2,10 @@ node_modules
 **/node_modules
 **/dist
 **/coverage
+**/bin
+**/obj
+**/artifacts
+**/.terraform
 .git
 .local
 .runtime

@@ -78,7 +78,13 @@ interface Fixture {
 
 async function dailyBriefRelease(projectId: string | null = null): Promise<ReleaseBundle> {
   let family = await prisma.resourceFamily.findUnique({
-    where: { kind_slug: { kind: ResourceKind.SKILL, slug: 'daily-brief' } },
+    where: {
+      workspaceId_kind_slug: {
+        workspaceId: localScope.workspaceId,
+        kind: ResourceKind.SKILL,
+        slug: 'daily-brief',
+      },
+    },
   });
   family ??= await prisma.resourceFamily.create({
     data: {
@@ -286,12 +292,13 @@ async function activateProductionRelease(release: ReleaseBundle): Promise<void> 
   const channelKey = release.projectId ?? 'default';
   await prisma.$transaction(async (transaction) => {
     const channel = await transaction.productionChannel.upsert({
-      where: { key: channelKey },
+      where: { workspaceId_key: { workspaceId: localScope.workspaceId, key: channelKey } },
       create: { ...localScope, key: channelKey, projectId: release.projectId },
       update: {},
     });
     const decision = await transaction.releasePromotionDecision.create({
       data: {
+        workspaceId: localScope.workspaceId,
         channelKey,
         action: ReleasePromotionAction.PROMOTED,
         releaseId: release.id,
@@ -303,7 +310,7 @@ async function activateProductionRelease(release: ReleaseBundle): Promise<void> 
     });
     await transaction.$queryRaw`SELECT set_config('paul_os.production_decision_id', ${decision.id}, true)`;
     await transaction.productionChannel.update({
-      where: { key: channelKey },
+      where: { workspaceId_key: { workspaceId: localScope.workspaceId, key: channelKey } },
       data: {
         currentReleaseId: release.id,
         priorReleaseId: channel.currentReleaseId,

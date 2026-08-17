@@ -12,7 +12,7 @@ import {
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { runWithPrincipal } from './request-context.js';
-import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from './scope-constants.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_PRINCIPAL_ID, LOCAL_WORKSPACE_ID } from './scope-constants.js';
 import { ConsoleCopyCertificationService } from './services/console-copy-certification-service.js';
 
 const optionalString = (minimum = 1) =>
@@ -98,10 +98,12 @@ async function main(): Promise<void> {
     );
     const result = await runWithPrincipal(
       {
+        principalId: LOCAL_PRINCIPAL_ID,
         actorId: environment.AUTH_ACTOR_ID,
         workspaceId: LOCAL_WORKSPACE_ID,
         departmentId: LOCAL_DEPARTMENT_ID,
         authentication: 'local',
+        roles: ['admin'],
         requestId: `console-copy-certification:${randomUUID()}`,
       },
       () =>

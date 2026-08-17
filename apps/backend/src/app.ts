@@ -39,7 +39,13 @@ export function createApp(
       },
     }),
   );
-  app.use(requestContextMiddleware(config.auth));
+  app.use(
+    requestContextMiddleware(config.auth, {
+      ...(services.platform?.identityDirectory === undefined
+        ? {}
+        : { identityDirectory: services.platform.identityDirectory }),
+    }),
+  );
   app.use(express.json({ limit: '1mb', strict: true }));
 
   registerRoutes(app, services);

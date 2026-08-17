@@ -10,7 +10,7 @@ metadata:
   provenance: synthetic
 dependencies:
   - familyId: 30000000-0000-4000-8000-000000000001
-    version: 1.0.0
+    version: 1.1.0
   - familyId: c0000000-0000-4000-8000-000000000001
     version: 1.0.0
 spec:
@@ -19,7 +19,7 @@ spec:
     timezone: profile
     catchUp: latest_only
   releaseSelector: daily-briefing-agent@1.0.0
-  project: personal-operations@1.0.0
+  project: personal-operations@1.1.0
   authorityClass: read-only-briefing
   deduplicationWindowMinutes: 60
   retry:

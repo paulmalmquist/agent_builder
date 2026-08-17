@@ -1,0 +1,9 @@
+apiVersion: v2
+name: paul-os
+description: Proposal-ready Paul OS control-plane chart; not an enterprise deployment authorization.
+type: application
+version: 0.1.0
+appVersion: 0.2.0
+kubeVersion: '>=1.31.0-0'
+annotations:
+  paul-os.dev/posture: proposal-only

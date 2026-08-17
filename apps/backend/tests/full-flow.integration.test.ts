@@ -203,7 +203,12 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     }
     await prisma.$connect();
     const descriptor = await prisma.knowledgeSource.findUnique({
-      where: { id: 'confluence-supplier-playbook' },
+      where: {
+        workspaceId_id: {
+          workspaceId: LOCAL_WORKSPACE_ID,
+          id: 'confluence-supplier-playbook',
+        },
+      },
     });
     if (!descriptor) {
       throw new Error('Integration database must be migrated and seeded before tests');
@@ -340,6 +345,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
       .post('/v1/execution-runs')
       .send({
         releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
         authorityGrantId: null,
         input: runInput,
         maxInputTokens: 2000,
@@ -353,6 +359,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
       .post('/v1/execution-runs')
       .send({
         releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
         authorityGrantId: null,
         input: runInput,
         maxInputTokens: 2000,
@@ -366,6 +373,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     const approved = await request(app)
       .post(`/v1/execution-runs/${awaiting.body.id as string}/approve`)
       .send({
+        entryResourceVersionId: skillImport.body.resource.id,
         projectId: null,
         inputConstraints: { timezone: 'America/New_York' },
         toolScopes: [],
@@ -407,6 +415,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
       .post('/v1/execution-runs')
       .send({
         releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
         authorityGrantId: approved.body.grant.id,
         input: runInput,
         maxInputTokens: 2000,
@@ -425,6 +434,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
       .post('/v1/execution-runs')
       .send({
         releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
         authorityGrantId: null,
         input: runInput,
         maxInputTokens: 2000,
@@ -623,7 +633,7 @@ spec:
 
   it('enforces frozen resource immutability below the service layer', async () => {
     const frozen = await prisma.resourceVersion.findFirstOrThrow({
-      where: { family: { slug: 'daily-brief' }, version: '1.0.0' },
+      where: { family: { slug: 'daily-brief' }, version: '1.1.0' },
     });
     await expect(
       prisma.$executeRaw`

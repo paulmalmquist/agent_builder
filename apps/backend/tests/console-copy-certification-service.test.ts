@@ -58,10 +58,12 @@ function ledger() {
 function certify(service: ConsoleCopyCertificationService, governedValue: unknown) {
   return runWithPrincipal(
     {
+      principalId: '00000000-0000-4000-8000-000000000003',
       actorId: 'human:copy-release-reviewer',
       workspaceId: LOCAL_WORKSPACE_ID,
       departmentId: LOCAL_DEPARTMENT_ID,
       authentication: 'local',
+      roles: ['admin'],
       requestId: 'copy-certification-test',
     },
     () =>

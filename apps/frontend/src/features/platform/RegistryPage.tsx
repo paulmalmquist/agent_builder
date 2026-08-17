@@ -6,6 +6,7 @@ import { Notice } from '../../components/Notice';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
 import { PluginRegistry } from './PluginRegistry';
+import { featureFlags } from '../../config/feature-flags';
 
 const resourceKinds: Array<ResourceVersion['kind']> = [
   'Skill',
@@ -88,6 +89,21 @@ export function RegistryPage() {
         title="Registry"
       />
       <InstrumentStrip readings={readings} />
+      {featureFlags.aimEnabled ? (
+        <section className="aim-entry-card">
+          <div>
+            <span>AIM · LOCAL PROGRAM MANIFEST</span>
+            <h2>Open the manufacturing capability map</h2>
+            <p>
+              Review synthetic program capabilities on conceptual geometry. No vehicle CAD or live
+              source connection is used.
+            </p>
+          </div>
+          <Link className="primary-button" to="/aim">
+            OPEN AIM →
+          </Link>
+        </section>
+      ) : null}
       <section aria-busy={plugins.isLoading} className="plugin-registry-section">
         <header className="os-panel-heading">
           <div>

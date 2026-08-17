@@ -65,6 +65,12 @@ import {
   interpretSpecResponseSchema,
 } from './interpretation-schemas.js';
 import {
+  IDENTITY_OPENAPI_OPERATION_IDS,
+  liveResponseSchema,
+  readyResponseSchema,
+  sessionResponseSchema,
+} from './identity-schemas.js';
+import {
   agentSchema,
   agentSpecSchema,
   apiErrorSchema,
@@ -168,6 +174,14 @@ registry.register('Agent', agentSchema);
 registry.register('AgentSpec', agentSpecSchema);
 registry.register('GenerationJob', generationJobSchema);
 registry.register('ApiError', apiErrorSchema);
+registry.register('Session', sessionResponseSchema);
+registry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  bearerFormat: 'Opaque or OIDC access token',
+  description:
+    'Authentication mode is deployment policy; fixture OIDC is never accepted in production.',
+});
 registry.register('CertificationRun', certificationRunDetailSchema);
 registry.register('CertificationGateConfig', certificationGateConfigSchema);
 registry.register('EvalCase', evalCaseSchema);
@@ -1332,8 +1346,45 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/health',
+  operationId: 'getHealth',
+  security: [],
   responses: {
     200: { description: 'Database-backed health check', content: json(healthResponseSchema) },
+    503: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/live',
+  operationId: IDENTITY_OPENAPI_OPERATION_IDS.live,
+  security: [],
+  responses: {
+    200: {
+      description: 'Process liveness; does not probe dependencies',
+      content: json(liveResponseSchema),
+    },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/ready',
+  operationId: IDENTITY_OPENAPI_OPERATION_IDS.ready,
+  security: [],
+  responses: {
+    200: { description: 'Dependency-backed readiness', content: json(readyResponseSchema) },
+    503: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/session',
+  operationId: IDENTITY_OPENAPI_OPERATION_IDS.session,
+  responses: {
+    200: {
+      description: 'Resolved request principal and effective authorization',
+      content: json(sessionResponseSchema),
+    },
+    401: errorResponse,
     503: errorResponse,
   },
 });
@@ -1346,5 +1397,6 @@ export function createOpenApiDocument() {
       version: '0.3.0',
       description: 'Governed resource, execution, agent specification, and certification API.',
     },
+    security: [{ bearerAuth: [] }],
   });
 }

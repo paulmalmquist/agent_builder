@@ -50,10 +50,12 @@ async function fixture(options: { approvalRequired?: boolean } = {}) {
   const pluginFamilyId = randomUUID();
   const entryFamilyId = randomUUID();
   const principal: RequestPrincipal = {
+    principalId: randomUUID(),
     actorId: `human:plugin-service-${suffix}`,
     workspaceId,
     departmentId,
     authentication: 'local',
+    roles: ['admin'],
     requestId: randomUUID(),
   };
   await prisma.workspace.create({

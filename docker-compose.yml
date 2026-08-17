@@ -22,7 +22,8 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
     environment:
-      NODE_ENV: production
+      # Local Compose is an explicit single-user development deployment. Production requires OIDC.
+      NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 3000
       DATABASE_URL: postgresql://agent_builder:agent_builder@postgres:5432/agent_builder?schema=public&connection_limit=10&pool_timeout=10

@@ -1,0 +1,118 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "paul-os.fullname" . }}-default-deny-ingress
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "paul-os.fullname" . }}-backend
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "paul-os.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: frontend
+      ports:
+        - port: {{ .Values.backend.servicePort }}
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "paul-os.fullname" . }}-frontend
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "paul-os.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: backend
+      ports:
+        - port: {{ .Values.backend.servicePort }}
+          protocol: TCP
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "paul-os.fullname" . }}-control-plane-egress
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [backend, worker, migrator]
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 5432
+          protocol: TCP
+{{- if .Values.postgres.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "paul-os.fullname" . }}-postgres-fixture
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres-fixture
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [backend, worker, migrator]
+      ports:
+        - port: 5432
+          protocol: TCP
+{{- end }}
+{{- end }}

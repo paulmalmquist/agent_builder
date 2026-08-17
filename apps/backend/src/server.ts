@@ -27,7 +27,7 @@ export async function startServer(): Promise<Server> {
       resolve();
     });
   });
-  logger.info({ host: config.host, port: config.port }, 'Agent Builder backend listening');
+  logger.info({ host: config.host, port: config.port }, 'Paul OS backend listening');
 
   let shuttingDown = false;
   const shutdown = (signal: string): void => {
@@ -36,7 +36,7 @@ export async function startServer(): Promise<Server> {
     services.maintenance.stop();
     services.pluginHealthScheduler.stop();
     services.catalogIndexScheduler.stop();
-    logger.info({ signal }, 'Shutting down Agent Builder backend');
+    logger.info({ signal }, 'Shutting down Paul OS backend');
     const forceExit = setTimeout(() => {
       logger.error(
         { signal, timeoutMs: config.shutdownTimeoutMs },

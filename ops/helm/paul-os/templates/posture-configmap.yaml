@@ -1,0 +1,11 @@
+{{- include "paul-os.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "paul-os.fullname" . }}-posture
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+data:
+  deployment-mode: {{ .Values.deploymentMode | quote }}
+  deployment-claim: "proposal/demo only; Enterprise Activation is separately authorized"
+  repository-source-commit: {{ .Values.global.repositorySourceCommit | quote }}

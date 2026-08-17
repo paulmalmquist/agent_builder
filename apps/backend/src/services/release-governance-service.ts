@@ -660,6 +660,7 @@ export class ReleaseGovernanceService {
   ) {
     const decision = await transaction.releasePromotionDecision.create({
       data: {
+        workspaceId: channel.workspaceId,
         channelKey: channel.key,
         action: input.action,
         releaseId: input.releaseId,
@@ -672,7 +673,9 @@ export class ReleaseGovernanceService {
     await transaction.$queryRaw`SELECT set_config('paul_os.production_decision_id', ${decision.id}, true)`;
     const promotedAt = new Date();
     const updated = await transaction.productionChannel.update({
-      where: { key: channel.key },
+      where: {
+        workspaceId_key: { workspaceId: channel.workspaceId, key: channel.key },
+      },
       data: {
         currentReleaseId: input.releaseId,
         priorReleaseId: channel.currentReleaseId,

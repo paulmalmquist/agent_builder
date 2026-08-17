@@ -88,6 +88,7 @@ import {
 } from '@agent-builder/contracts';
 import type { z } from 'zod';
 import type { PlatformServices } from './services/types.js';
+import { requireMinimumRole } from './authorization.js';
 
 const asyncRoute =
   (handler: (request: Request, response: Response) => Promise<void>): RequestHandler =>
@@ -158,6 +159,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/catalog/publications/:publicationId/retirement',
     uuidParam('publicationId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = retireCatalogPublicationRequestSchema.parse(request.body);
       send(
@@ -170,6 +172,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/builder/intakes',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = createBuilderIntakeRequestSchema.parse(request.body);
       send(response, 201, builderIntakeSchema, await services.reuse.createIntake(input));
@@ -202,6 +205,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/builder/intakes/:intakeId/decisions',
     uuidParam('intakeId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = createBuilderDecisionRequestSchema.parse(request.body);
       send(
@@ -308,6 +312,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/plugin-installations',
+    requireMinimumRole('admin'),
     asyncRoute(async (request, response) => {
       const input = installPluginRequestSchema.parse(request.body);
       send(response, 201, pluginInstallationSchema, await services.plugins.install(input));
@@ -328,6 +333,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/plugin-installations/:installationId/configure',
     uuidParam('installationId'),
+    requireMinimumRole('admin'),
     asyncRoute(async (request, response) => {
       const input = configurePluginInstallationRequestSchema.parse(request.body);
       send(
@@ -354,6 +360,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
     router.post(
       `/v1/plugin-installations/:installationId/${action}`,
       uuidParam('installationId'),
+      requireMinimumRole('admin'),
       asyncRoute(async (request, response) => {
         const input = pluginStateChangeRequestSchema.parse(request.body);
         send(
@@ -380,6 +387,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/plugin-installations/:installationId/uninstall',
     uuidParam('installationId'),
+    requireMinimumRole('admin'),
     asyncRoute(async (request, response) => {
       const input = uninstallPluginRequestSchema.parse(request.body);
       await services.plugins.uninstall(request.params['installationId'] as string, input);
@@ -421,6 +429,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/repository-imports',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = repositoryImportRequestSchema.parse(request.body);
       send(
@@ -433,6 +442,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/releases',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = createReleaseRequestSchema.parse(request.body);
       send(response, 201, releaseBundleSchema, await services.registry.createRelease(input));
@@ -452,6 +462,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/release-evaluations',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = createReleaseEvaluationRequestSchema.parse(request.body);
       send(
@@ -488,6 +499,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/production-channels/:channelKey/promote',
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const channelKey = productionChannelKeySchema.parse(request.params['channelKey']);
       const input = promoteReleaseRequestSchema.parse(request.body);
@@ -501,6 +513,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/production-channels/:channelKey/decline',
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const channelKey = productionChannelKeySchema.parse(request.params['channelKey']);
       const input = declineReleaseRequestSchema.parse(request.body);
@@ -514,6 +527,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/production-channels/:channelKey/rollback',
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const channelKey = productionChannelKeySchema.parse(request.params['channelKey']);
       const input = rollbackReleaseRequestSchema.parse(request.body);

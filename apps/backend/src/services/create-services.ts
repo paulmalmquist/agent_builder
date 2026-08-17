@@ -48,6 +48,7 @@ import { PluginService } from './plugin-service.js';
 import { PluginHealthScheduler } from '../plugins/health-scheduler.js';
 import { ReuseService } from './reuse-service.js';
 import { CatalogIndexScheduler } from '../catalog/index-scheduler.js';
+import { PrismaIdentityDirectory } from './identity-directory.js';
 
 export function createServices(
   prisma: PrismaClient,
@@ -178,6 +179,7 @@ export function createServices(
     pluginHealthScheduler,
     catalogIndexScheduler,
     platform: {
+      identityDirectory: new PrismaIdentityDirectory(prisma),
       attention,
       plugins,
       reuse,

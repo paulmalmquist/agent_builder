@@ -10,9 +10,9 @@ metadata:
   provenance: synthetic
 dependencies:
   - familyId: 20000000-0000-4000-8000-000000000001
-    version: 1.0.0
+    version: 1.1.0
   - familyId: 90000000-0000-4000-8000-000000000001
-    version: 1.0.0
+    version: 1.1.0
 spec:
   signalType: outcome_quality
   observation: A synthetic briefing omitted a source reference for one input-derived claim.

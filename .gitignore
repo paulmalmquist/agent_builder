@@ -11,6 +11,14 @@ test-results/
 .DS_Store
 apps/backend/src/generated/
 apps/backend/prisma/dev.db
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+apps/workstation-broker/**/bin/
+apps/workstation-broker/**/obj/
+apps/workstation-broker/artifacts/
+apps/workstation-broker/src/PaulOs.ControlPlane.Client/Generated/.kiota.log
 
 # Paul OS private overlays and ephemeral runtime state.
 .local/*

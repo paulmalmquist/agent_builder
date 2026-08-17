@@ -9,7 +9,12 @@ import {
   runAsSystem,
   runWithPrincipal,
 } from '../src/request-context.js';
-import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
+import {
+  LOCAL_DEPARTMENT_ID,
+  LOCAL_PRINCIPAL_ID,
+  LOCAL_WORKSPACE_ID,
+  SYSTEM_PRINCIPAL_ID,
+} from '../src/scope-constants.js';
 
 function testApp() {
   const app = express();
@@ -53,10 +58,12 @@ describe('request identity context', () => {
       authentication: 'bearer',
     });
     expect(response.body.principal).toEqual({
+      principalId: LOCAL_PRINCIPAL_ID,
       actorId: 'authenticated-user@example.test',
       workspaceId: LOCAL_WORKSPACE_ID,
       departmentId: LOCAL_DEPARTMENT_ID,
       authentication: 'bearer',
+      roles: ['admin'],
       requestId: null,
     });
   });
@@ -69,10 +76,12 @@ describe('request identity context', () => {
     expect(response.body).toEqual({
       requestId: null,
       principal: {
+        principalId: SYSTEM_PRINCIPAL_ID,
         actorId: 'system:background',
         workspaceId: LOCAL_WORKSPACE_ID,
         departmentId: LOCAL_DEPARTMENT_ID,
         authentication: 'system',
+        roles: ['admin'],
         requestId: null,
       },
       actor: { id: 'system:background', authentication: 'system' },
@@ -82,10 +91,12 @@ describe('request identity context', () => {
   it('preserves the compatibility actor view for an explicitly supplied principal', () => {
     const result = runWithPrincipal(
       {
+        principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
         actorId: 'human:scoped-test',
         workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         departmentId: null,
         authentication: 'local',
+        roles: ['admin'],
         requestId: 'scope-test-request',
       },
       () => ({

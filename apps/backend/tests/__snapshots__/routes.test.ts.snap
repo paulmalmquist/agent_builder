@@ -6838,6 +6838,122 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
         ],
         "type": "object",
       },
+      "Session": {
+        "additionalProperties": false,
+        "properties": {
+          "authorizationModel": {
+            "enum": [
+              "workspace-role-v1",
+            ],
+            "type": "string",
+          },
+          "effectiveRoles": {
+            "items": {
+              "enum": [
+                "consumer",
+                "builder",
+                "owner",
+                "admin",
+              ],
+              "type": "string",
+            },
+            "maxItems": 4,
+            "type": "array",
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "catalog:read",
+                "runs:execute",
+                "builder:author",
+                "evidence:review",
+                "release:govern",
+                "platform:administer",
+              ],
+              "type": "string",
+            },
+            "maxItems": 6,
+            "type": "array",
+          },
+          "principal": {
+            "additionalProperties": false,
+            "properties": {
+              "actorId": {
+                "maxLength": 200,
+                "minLength": 2,
+                "type": "string",
+              },
+              "authentication": {
+                "enum": [
+                  "local",
+                  "bearer",
+                  "fixture_oidc",
+                  "oidc",
+                  "system",
+                ],
+                "type": "string",
+              },
+              "departmentId": {
+                "format": "uuid",
+                "nullable": true,
+                "type": "string",
+              },
+              "principalId": {
+                "format": "uuid",
+                "type": "string",
+              },
+              "requestId": {
+                "maxLength": 200,
+                "minLength": 1,
+                "nullable": true,
+                "type": "string",
+              },
+              "roles": {
+                "items": {
+                  "enum": [
+                    "consumer",
+                    "builder",
+                    "owner",
+                    "admin",
+                  ],
+                  "type": "string",
+                },
+                "maxItems": 4,
+                "type": "array",
+              },
+              "workspaceId": {
+                "format": "uuid",
+                "type": "string",
+              },
+            },
+            "required": [
+              "principalId",
+              "actorId",
+              "workspaceId",
+              "departmentId",
+              "authentication",
+              "roles",
+              "requestId",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "principal",
+          "effectiveRoles",
+          "permissions",
+          "authorizationModel",
+        ],
+        "type": "object",
+      },
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "Opaque or OIDC access token",
+        "description": "Authentication mode is deployment policy; fixture OIDC is never accepted in production.",
+        "scheme": "bearer",
+        "type": "http",
+      },
     },
   },
   "info": {
@@ -18182,6 +18298,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
     },
     "/health": {
       "get": {
+        "operationId": "getHealth",
         "responses": {
           "200": {
             "content": {
@@ -18259,6 +18376,135 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "description": "Typed API error",
           },
         },
+        "security": [],
+      },
+    },
+    "/live": {
+      "get": {
+        "operationId": "getLiveness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "live",
+                      ],
+                      "type": "string",
+                    },
+                    "timestamp": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "status",
+                    "timestamp",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Process liveness; does not probe dependencies",
+          },
+        },
+        "security": [],
+      },
+    },
+    "/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "dependencies": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "postgresql": {
+                          "enum": [
+                            "connected",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "postgresql",
+                      ],
+                      "type": "object",
+                    },
+                    "status": {
+                      "enum": [
+                        "ready",
+                      ],
+                      "type": "string",
+                    },
+                    "timestamp": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "status",
+                    "dependencies",
+                    "timestamp",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Dependency-backed readiness",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+        "security": [],
       },
     },
     "/v1/attention": {
@@ -45284,6 +45530,217 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
         },
       },
     },
+    "/v1/session": {
+      "get": {
+        "operationId": "getCurrentSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "authorizationModel": {
+                      "enum": [
+                        "workspace-role-v1",
+                      ],
+                      "type": "string",
+                    },
+                    "effectiveRoles": {
+                      "items": {
+                        "enum": [
+                          "consumer",
+                          "builder",
+                          "owner",
+                          "admin",
+                        ],
+                        "type": "string",
+                      },
+                      "maxItems": 4,
+                      "type": "array",
+                    },
+                    "permissions": {
+                      "items": {
+                        "enum": [
+                          "catalog:read",
+                          "runs:execute",
+                          "builder:author",
+                          "evidence:review",
+                          "release:govern",
+                          "platform:administer",
+                        ],
+                        "type": "string",
+                      },
+                      "maxItems": 6,
+                      "type": "array",
+                    },
+                    "principal": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "actorId": {
+                          "maxLength": 200,
+                          "minLength": 2,
+                          "type": "string",
+                        },
+                        "authentication": {
+                          "enum": [
+                            "local",
+                            "bearer",
+                            "fixture_oidc",
+                            "oidc",
+                            "system",
+                          ],
+                          "type": "string",
+                        },
+                        "departmentId": {
+                          "format": "uuid",
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "principalId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "roles": {
+                          "items": {
+                            "enum": [
+                              "consumer",
+                              "builder",
+                              "owner",
+                              "admin",
+                            ],
+                            "type": "string",
+                          },
+                          "maxItems": 4,
+                          "type": "array",
+                        },
+                        "workspaceId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "principalId",
+                        "actorId",
+                        "workspaceId",
+                        "departmentId",
+                        "authentication",
+                        "roles",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "principal",
+                    "effectiveRoles",
+                    "permissions",
+                    "authorizationModel",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Resolved request principal and effective authorization",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
   },
+  "security": [
+    {
+      "bearerAuth": [],
+    },
+  ],
 }
 `;

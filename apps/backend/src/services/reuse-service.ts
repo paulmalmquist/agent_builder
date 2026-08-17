@@ -763,12 +763,15 @@ export class ReuseService {
     const input = createBuilderDecisionRequestSchema.parse(rawInput);
     const idempotencyKey = idempotencyKeySchema.parse(rawIdempotencyKey);
     const actor = requireHumanActor();
+    const scope = aggregateScope();
 
     // Resolve a completed retry before consulting the mutable catalog. A publication can
     // legitimately be retired after the first request, but that must not make an otherwise
     // identical idempotent replay fail or create a second demand observation.
     const existingByKey = await this.prisma.builderDecision.findUnique({
-      where: { idempotencyKey },
+      where: {
+        workspaceId_idempotencyKey: { workspaceId: scope.workspaceId, idempotencyKey },
+      },
     });
     if (existingByKey !== null) {
       if (
@@ -819,10 +822,12 @@ export class ReuseService {
         // Serialize both the retry key and the intake. READ COMMITTED then observes the
         // winner after either lock wait, making concurrent identical submissions replay
         // cleanly instead of surfacing a serialization failure.
-        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${idempotencyKey}))`;
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${scope.workspaceId}:${idempotencyKey}`}))`;
         await transaction.$queryRaw`SELECT "id" FROM "BuilderIntake" WHERE "id" = ${intakeId}::uuid FOR UPDATE`;
         const existingByKey = await transaction.builderDecision.findUnique({
-          where: { idempotencyKey },
+          where: {
+            workspaceId_idempotencyKey: { workspaceId: scope.workspaceId, idempotencyKey },
+          },
         });
         if (existingByKey !== null) {
           if (
@@ -875,7 +880,12 @@ export class ReuseService {
         let demandObservationId: string | null = null;
         if (input.action === 'build_new' && input.buildNewReason !== null) {
           const observation = await transaction.observation.upsert({
-            where: { signalKey: `builder-demand:${intakeId}` },
+            where: {
+              workspaceId_signalKey: {
+                workspaceId: scope.workspaceId,
+                signalKey: `builder-demand:${intakeId}`,
+              },
+            },
             update: {},
             create: {
               ...aggregateScope(),
@@ -1130,7 +1140,10 @@ async function enqueuePublication(
   const resource = buildCatalogIndexResource(wire, now.toISOString(), null);
   await transaction.catalogIndexOutbox.upsert({
     where: {
-      idempotencyKey: `catalog-index:${publication.id}:${publication.revision}:${operation === DatabaseIndexOperation.UPSERT ? 'upsert' : 'remove'}`,
+      workspaceId_idempotencyKey: {
+        workspaceId: publication.workspaceId,
+        idempotencyKey: `catalog-index:${publication.id}:${publication.revision}:${operation === DatabaseIndexOperation.UPSERT ? 'upsert' : 'remove'}`,
+      },
     },
     create: {
       workspaceId: publication.workspaceId,

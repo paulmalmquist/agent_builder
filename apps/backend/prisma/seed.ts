@@ -16,7 +16,10 @@ import {
   EvalCaseSource,
   EvalCaseTag,
   EvaluationMode,
+  ExternalIdentityProvider,
   ExecutorKind,
+  PlatformRole,
+  PrincipalKind,
   PromotionDecisionType,
   Prisma,
   PrismaClient,
@@ -43,8 +46,12 @@ import { RegistryService } from '../src/services/registry-service.js';
 import {
   LOCAL_DEPARTMENT_ID,
   LOCAL_DEPARTMENT_SLUG,
+  LOCAL_PRINCIPAL_ID,
+  LOCAL_PROJECT_INSTANCE_ID,
+  LOCAL_SERVICE_PRINCIPAL_ID,
   LOCAL_WORKSPACE_ID,
   LOCAL_WORKSPACE_SLUG,
+  SYSTEM_PRINCIPAL_ID,
 } from '../src/scope-constants.js';
 
 const prisma = new PrismaClient();
@@ -615,7 +622,9 @@ const sources = [
 
 async function seedFamiliesAndVersions(): Promise<void> {
   await prisma.agentFamily.upsert({
-    where: { slug: 'supplier-delay-alert' },
+    where: {
+      workspaceId_slug: { workspaceId: LOCAL_WORKSPACE_ID, slug: 'supplier-delay-alert' },
+    },
     create: {
       ...localScope,
       id: supplierFamilyId,
@@ -634,7 +643,9 @@ async function seedFamiliesAndVersions(): Promise<void> {
     },
   });
   await prisma.agentFamily.upsert({
-    where: { slug: 'inventory-risk-analyst' },
+    where: {
+      workspaceId_slug: { workspaceId: LOCAL_WORKSPACE_ID, slug: 'inventory-risk-analyst' },
+    },
     create: {
       ...localScope,
       id: inventoryFamilyId,
@@ -833,7 +844,7 @@ async function seedSources(): Promise<void> {
       metadata,
     };
     await prisma.knowledgeSource.upsert({
-      where: { id },
+      where: { workspaceId_id: { workspaceId: LOCAL_WORKSPACE_ID, id } },
       create: { id, ...localScope, ...mutable },
       update: mutable,
     });
@@ -841,9 +852,16 @@ async function seedSources(): Promise<void> {
   for (const agentId of [supplierChampionId, rejectedChallengerId, passingChallengerId]) {
     for (const selection of supplierKnowledge.sources) {
       await prisma.agentKnowledgeSource.upsert({
-        where: { agentId_sourceId: { agentId, sourceId: selection.descriptorId } },
+        where: {
+          agentId_workspaceId_sourceId: {
+            agentId,
+            workspaceId: LOCAL_WORKSPACE_ID,
+            sourceId: selection.descriptorId,
+          },
+        },
         create: {
           agentId,
+          workspaceId: LOCAL_WORKSPACE_ID,
           sourceId: selection.descriptorId,
           purpose: selection.purpose,
           citations: selection.requiredCitations,
@@ -855,7 +873,9 @@ async function seedSources(): Promise<void> {
 }
 
 async function seedCertification(): Promise<void> {
-  const existingConfig = await prisma.certificationGateConfig.findUnique({ where: { version: 1 } });
+  const existingConfig = await prisma.certificationGateConfig.findUnique({
+    where: { workspaceId_version: { workspaceId: LOCAL_WORKSPACE_ID, version: 1 } },
+  });
   if (existingConfig === null) {
     await prisma.certificationGateConfig.create({
       data: {
@@ -888,7 +908,7 @@ async function seedCertification(): Promise<void> {
       updatedAt: '2026-08-04T00:00:00.000Z',
     });
   const existingInventoryCorpus = await prisma.evalCorpusVersion.findUnique({
-    where: { version: 1 },
+    where: { workspaceId_version: { workspaceId: LOCAL_WORKSPACE_ID, version: 1 } },
   });
   if (existingInventoryCorpus === null) {
     const caseSnapshot = snapshotCase(inventoryEvalCase);
@@ -912,7 +932,9 @@ async function seedCertification(): Promise<void> {
       },
     });
   }
-  const existingCorpus = await prisma.evalCorpusVersion.findUnique({ where: { version: 2 } });
+  const existingCorpus = await prisma.evalCorpusVersion.findUnique({
+    where: { workspaceId_version: { workspaceId: LOCAL_WORKSPACE_ID, version: 2 } },
+  });
   if (existingCorpus === null) {
     await prisma.evalCorpusVersion.create({
       data: {
@@ -1426,6 +1448,151 @@ async function seedLocalScope(): Promise<void> {
   if (department.id !== LOCAL_DEPARTMENT_ID) {
     throw new Error('The local department slug is bound to an unexpected ID');
   }
+
+  await prisma.principal.upsert({
+    where: {
+      workspaceId_actorId: { workspaceId: LOCAL_WORKSPACE_ID, actorId: 'local-user' },
+    },
+    create: {
+      id: LOCAL_PRINCIPAL_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+      actorId: 'local-user',
+      kind: PrincipalKind.HUMAN,
+      displayName: 'Local user',
+    },
+    update: {
+      active: true,
+      displayName: 'Local user',
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+    },
+  });
+  await prisma.externalIdentity.upsert({
+    where: {
+      workspaceId_issuer_subject: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        issuer: 'urn:paul-os:local',
+        subject: 'local-user',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: LOCAL_PRINCIPAL_ID,
+      provider: ExternalIdentityProvider.LOCAL,
+      issuer: 'urn:paul-os:local',
+      subject: 'local-user',
+    },
+    update: { principalId: LOCAL_PRINCIPAL_ID },
+  });
+  await prisma.externalIdentity.upsert({
+    where: {
+      workspaceId_issuer_subject: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        issuer: 'urn:paul-os:fixture',
+        subject: 'local-user-fixture',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: LOCAL_PRINCIPAL_ID,
+      provider: ExternalIdentityProvider.FIXTURE_OIDC,
+      issuer: 'urn:paul-os:fixture',
+      subject: 'local-user-fixture',
+    },
+    update: { principalId: LOCAL_PRINCIPAL_ID },
+  });
+  await prisma.roleBinding.upsert({
+    where: {
+      workspaceId_principalId_role_scopeKey: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        principalId: LOCAL_PRINCIPAL_ID,
+        role: PlatformRole.ADMIN,
+        scopeKey: 'workspace',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: LOCAL_PRINCIPAL_ID,
+      role: PlatformRole.ADMIN,
+      scopeKey: 'workspace',
+      grantedBy: seedActor,
+    },
+    update: { revokedAt: null },
+  });
+
+  await prisma.principal.upsert({
+    where: {
+      workspaceId_actorId: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        actorId: 'system:background',
+      },
+    },
+    create: {
+      id: SYSTEM_PRINCIPAL_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+      actorId: 'system:background',
+      kind: PrincipalKind.SERVICE,
+      displayName: 'Local background service',
+    },
+    update: {
+      active: true,
+      displayName: 'Local background service',
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+    },
+  });
+  await prisma.servicePrincipal.upsert({
+    where: { principalId: SYSTEM_PRINCIPAL_ID },
+    create: {
+      id: LOCAL_SERVICE_PRINCIPAL_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: SYSTEM_PRINCIPAL_ID,
+      slug: 'background-worker',
+      purpose: 'Runs governed local background work',
+    },
+    update: { state: 'ACTIVE', purpose: 'Runs governed local background work' },
+  });
+  await prisma.roleBinding.upsert({
+    where: {
+      workspaceId_principalId_role_scopeKey: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        principalId: SYSTEM_PRINCIPAL_ID,
+        role: PlatformRole.ADMIN,
+        scopeKey: 'workspace',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: SYSTEM_PRINCIPAL_ID,
+      role: PlatformRole.ADMIN,
+      scopeKey: 'workspace',
+      grantedBy: seedActor,
+    },
+    update: { revokedAt: null },
+  });
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT set_config('paul_os.workspace_id', ${LOCAL_WORKSPACE_ID}, true)`,
+    );
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT set_config('paul_os.department_id', ${LOCAL_DEPARTMENT_ID}, true)`,
+    );
+    await transaction.projectInstance.upsert({
+      where: {
+        workspaceId_slug: { workspaceId: LOCAL_WORKSPACE_ID, slug: 'personal-operations' },
+      },
+      create: {
+        id: LOCAL_PROJECT_INSTANCE_ID,
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        slug: 'personal-operations',
+        name: 'Personal operations',
+        createdBy: seedActor,
+      },
+      update: { name: 'Personal operations', state: 'ACTIVE' },
+    });
+  });
 }
 
 async function main(): Promise<void> {

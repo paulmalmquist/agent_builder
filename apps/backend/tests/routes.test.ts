@@ -17,6 +17,7 @@ import {
   generationJobSchema,
   gateConfigListResponseSchema,
   interpretSpecResponseSchema,
+  liveResponseSchema,
   promotionResponseSchema,
   retirementResponseSchema,
   shadowDeployResponseSchema,
@@ -30,6 +31,11 @@ import {
 import { createApp } from '../src/app.js';
 import { AppError } from '../src/errors.js';
 import type { ServiceBundle } from '../src/services/types.js';
+import {
+  LOCAL_DEPARTMENT_ID,
+  LOCAL_PRINCIPAL_ID,
+  LOCAL_WORKSPACE_ID,
+} from '../src/scope-constants.js';
 
 const agentId = 'e341457e-e682-4429-898f-a07d31d88a35';
 const familyId = 'a341457e-e682-4429-898f-a07d31d88a35';
@@ -494,6 +500,17 @@ describe('Agent Builder HTTP API', () => {
 
   it('serves database-backed health and generated OpenAPI', async () => {
     const app = createApp(services, logger);
+    const live = await request(app).get('/live').expect(200);
+    const liveBody = liveResponseSchema.parse(live.body as unknown);
+    expect(liveBody).toMatchObject({ status: 'live' });
+    expect(Date.parse(liveBody.timestamp)).not.toBeNaN();
+    await request(app)
+      .get('/ready')
+      .expect(200, {
+        status: 'ready',
+        dependencies: { postgresql: 'connected' },
+        timestamp: now,
+      });
     await request(app).get('/health').expect(200, {
       status: 'ok',
       database: 'connected',
@@ -504,6 +521,23 @@ describe('Agent Builder HTTP API', () => {
     expect(openapi.body.paths['/agents']).toBeDefined();
     expect(openapi.body).toEqual(createOpenApiDocument());
     expect(openapi.body).toMatchSnapshot();
+  });
+
+  it('returns the resolved local session and inherited four-role authorization', async () => {
+    const response = await request(createApp(services, logger)).get('/v1/session').expect(200);
+    expect(response.body).toMatchObject({
+      principal: {
+        principalId: LOCAL_PRINCIPAL_ID,
+        actorId: 'local-user',
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        authentication: 'local',
+        roles: ['admin'],
+      },
+      effectiveRoles: ['consumer', 'builder', 'owner', 'admin'],
+      authorizationModel: 'workspace-role-v1',
+    });
+    expect(response.body.permissions).toContain('platform:administer');
   });
 
   it('searches from GET /agents and returns the reuse result', async () => {

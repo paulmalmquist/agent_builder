@@ -1,0 +1,8 @@
+project_id = "REPLACE_WITH_ENTERPRISE_ACTIVATION_PROJECT"
+
+master_authorized_networks = {
+  security_approved_admin = {
+    cidr_block   = "203.0.113.10/32"
+    display_name = "REPLACE_WITH_APPROVED_ADMIN_NETWORK"
+  }
+}

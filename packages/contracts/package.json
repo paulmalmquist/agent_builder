@@ -13,6 +13,18 @@
     "./openapi": {
       "types": "./dist/openapi.d.ts",
       "import": "./dist/openapi.js"
+    },
+    "./aim": {
+      "types": "./dist/aim/index.d.ts",
+      "import": "./dist/aim/index.js"
+    },
+    "./aim/schema": {
+      "types": "./dist/aim/schema.d.ts",
+      "import": "./dist/aim/schema.js"
+    },
+    "./workstation-broker": {
+      "types": "./dist/workstation-broker-domain.d.ts",
+      "import": "./dist/workstation-broker-domain.js"
     }
   },
   "scripts": {

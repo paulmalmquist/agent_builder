@@ -11,6 +11,8 @@ export default tseslint.config(
       '**/coverage/**',
       '**/node_modules/**',
       '**/generated/**',
+      '.local/**',
+      '.runtime/**',
       '**/*.config.cjs',
       'eslint.config.js',
       'apps/backend/prisma/**',
@@ -22,7 +24,13 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['scripts/*.mjs', 'packages/contracts/test/*.mjs'],
+          allowDefaultProject: [
+            'scripts/*.mjs',
+            'apps/backend/tests/*.smoke.mjs',
+            'apps/workstation-broker/scripts/*.mjs',
+            'packages/contracts/test/*.mjs',
+            'packages/runtime/test/*.mjs',
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -56,7 +64,10 @@ export default tseslint.config(
       'packages/contracts/**/*.ts',
       'packages/runtime/**/*.ts',
       'scripts/**/*.mjs',
+      'apps/workstation-broker/scripts/**/*.mjs',
+      'apps/backend/tests/**/*.smoke.mjs',
       'packages/contracts/test/**/*.mjs',
+      'packages/runtime/test/**/*.mjs',
     ],
     languageOptions: {
       globals: globals.node,
@@ -76,7 +87,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.mjs', 'packages/contracts/test/**/*.mjs'],
+    files: [
+      'scripts/**/*.mjs',
+      'apps/workstation-broker/scripts/**/*.mjs',
+      'apps/backend/tests/**/*.smoke.mjs',
+      'packages/contracts/test/**/*.mjs',
+      'packages/runtime/test/**/*.mjs',
+    ],
     ...tseslint.configs.disableTypeChecked,
   },
 );

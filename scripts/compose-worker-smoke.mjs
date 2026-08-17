@@ -1,8 +1,36 @@
+import { createHmac, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 const baseUrl = process.env.PAUL_OS_BASE_URL ?? 'http://127.0.0.1:8080';
-const smokeId = crypto.randomUUID();
+const smokeId = randomUUID();
 const dailyBriefManifestUrl = new URL('../02-skills/daily-brief/manifest.yaml', import.meta.url);
+const dailyBriefVersion = '1.1.0';
+const evaluationSuiteVersion = '1.1.0';
+const briefingReferenceVersion = '1.0.0';
+
+function createFixtureToken(secret) {
+  assert(secret.length >= 32, 'PAUL_OS_FIXTURE_OIDC_SECRET must contain at least 32 characters');
+  const payload = Buffer.from(
+    JSON.stringify({
+      iss: 'urn:paul-os:fixture',
+      aud: 'paul-os-local',
+      sub: process.env.PAUL_OS_FIXTURE_OIDC_SUBJECT ?? 'local-user-fixture',
+      exp: Math.floor(Date.now() / 1000) + 60 * 60,
+    }),
+  ).toString('base64url');
+  const signature = createHmac('sha256', secret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+const suppliedToken = process.env.PAUL_OS_AUTH_TOKEN?.trim();
+const fixtureSecret = process.env.PAUL_OS_FIXTURE_OIDC_SECRET?.trim();
+const authToken =
+  suppliedToken === undefined || suppliedToken.length === 0
+    ? fixtureSecret === undefined || fixtureSecret.length === 0
+      ? null
+      : createFixtureToken(fixtureSecret)
+    : suppliedToken;
+const authHeaders = authToken === null ? {} : { authorization: `Bearer ${authToken}` };
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -13,6 +41,7 @@ async function requestJson(path, options = {}, expectedStatus = 200) {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...authHeaders,
       ...(options.headers ?? {}),
     },
   });
@@ -27,7 +56,7 @@ async function requestJson(path, options = {}, expectedStatus = 200) {
 
 async function optionalJson(path) {
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders },
   });
   if (response.status === 404) return null;
   const body = await response.json();
@@ -35,17 +64,6 @@ async function optionalJson(path) {
     throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
   }
   return body;
-}
-
-async function exactResource(kind, slug) {
-  const response = await requestJson(
-    `/v1/resources?kind=${encodeURIComponent(kind)}&query=${encodeURIComponent(slug)}&limit=20`,
-  );
-  const matches = response.items.filter((item) => item.kind === kind && item.slug === slug);
-  if (matches.length !== 1) {
-    throw new Error(`Expected one ${kind} resource named ${slug}; found ${matches.length}`);
-  }
-  return matches[0];
 }
 
 async function exactResourceVersion(kind, slug, version) {
@@ -117,7 +135,8 @@ const existingSkillResponse = await requestJson(
   '/v1/resources?kind=Skill&query=daily-brief&limit=100',
 );
 const existingSkill = existingSkillResponse.items.find(
-  (item) => item.kind === 'Skill' && item.slug === 'daily-brief' && item.version === '1.0.0',
+  (item) =>
+    item.kind === 'Skill' && item.slug === 'daily-brief' && item.version === dailyBriefVersion,
 );
 let expectedCandidateId = null;
 if (existingSkill === undefined) {
@@ -146,7 +165,7 @@ if (existingSkill === undefined) {
       body: JSON.stringify({
         observationId: initialObservation.id,
         title: 'Produce a governed daily planning brief',
-        proposedTarget: 'Skill:daily-brief@1.0.0',
+        proposedTarget: `Skill:daily-brief@${dailyBriefVersion}`,
         proposedChange: 'Compile planning inputs into a cited, bounded daily briefing outcome.',
         evidenceRefs: [`observation:${initialObservation.id}`],
       }),
@@ -185,15 +204,22 @@ assert(
   'The imported skill has an invalid governed lifecycle',
 );
 assert(
-  imported.import.improvementCandidateId !== null &&
-    (expectedCandidateId === null ||
-      imported.import.improvementCandidateId === expectedCandidateId),
-  'The imported skill did not retain its reviewed improvement-candidate lineage',
+  expectedCandidateId === null || imported.import.improvementCandidateId === expectedCandidateId,
+  'A newly imported skill did not retain its reviewed improvement-candidate lineage',
 );
 
 const skill = imported.resource;
-const suite = await exactResource('EvaluationSuite', 'daily-brief-contract');
-const reference = await exactResource('Reference', 'briefing-principles');
+assert(skill.version === dailyBriefVersion, `Expected daily-brief@${dailyBriefVersion}`);
+const suite = await exactResourceVersion(
+  'EvaluationSuite',
+  'daily-brief-contract',
+  evaluationSuiteVersion,
+);
+const reference = await exactResourceVersion(
+  'Reference',
+  'briefing-principles',
+  briefingReferenceVersion,
+);
 const release = await requestJson(
   '/v1/releases',
   {
@@ -223,11 +249,20 @@ assert(
   evaluation.disclaimer.includes('does not measure semantic model quality'),
   'Release evidence omitted the fixture-quality disclaimer',
 );
-const [certifiedSkill, certifiedSuite, certifiedReference] = await Promise.all([
-  exactResourceVersion('Skill', skill.slug, skill.version),
-  exactResource('EvaluationSuite', 'daily-brief-contract'),
-  exactResource('Reference', 'briefing-principles'),
-]);
+// Keep fixture-identity requests sequential: each request resolves its database-owned principal
+// before entering the workspace-scoped transaction, and the smoke should not manufacture lock
+// contention that is unrelated to the API-to-worker lifecycle under test.
+const certifiedSkill = await exactResourceVersion('Skill', skill.slug, skill.version);
+const certifiedSuite = await exactResourceVersion(
+  'EvaluationSuite',
+  'daily-brief-contract',
+  evaluationSuiteVersion,
+);
+const certifiedReference = await exactResourceVersion(
+  'Reference',
+  'briefing-principles',
+  briefingReferenceVersion,
+);
 assert(certifiedSkill.lifecycle === 'certified', 'Passing evidence did not certify the skill');
 assert(certifiedSuite.lifecycle === 'certified', 'Passing evidence did not certify its suite');
 assert(
@@ -272,6 +307,7 @@ const firstRun = await requestJson(
     method: 'POST',
     body: JSON.stringify({
       releaseId: release.id,
+      entryResourceVersionId: skill.id,
       authorityGrantId: null,
       input: firstInput,
       maxInputTokens: 2000,
@@ -293,6 +329,7 @@ const approval = await requestJson(
   {
     method: 'POST',
     body: JSON.stringify({
+      entryResourceVersionId: skill.id,
       projectId: null,
       inputConstraints: { date: '2026-08-16', timezone: 'UTC' },
       toolScopes: [],
@@ -328,6 +365,7 @@ const schedule = await requestJson(
       name: `Compose daily brief ${smokeId}`,
       channelKey: 'default',
       releaseId: release.id,
+      entryResourceVersionId: skill.id,
       authorityGrantId: approval.grant.id,
       timezone: 'UTC',
       intervalSeconds: 86_400,
@@ -435,11 +473,11 @@ const memoryCandidate = await requestJson(
 );
 assert(memoryCandidate.state === 'staged', 'Durable memory was accepted without human review');
 
-const [observations, proposedCandidates, stagedMemory] = await Promise.all([
-  requestJson(`/v1/observations?sourceRunId=${scheduledRun.id}&limit=20`),
-  requestJson('/v1/improvement-candidates?state=proposed&limit=100'),
-  requestJson(`/v1/memory-candidates?sourceRunId=${scheduledRun.id}&limit=20`),
-]);
+const observations = await requestJson(`/v1/observations?sourceRunId=${scheduledRun.id}&limit=20`);
+const proposedCandidates = await requestJson('/v1/improvement-candidates?state=proposed&limit=100');
+const stagedMemory = await requestJson(
+  `/v1/memory-candidates?sourceRunId=${scheduledRun.id}&limit=20`,
+);
 assert(
   observations.items.some((item) => item.id === outcomeObservation.id),
   'Outcome observation was not queryable by run lineage',

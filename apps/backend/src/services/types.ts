@@ -57,6 +57,7 @@ import type { PluginService } from './plugin-service.js';
 import type { PluginHealthSchedulerApi } from '../plugins/health-scheduler.js';
 import type { CatalogIndexSchedulerApi } from '../catalog/index-scheduler.js';
 import type { ReuseService } from './reuse-service.js';
+import type { IdentityDirectory } from '../identity-auth.js';
 
 export interface CatalogApi {
   list(query: AgentCatalogQuery): Promise<AgentCatalogResponse>;
@@ -175,6 +176,7 @@ export interface ServiceBundle {
 }
 
 export interface PlatformServices {
+  identityDirectory: IdentityDirectory;
   attention: AttentionService;
   plugins: PluginService;
   reuse: ReuseService;

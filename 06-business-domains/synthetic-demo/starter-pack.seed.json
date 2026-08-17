@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "starter-pack/v1",
+  "id": "d2000000-0000-4000-8000-000000000001",
+  "slug": "synthetic-operations-starter",
+  "name": "Synthetic Operations Starter Pack",
+  "departmentKey": "synthetic-operations",
+  "owner": "Platform Demo Team",
+  "version": "1.0.0",
+  "synthetic": true,
+  "referredReleases": [
+    {
+      "releaseBundleId": "d2000000-0000-4000-8000-000000000002",
+      "releaseDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    }
+  ],
+  "pluginPacks": [
+    {
+      "familyId": "d2000000-0000-4000-8000-000000000003",
+      "version": "1.0.0",
+      "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+    }
+  ],
+  "defaultAuthorityPolicy": {
+    "selfApprovableEffects": ["read"],
+    "maximumValidityDays": 30,
+    "maximumRunCount": 31,
+    "maximumCostUsd": 25
+  },
+  "subscriptions": [
+    {
+      "kind": "daily_brief",
+      "localTime": "07:00",
+      "timezone": "America/New_York",
+      "freshnessWindowSeconds": 7200
+    }
+  ]
+}

@@ -26,17 +26,17 @@ dependencies:
   - familyId: 10000000-0000-4000-8000-000000000001
     version: 1.0.0
   - familyId: 20000000-0000-4000-8000-000000000001
-    version: 1.0.0
+    version: 1.1.0
   - familyId: 70000000-0000-4000-8000-000000000001
     version: 1.0.0
   - familyId: 80000000-0000-4000-8000-000000000001
-    version: 1.0.0
+    version: 1.1.0
 spec:
   objective: Produce one concise, cited daily planning brief without taking external action.
-  skills: [daily-brief@1.0.0]
+  skills: [daily-brief@1.1.0]
   protocols: [safe-execution@1.0.0]
   contextPolicy: default-context@1.0.0
-  knowledgeSources: [planning-fixture@1.0.0]
+  knowledgeSources: [planning-fixture@1.1.0]
   tools: []
   triggers:
     - kind: schedule
@@ -44,7 +44,7 @@ spec:
   executionLoop:
     maximumSteps: 1
     onUnresolved: return_to_user
-    outputContract: daily-brief@1.0.0
+    outputContract: daily-brief@1.1.0
   memoryPolicy:
     reads: accepted_only
     writes: staged_for_human_acceptance

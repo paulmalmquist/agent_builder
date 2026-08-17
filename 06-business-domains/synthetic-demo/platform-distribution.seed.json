@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "platform.distribution/v1",
+  "id": "d1000000-0000-4000-8000-000000000001",
+  "slug": "paul-os-pilot",
+  "version": "0.2.0",
+  "channel": "pilot",
+  "status": "certified",
+  "releaseBundleId": "d1000000-0000-4000-8000-000000000002",
+  "releaseDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "sourceCommit": "a702bb1",
+  "chart": {
+    "name": "paul-os",
+    "version": "0.1.0",
+    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "images": {
+    "backend": "registry.example.invalid/paul-os/backend@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "frontend": "registry.example.invalid/paul-os/frontend@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "worker": "registry.example.invalid/paul-os/worker@sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "migrator": "registry.example.invalid/paul-os/backend@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "publishedAt": "2026-08-17T12:00:00.000Z",
+  "rollbackDistributionId": null,
+  "proposalOnly": true
+}

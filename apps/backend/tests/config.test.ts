@@ -170,4 +170,57 @@ describe('backend configuration safety', () => {
       }),
     ).toThrow(/fixture-only/);
   });
+
+  it('keeps fixture OIDC out of production and validates the production OIDC contract', () => {
+    expect(() =>
+      loadTestConfig({
+        NODE_ENV: 'production',
+        EXECUTION_DISPATCH_MODE: 'external',
+        AUTH_MODE: 'local',
+      }),
+    ).toThrow(/production requires AUTH_MODE=oidc/);
+    expect(() =>
+      loadTestConfig({
+        NODE_ENV: 'production',
+        EXECUTION_DISPATCH_MODE: 'external',
+        AUTH_MODE: 'static_bearer',
+        AUTH_BEARER_TOKEN: 'production-static-token-is-not-allowed',
+      }),
+    ).toThrow(/production requires AUTH_MODE=oidc/);
+    expect(() =>
+      loadTestConfig({
+        NODE_ENV: 'production',
+        EXECUTION_DISPATCH_MODE: 'external',
+        AUTH_MODE: 'fixture_oidc',
+        FIXTURE_OIDC_SECRET: 'fixture-only-oidc-secret-000000000000',
+      }),
+    ).toThrow(/forbidden in production/);
+    expect(() =>
+      loadTestConfig({
+        NODE_ENV: 'test',
+        AUTH_MODE: 'oidc',
+        OIDC_ISSUER: 'http://identity.example.test/tenant',
+        OIDC_AUDIENCES: 'paul-os-control-plane',
+        OIDC_JWKS_URI: 'https://identity.example.test/tenant/keys',
+      }),
+    ).toThrow(/HTTPS/);
+
+    const config = loadTestConfig({
+      NODE_ENV: 'test',
+      AUTH_MODE: 'oidc',
+      OIDC_ISSUER: 'https://identity.example.test/tenant',
+      OIDC_AUDIENCES: 'paul-os-control-plane,paul-os-cli',
+      OIDC_JWKS_URI: 'https://identity.example.test/tenant/keys',
+      OIDC_GROUP_CLAIM: 'groups',
+    });
+    expect(config.auth).toMatchObject({
+      enabled: true,
+      mode: 'oidc',
+      oidc: {
+        issuer: 'https://identity.example.test/tenant',
+        audiences: ['paul-os-control-plane', 'paul-os-cli'],
+        groupClaim: 'groups',
+      },
+    });
+  });
 });

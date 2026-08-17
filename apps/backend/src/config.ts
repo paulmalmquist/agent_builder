@@ -1,6 +1,12 @@
 import 'dotenv/config';
 import path from 'node:path';
 import { z } from 'zod';
+import {
+  platformRoleSchema,
+  productionOidcConfigSchema,
+  type PlatformRoleValue,
+  type ProductionOidcConfig,
+} from '@agent-builder/contracts';
 
 const booleanEnvironmentValue = z.preprocess((value) => {
   if (typeof value !== 'string') return value;
@@ -14,6 +20,17 @@ const optionalEnvironmentString = (minimumLength = 1) =>
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().trim().min(minimumLength).optional(),
   );
+
+const commaSeparatedValues = z.preprocess(
+  (value) =>
+    typeof value === 'string'
+      ? value
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0)
+      : value,
+  z.array(z.string().min(1)),
+);
 
 const environmentSchema = z
   .object({
@@ -51,6 +68,17 @@ const environmentSchema = z
     SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15_000),
     AUTH_BEARER_TOKEN: optionalEnvironmentString(24),
     AUTH_ACTOR_ID: z.string().trim().min(2).max(200).default('local-user'),
+    AUTH_MODE: z.enum(['local', 'static_bearer', 'fixture_oidc', 'oidc']).optional(),
+    AUTH_PRINCIPAL_ID: z.string().uuid().optional(),
+    AUTH_WORKSPACE_ID: z.string().uuid().optional(),
+    AUTH_DEPARTMENT_ID: z.string().uuid().optional(),
+    AUTH_ROLES: commaSeparatedValues.pipe(z.array(platformRoleSchema).min(1).max(4)).optional(),
+    FIXTURE_OIDC_SECRET: optionalEnvironmentString(32),
+    OIDC_ISSUER: optionalEnvironmentString(),
+    OIDC_AUDIENCES: commaSeparatedValues.optional(),
+    OIDC_JWKS_URI: optionalEnvironmentString(),
+    OIDC_GROUP_CLAIM: optionalEnvironmentString(),
+    OIDC_VERIFIER: z.enum(['fail_closed', 'jwks']).default('fail_closed'),
     BIGQUERY_ENABLED: booleanEnvironmentValue.default(false),
     CONFLUENCE_ENABLED: booleanEnvironmentValue.default(false),
     JIRA_ENABLED: booleanEnvironmentValue.default(false),
@@ -76,6 +104,53 @@ const environmentSchema = z
     BIGQUERY_PREVIEW_ROW_LIMIT: z.coerce.number().int().min(1).max(1000).default(25),
   })
   .superRefine((environment, context) => {
+    const authMode =
+      environment.AUTH_MODE ??
+      (environment.AUTH_BEARER_TOKEN === undefined ? 'local' : 'static_bearer');
+    if (environment.NODE_ENV === 'production' && authMode !== 'oidc') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AUTH_MODE'],
+        message:
+          'production requires AUTH_MODE=oidc; local and static authentication are forbidden',
+      });
+    }
+    if (authMode === 'static_bearer' && environment.AUTH_BEARER_TOKEN === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AUTH_BEARER_TOKEN'],
+        message: 'static_bearer authentication requires AUTH_BEARER_TOKEN',
+      });
+    }
+    if (authMode === 'fixture_oidc') {
+      if (environment.NODE_ENV === 'production') {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['AUTH_MODE'],
+          message: 'fixture_oidc authentication is forbidden in production',
+        });
+      }
+      if (environment.FIXTURE_OIDC_SECRET === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['FIXTURE_OIDC_SECRET'],
+          message: 'fixture_oidc authentication requires FIXTURE_OIDC_SECRET',
+        });
+      }
+    }
+    if (
+      authMode === 'oidc' &&
+      (environment.OIDC_ISSUER === undefined ||
+        environment.OIDC_AUDIENCES === undefined ||
+        environment.OIDC_AUDIENCES.length === 0 ||
+        environment.OIDC_JWKS_URI === undefined)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AUTH_MODE'],
+        message: 'oidc authentication requires OIDC_ISSUER, OIDC_AUDIENCES, and OIDC_JWKS_URI',
+      });
+    }
     if (environment.BIGQUERY_ENABLED && environment.GOOGLE_CLOUD_PROJECT === undefined) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -90,11 +165,12 @@ const environmentSchema = z
       environment.EMAIL_ENABLED ||
       environment.SLACK_ENABLED ||
       environment.TELEMETRY_ENABLED;
-    if (anyLiveProviderEnabled && environment.AUTH_BEARER_TOKEN === undefined) {
+    if (anyLiveProviderEnabled && authMode === 'local') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['AUTH_BEARER_TOKEN'],
-        message: 'AUTH_BEARER_TOKEN is required when any live provider is enabled',
+        message:
+          'AUTH_BEARER_TOKEN is required when any live provider is enabled unless configured OIDC authentication is used',
       });
     }
     if (
@@ -118,15 +194,12 @@ const environmentSchema = z
       });
     }
     const loopbackHost = ['127.0.0.1', 'localhost', '::1'].includes(environment.HOST);
-    if (
-      environment.MODEL_PROVIDER !== 'deterministic' &&
-      !loopbackHost &&
-      environment.AUTH_BEARER_TOKEN === undefined
-    ) {
+    if (environment.MODEL_PROVIDER !== 'deterministic' && !loopbackHost && authMode === 'local') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['AUTH_BEARER_TOKEN'],
-        message: 'AUTH_BEARER_TOKEN is required for non-loopback model execution',
+        message:
+          'AUTH_BEARER_TOKEN is required for non-loopback model execution unless configured OIDC authentication is used',
       });
     }
     if (
@@ -190,6 +263,14 @@ export type AppConfig = {
     enabled: boolean;
     actorId: string;
     bearerToken?: string;
+    mode?: 'local' | 'static_bearer' | 'fixture_oidc' | 'oidc';
+    principalId?: string;
+    workspaceId?: string;
+    departmentId?: string;
+    roles?: PlatformRoleValue[];
+    fixtureOidcSecret?: string;
+    oidc?: ProductionOidcConfig;
+    oidcVerifier?: 'fail_closed' | 'jwks';
   };
   providers: Record<ProviderName, boolean>;
   model: {
@@ -219,6 +300,8 @@ export type AppConfig = {
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = environmentSchema.parse(environment);
+  const authMode =
+    parsed.AUTH_MODE ?? (parsed.AUTH_BEARER_TOKEN === undefined ? 'local' : 'static_bearer');
   const runningFromBackendWorkspace = process.cwd().endsWith(path.join('apps', 'backend'));
   const repositoryRoot = runningFromBackendWorkspace
     ? path.resolve(process.cwd(), '..', '..')
@@ -260,9 +343,30 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     ),
     shutdownTimeoutMs: parsed.SHUTDOWN_TIMEOUT_MS,
     auth: {
-      enabled: parsed.AUTH_BEARER_TOKEN !== undefined,
+      enabled: authMode !== 'local',
       actorId: parsed.AUTH_ACTOR_ID,
       ...(parsed.AUTH_BEARER_TOKEN === undefined ? {} : { bearerToken: parsed.AUTH_BEARER_TOKEN }),
+      ...(parsed.AUTH_MODE === undefined ? {} : { mode: authMode }),
+      ...(parsed.AUTH_PRINCIPAL_ID === undefined ? {} : { principalId: parsed.AUTH_PRINCIPAL_ID }),
+      ...(parsed.AUTH_WORKSPACE_ID === undefined ? {} : { workspaceId: parsed.AUTH_WORKSPACE_ID }),
+      ...(parsed.AUTH_DEPARTMENT_ID === undefined
+        ? {}
+        : { departmentId: parsed.AUTH_DEPARTMENT_ID }),
+      ...(parsed.AUTH_ROLES === undefined ? {} : { roles: parsed.AUTH_ROLES }),
+      ...(parsed.FIXTURE_OIDC_SECRET === undefined
+        ? {}
+        : { fixtureOidcSecret: parsed.FIXTURE_OIDC_SECRET }),
+      ...(authMode !== 'oidc'
+        ? {}
+        : {
+            oidc: productionOidcConfigSchema.parse({
+              issuer: parsed.OIDC_ISSUER,
+              audiences: parsed.OIDC_AUDIENCES,
+              jwksUri: parsed.OIDC_JWKS_URI,
+              groupClaim: parsed.OIDC_GROUP_CLAIM ?? null,
+            }),
+            oidcVerifier: parsed.OIDC_VERIFIER,
+          }),
     },
     providers: {
       bigquery: parsed.BIGQUERY_ENABLED,

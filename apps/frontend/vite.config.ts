@@ -18,6 +18,14 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      '/live': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/ready': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
       '/openapi.json': {
         target: 'http://localhost:3000',
         changeOrigin: true,

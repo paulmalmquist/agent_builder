@@ -26,6 +26,7 @@ import {
   healthResponseSchema,
   interpretSpecRequestSchema,
   interpretSpecResponseSchema,
+  liveResponseSchema,
   promotionRequestSchema,
   promotionResponseSchema,
   publishEvalCorpusRequestSchema,
@@ -37,6 +38,8 @@ import {
   shadowDeployResponseSchema,
   similarityRequestSchema,
   similarityResponseSchema,
+  readyResponseSchema,
+  sessionResponseSchema,
   sourceListResponseSchema,
   sourceRoleSchema,
   updateGuardrailsRequestSchema,
@@ -48,6 +51,8 @@ import {
 import { z } from 'zod';
 import type { ServiceBundle } from './services/types.js';
 import { registerPlatformRoutes } from './platform-routes.js';
+import { currentRequestPrincipal } from './request-context.js';
+import { requireMinimumRole, sessionForPrincipal } from './authorization.js';
 
 const sourceQuerySchema = z.object({ role: sourceRoleSchema.optional() });
 let cachedOpenApiDocument: ReturnType<typeof createOpenApiDocument> | undefined;
@@ -86,6 +91,23 @@ function send<TSchema extends z.ZodTypeAny>(
 }
 
 export function registerRoutes(router: Router, services: ServiceBundle): void {
+  router.get('/live', (_request, response) => {
+    send(response, 200, liveResponseSchema, {
+      status: 'live',
+      timestamp: new Date().toISOString(),
+    });
+  });
+  router.get(
+    '/ready',
+    asyncRoute(async (_request, response) => {
+      const health = await services.health.check();
+      send(response, 200, readyResponseSchema, {
+        status: 'ready',
+        dependencies: { postgresql: health.database },
+        timestamp: health.timestamp,
+      });
+    }),
+  );
   router.get(
     '/health',
     asyncRoute(async (_request, response) => {
@@ -94,6 +116,9 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.get('/openapi.json', (_request, response) => {
     response.status(200).json(openApiDocument());
+  });
+  router.get('/v1/session', (_request, response) => {
+    send(response, 200, sessionResponseSchema, sessionForPrincipal(currentRequestPrincipal()));
   });
 
   if (services.platform !== undefined) registerPlatformRoutes(router, services.platform);
@@ -113,6 +138,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.post(
     '/v1/builder/specs/interpret',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = interpretSpecRequestSchema.parse(request.body);
       send(
@@ -125,6 +151,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.post(
     '/v1/builder/specs',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = createSpecRequestSchema.parse(request.body);
       send(response, 201, agentSpecSchema, await services.specs.create(input));
@@ -145,6 +172,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/v1/builder/specs/:specId/outcomes',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -160,6 +188,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/v1/builder/specs/:specId/knowledge',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -175,6 +204,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/v1/builder/specs/:specId/guardrails',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -190,6 +220,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/v1/builder/specs/:specId/outputs',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -205,6 +236,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/v1/builder/specs/:specId/generate',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const accepted = await services.generation.accept(request.params['specId'] as string);
       const versioned = {
@@ -231,6 +263,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/v1/builder/agents/:agentId/recover',
     uuidRouteParam('agentId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -243,6 +276,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/v1/builder/agents/:agentId/shadow-deploy',
     uuidRouteParam('agentId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -286,6 +320,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.post(
     '/agents/specs/interpret',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = interpretSpecRequestSchema.parse(request.body);
       send(
@@ -298,6 +333,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.post(
     '/agents/specs',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = createSpecRequestSchema.parse(request.body);
       send(response, 201, agentSpecSchema, await services.specs.create(input));
@@ -318,6 +354,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/agents/specs/:specId/outcomes',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = updateOutcomesRequestSchema.parse(request.body);
       send(
@@ -331,6 +368,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/agents/specs/:specId/knowledge',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = updateKnowledgeRequestSchema.parse(request.body);
       send(
@@ -344,6 +382,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/agents/specs/:specId/guardrails',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = updateGuardrailsRequestSchema.parse(request.body);
       send(
@@ -357,6 +396,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.put(
     '/agents/specs/:specId/outputs',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = updateOutputsRequestSchema.parse(request.body);
       send(
@@ -370,6 +410,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/agents/specs/:specId/generate',
     uuidRouteParam('specId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const accepted = await services.generation.accept(request.params['specId'] as string);
       response.location(accepted.statusUrl);
@@ -421,6 +462,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.post(
     '/agents/certification-gate-configs/publish',
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = publishGateConfigRequestSchema.parse(request.body);
       send(response, 201, certificationGateConfigSchema, await services.gateConfigs.publish(input));
@@ -435,6 +477,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.post(
     '/agents/eval-cases',
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       const input = createEvalCaseRequestSchema.parse(request.body);
       send(response, 201, evalCaseSchema, await services.corpus.createCase(input));
@@ -443,6 +486,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/agents/eval-cases/:caseId/deactivate',
     uuidRouteParam('caseId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = deactivateEvalCaseRequestSchema.parse(request.body);
       send(
@@ -455,6 +499,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   );
   router.post(
     '/agents/eval-corpus/publish',
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = publishEvalCorpusRequestSchema.parse(request.body);
       send(response, 201, publishEvalCorpusResponseSchema, await services.corpus.publish(input));
@@ -473,6 +518,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/agents/:agentId/certification-runs',
     uuidRouteParam('agentId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       createCertificationRunRequestSchema.parse(request.body ?? {});
       const accepted = await services.certification.createRun(request.params['agentId'] as string);
@@ -497,6 +543,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/agents/:agentId/promote',
     uuidRouteParam('agentId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = promotionRequestSchema.parse(request.body);
       send(
@@ -510,6 +557,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/agents/:agentId/retire',
     uuidRouteParam('agentId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = retirementRequestSchema.parse(request.body);
       send(
@@ -523,6 +571,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/agents/:agentId/recover',
     uuidRouteParam('agentId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -535,6 +584,7 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
   router.post(
     '/agents/:agentId/shadow-deploy',
     uuidRouteParam('agentId'),
+    requireMinimumRole('builder'),
     asyncRoute(async (request, response) => {
       send(
         response,
