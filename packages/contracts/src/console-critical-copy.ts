@@ -84,6 +84,54 @@ export const consoleActionCopy = {
  * equivalent. This prevents a hand-maintained evaluation fixture from drifting away from the UI.
  */
 export const consoleCriticalCopy = {
+  home: {
+    screen: 'home',
+    introduction: [
+      'Paul OS is the control room for governed agent work.',
+      'Build, run, prove, and improve reusable capabilities without losing authority or provenance.',
+    ],
+    actions: [
+      {
+        label: 'Open Attention',
+        consequence: 'Opens the governed queue for decisions and degraded work.',
+        undo: 'Return home without changing any item.',
+      },
+      {
+        label: 'Build or reuse',
+        consequence: 'Checks certified matches before starting a new agent draft.',
+        undo: 'Leave before saving to keep the platform unchanged.',
+      },
+      {
+        label: 'Open registry',
+        consequence: 'Shows versioned resources, Plugins, and current operational health.',
+        undo: 'Browsing the registry changes nothing.',
+      },
+      {
+        label: 'Review runs',
+        consequence: 'Shows approvals, authority grants, schedules, and run recorders.',
+        undo: 'Reviewing operational history changes nothing.',
+      },
+      {
+        label: 'Review evidence',
+        consequence: 'Shows outcomes, metrics, citations, and release comparisons.',
+        undo: 'Reviewing evidence changes nothing.',
+      },
+      {
+        label: 'Open incubator',
+        consequence: 'Shows observations, proposed improvements, and staged memories.',
+        undo: 'Nothing changes until you make a governed decision.',
+      },
+      {
+        label: 'Open capability map',
+        consequence: 'Opens the offline synthetic manufacturing capability map.',
+        undo: 'Close the map without changing governed data.',
+      },
+    ],
+    body: [
+      'Attention is the only place that interrupts you.',
+      'Daily Briefing carries informational activity without a badge.',
+    ],
+  },
   attention: {
     screen: 'attention',
     introduction: [
@@ -179,6 +227,7 @@ export const consoleCriticalCopy = {
 } as const satisfies Record<string, ConsoleCopyArtifact>;
 
 export const consoleCriticalCopyArtifacts: readonly ConsoleCopyArtifact[] = [
+  consoleCriticalCopy.home,
   consoleCriticalCopy.attention,
   consoleCriticalCopy.allQuiet,
   consoleCriticalCopy.runApproval,

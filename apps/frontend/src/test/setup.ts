@@ -24,6 +24,11 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
   value: vi.fn(),
 });
 
+Object.defineProperty(window, 'scrollTo', {
+  configurable: true,
+  value: vi.fn(),
+});
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => resetFixtures());
 afterEach(() => server.resetHandlers());

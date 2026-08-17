@@ -79,7 +79,67 @@ async function stubReadModels(page: Page): Promise<void> {
       return;
     }
     if (path.startsWith('/v1/production-channels/')) {
-      await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          key: 'daily-operations',
+          projectId: null,
+          currentReleaseId: null,
+          currentReleaseDigest: null,
+          priorReleaseId: null,
+          promotedBy: null,
+          promotedAt: null,
+          updatedAt: '2026-08-16T12:00:00.000Z',
+        }),
+      });
+      return;
+    }
+    const emptyResponses: Record<string, object> = {
+      '/v1/resources': {
+        items: [],
+        total: 0,
+        countsByLifecycle: {
+          experimental: 0,
+          candidate: 0,
+          evaluating: 0,
+          evaluated: 0,
+          certified: 0,
+          production: 0,
+          deprecated: 0,
+        },
+      },
+      '/v1/plugins': { items: [] },
+      '/v1/plugin-installations': { items: [] },
+      '/v1/execution-runs': {
+        items: [],
+        total: 0,
+        countsByState: {
+          awaiting_approval: 0,
+          queued: 0,
+          running: 0,
+          paused_budget: 0,
+          paused_plugin: 0,
+          succeeded: 0,
+          failed: 0,
+          cancelled: 0,
+        },
+      },
+      '/v1/authority-grants': { items: [], total: 0, activeTotal: 0 },
+      '/v1/automation-schedules': { items: [], total: 0, activeTotal: 0 },
+      '/v1/outcomes': { items: [] },
+      '/v1/metrics': { items: [] },
+      '/v1/observations': { items: [] },
+      '/v1/improvement-candidates': { items: [] },
+      '/v1/memory-candidates': { items: [] },
+    };
+    const emptyResponse = emptyResponses[path];
+    if (emptyResponse) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(emptyResponse),
+      });
       return;
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' });
@@ -89,17 +149,29 @@ async function stubReadModels(page: Page): Promise<void> {
 test('direct routes render through the consolidated console', async ({ page }) => {
   await stubReadModels(page);
   const routes = [
-    ['/', 'Attention'],
+    ['/', /Build, run, prove, and improve governed work/i],
+    ['/attention', 'Attention'],
     ['/build', /Build or extend the right agent/i],
     ['/registry', 'Registry'],
     ['/runs', 'Runs & Approvals'],
     ['/evidence', 'Evidence'],
     ['/incubator', 'Incubator'],
+    ['/aim', 'AIM Capability Vehicle'],
   ] as const;
 
   for (const [path, heading] of routes) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    if (path === '/registry') {
+      await expect(page.getByText('No Plugin definitions are available.')).toBeVisible();
+      await expect(page.getByText('No imported definitions match.')).toBeVisible();
+    }
+    if (path === '/evidence') {
+      await expect(page.getByText('Current production release')).toBeVisible();
+      await expect(page.getByText('No outcomes have been recorded.')).toBeVisible();
+      await expect(page.getByText('No metrics have been observed.')).toBeVisible();
+    }
+    await expect(page.getByRole('alert')).toHaveCount(0);
   }
 });
 
@@ -113,7 +185,7 @@ test('Attention, Build, and Runs remain keyboard operable', async ({ page }) => 
     });
   });
 
-  await page.goto('/');
+  await page.goto('/attention');
   await expect(page.getByRole('heading', { level: 1, name: 'Attention' })).toBeVisible();
   await page.keyboard.press('j');
   await expect(page.getByRole('article').first()).toBeFocused();
@@ -144,4 +216,36 @@ test('reduced motion renders a static sky', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('[data-starfield-fallback="true"]')).toBeVisible();
   await expect(page.locator('canvas.starfield-canvas')).toHaveCount(0);
+});
+
+test('Home presents the full platform and opens the lazy AIM capability map', async ({ page }) => {
+  await stubReadModels(page);
+  const externalRequests: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.origin !== 'http://127.0.0.1:5173') externalRequests.push(request.url());
+  });
+
+  await page.goto('/');
+  await expect(
+    page.getByRole('heading', {
+      level: 1,
+      name: /Build, run, prove, and improve governed work/i,
+    }),
+  ).toBeVisible();
+  await expect(page.locator('.primary-button')).toHaveCount(1);
+  await expect(page.getByRole('link', { name: /Build or reuse/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Open registry/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Review runs/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Review evidence/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Open incubator/i })).toBeVisible();
+
+  await page.getByRole('link', { name: /Open capability map/i }).click();
+  await expect(page).toHaveURL(/\/aim$/);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'AIM Capability Vehicle' }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.getByText(/conceptual capability proxy/i)).toBeVisible();
+  expect(externalRequests).toEqual([]);
 });

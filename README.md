@@ -82,11 +82,12 @@ window, run count, and cost ceilings. Revoked, expired, exhausted, or scope-mism
 closed. The deterministic provider is the default and is used in CI. Direct model access is opt-in,
 credential-gated, and rejected when `PROVIDER_POLICY=gateway_only`.
 
-The console preserves the matte-black and purple instrument design. `/` is the keyboard-first
-Attention queue, `/build` is the reuse-first Builder, and Registry, Runs, Evidence, Incubator,
-Library, and Certification remain direct routes. The optional, offline AIM capability visualization
-is available at `/aim` when `VITE_AIM_ENABLED=true`. Legacy endpoints remain available only during
-the compatibility period described in `docs/adr/0009-legacy-api-sunset.md`.
+The console preserves the matte-black and purple instrument design. `/` is the Paul OS home,
+`/attention` is the keyboard-first review queue, and `/build` is the reuse-first Builder. Registry,
+Runs, Evidence, Incubator, Library, and Certification remain direct routes. Local Compose builds the
+offline AIM capability visualization at `/aim`; other image builds must opt in with
+`VITE_AIM_ENABLED=true`. Legacy endpoints remain available only during the compatibility period
+described in `docs/adr/0009-legacy-api-sunset.md`.
 
 Phase 2 also includes strict Plugin manifests and control-plane HTTP execution, entrypoint-scoped
 authority, promotion-backed referred choices, workspace/department scoping, fixture OIDC, and a

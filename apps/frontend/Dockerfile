@@ -1,6 +1,8 @@
 FROM node:22-slim AS build
 
 WORKDIR /workspace
+ARG VITE_AIM_ENABLED=false
+ENV VITE_AIM_ENABLED=${VITE_AIM_ENABLED}
 COPY . .
 RUN npm ci
 RUN npm run build -w @agent-builder/contracts \

@@ -23,6 +23,13 @@ export const router = createBrowserRouter([
       {
         index: true,
         lazy: async () => {
+          const { HomePage } = await import('./features/home/HomePage');
+          return { Component: HomePage };
+        },
+      },
+      {
+        path: 'attention',
+        lazy: async () => {
           const { AttentionPage } = await import('./features/attention/AttentionPage');
           return { Component: AttentionPage };
         },

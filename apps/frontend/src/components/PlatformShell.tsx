@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, type MouseEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom';
 import { Brand } from './Brand';
 import { GlobalAgentSearch } from './GlobalAgentSearch';
@@ -13,6 +13,10 @@ export function PlatformShell() {
   const attention = useAttention();
   const [searchParams, setSearchParams] = useSearchParams();
   const agentId = searchParams.get('agent');
+
+  useEffect(() => {
+    window.scrollTo({ behavior: 'auto', left: 0, top: 0 });
+  }, [location.pathname]);
   const drawer = useMemo<AgentDrawerContextValue>(
     () => ({
       openAgent: (nextAgentId) => {
@@ -43,12 +47,20 @@ export function PlatformShell() {
     });
   }
 
+  function focusMainContent(event: MouseEvent<HTMLAnchorElement>) {
+    const target = document.getElementById('platform-main');
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+    target.scrollIntoView({ block: 'start' });
+  }
+
   const navigation = [
     {
       label: 'ATTENTION',
-      path: '/',
-      active: location.pathname === '/',
-      badge: attention.data?.decideBadgeCount ?? 0,
+      path: '/attention',
+      active: location.pathname === '/attention',
+      badge: attention.isError ? 0 : (attention.data?.decideBadgeCount ?? 0),
       unavailable: attention.isError,
     },
     {
@@ -91,9 +103,17 @@ export function PlatformShell() {
   return (
     <AgentDrawerContext.Provider value={drawer}>
       <div className="platform-shell">
+        <a className="skip-link" href="#platform-main" onClick={focusMainContent}>
+          Skip to main content
+        </a>
         <StarfieldCanvas />
         <header className="platform-topbar">
-          <Link aria-label="Open Paul OS Attention" className="platform-brand" to="/">
+          <Link
+            aria-current={location.pathname === '/' ? 'page' : undefined}
+            aria-label="Open Paul OS home"
+            className="platform-brand"
+            to="/"
+          >
             <Brand compact />
           </Link>
           <GlobalAgentSearch onSelectAgent={drawer.openAgent} />
@@ -108,7 +128,7 @@ export function PlatformShell() {
             <NavLink
               aria-current={item.active ? 'page' : undefined}
               className={item.active ? 'platform-nav-link active' : 'platform-nav-link'}
-              end={item.path === '/' || item.path === '/build'}
+              end={item.path === '/attention' || item.path === '/build'}
               key={item.path}
               to={
                 item.path === '/build'
@@ -132,7 +152,7 @@ export function PlatformShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="platform-content">
+        <div className="platform-content" id="platform-main" tabIndex={-1}>
           <Outlet />
         </div>
         {agentId ? <AgentDetailDrawer agentId={agentId} onClose={closeAgent} /> : null}

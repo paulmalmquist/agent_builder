@@ -111,6 +111,8 @@ services:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
+      args:
+        VITE_AIM_ENABLED: ${VITE_AIM_ENABLED:-true}
     depends_on:
       backend:
         condition: service_healthy
