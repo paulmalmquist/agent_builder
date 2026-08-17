@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AgentStatus, CertificationRunKind, PrismaClient, ResourceLifecycle } from '@prisma/client';
 import { agentResourceSpecSchema, resourceManifestSchema } from '@agent-builder/contracts';
 import { canonicalJson, sha256 } from '@paul-os/runtime';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const describeDatabase =
   process.env['RUN_DATABASE_INTEGRATION'] === 'true' && process.env['DATABASE_URL']
@@ -22,6 +23,8 @@ describeDatabase('legacy registry compatibility synchronization', () => {
     const suffix = familyId.slice(0, 8);
     await prisma.agentFamily.create({
       data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
         id: familyId,
         slug: `compat-${suffix}`,
         name: 'Compatibility test family',

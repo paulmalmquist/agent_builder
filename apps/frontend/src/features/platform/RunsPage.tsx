@@ -22,6 +22,76 @@ function time(value: string | null) {
   return value ? new Date(value).toLocaleString() : 'Not started';
 }
 
+function elapsed(start: string | null, end: string | null) {
+  if (start === null || end === null) return '—';
+  const milliseconds = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
+  if (milliseconds < 1_000) return `${milliseconds} ms`;
+  return `${(milliseconds / 1_000).toFixed(milliseconds < 10_000 ? 1 : 0)} s`;
+}
+
+function RunFlightRecorder({ run }: { run: ExecutionRun }) {
+  const terminal = ['succeeded', 'failed', 'cancelled'].includes(run.state);
+  return (
+    <details className="run-flight-recorder">
+      <summary>
+        <span>FLIGHT RECORDER</span>
+        <span>
+          {run.progress}% · {money(run.actualCostUsd)}
+        </span>
+      </summary>
+      <ol aria-label={`Run ${run.id.slice(0, 8)} phases`}>
+        <li data-phase-state="complete">
+          <span>01</span>
+          <div>
+            <strong>REQUEST</strong>
+            <small>{time(run.createdAt)}</small>
+          </div>
+          <em>ACCEPTED</em>
+        </li>
+        <li data-phase-state={run.authorityGrantId ? 'complete' : 'waiting'}>
+          <span>02</span>
+          <div>
+            <strong>AUTHORITY</strong>
+            <small>{run.requiredToolScopes.length} bounded scopes</small>
+          </div>
+          <em>
+            {run.authorityGrantId
+              ? 'BOUND'
+              : run.state === 'awaiting_approval'
+                ? 'WAITING'
+                : 'NOT BOUND'}
+          </em>
+        </li>
+        <li data-phase-state={run.startedAt ? (terminal ? 'complete' : 'active') : 'waiting'}>
+          <span>03</span>
+          <div>
+            <strong>EXECUTION</strong>
+            <small>{elapsed(run.startedAt, run.finishedAt ?? run.updatedAt)}</small>
+          </div>
+          <em>{run.startedAt ? (terminal ? 'COMPLETE' : 'IN FLIGHT') : 'NOT STARTED'}</em>
+        </li>
+        <li
+          data-phase-state={
+            terminal ? (run.state === 'succeeded' ? 'complete' : 'stopped') : 'waiting'
+          }
+        >
+          <span>04</span>
+          <div>
+            <strong>OUTCOME</strong>
+            <small>{run.finishedAt ? time(run.finishedAt) : run.message}</small>
+          </div>
+          <em>{terminal ? run.state.replaceAll('_', ' ').toUpperCase() : 'PENDING'}</em>
+        </li>
+      </ol>
+      <footer>
+        <span>ACTUAL COST · {money(run.actualCostUsd)}</span>
+        <span>CEILING · {money(run.maxEstimatedCostUsd)}</span>
+        <span>ATTEMPTS · {run.attempts}</span>
+      </footer>
+    </details>
+  );
+}
+
 function ScheduleStateControl({
   schedule,
   isPending,
@@ -140,6 +210,7 @@ export function RunsPage() {
                   </span>
                   <span>START · {time(run.startedAt)}</span>
                 </div>
+                <RunFlightRecorder run={run} />
                 {run.state === 'awaiting_approval' ? (
                   <button
                     className="primary-button run-action"

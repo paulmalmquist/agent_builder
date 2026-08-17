@@ -45,6 +45,8 @@ mode. Never silently substitute fixtures or a less restrictive provider for a pr
 ## Change discipline
 
 - Preserve stable IDs. Increment a frozen resource's version instead of editing it.
+- Before adding or changing a console surface, load `07-protocols/console-grammar` and the governed
+  critical copy in `05-reference/console-critical-copy`. Treat both as release checks.
 - Run manifest validation, format, lint, typecheck, and relevant tests before proposing completion.
 - Generated Claude adapters are disposable projections of canonical definitions in the numbered
   content tree; never edit an adapter as the source of truth.

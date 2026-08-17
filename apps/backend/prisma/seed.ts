@@ -36,9 +36,16 @@ import {
 } from '@agent-builder/contracts';
 import { assertAcyclicDependencies, compileResourceYaml } from '@paul-os/runtime';
 import { RegistryService } from '../src/services/registry-service.js';
+import {
+  LOCAL_DEPARTMENT_ID,
+  LOCAL_DEPARTMENT_SLUG,
+  LOCAL_WORKSPACE_ID,
+  LOCAL_WORKSPACE_SLUG,
+} from '../src/scope-constants.js';
 
 const prisma = new PrismaClient();
 const seedActor = 'system:seed';
+const localScope = { workspaceId: LOCAL_WORKSPACE_ID, departmentId: LOCAL_DEPARTMENT_ID } as const;
 const configuredSourceCommit = process.env['REPOSITORY_SOURCE_COMMIT']?.trim();
 const seedSourceCommit =
   configuredSourceCommit !== undefined && /^[a-f0-9]{7,64}$/i.test(configuredSourceCommit)
@@ -630,6 +637,7 @@ async function seedFamiliesAndVersions(): Promise<void> {
   await prisma.agentFamily.upsert({
     where: { slug: 'supplier-delay-alert' },
     create: {
+      ...localScope,
       id: supplierFamilyId,
       slug: 'supplier-delay-alert',
       name: 'Supplier Delay Alert',
@@ -648,6 +656,7 @@ async function seedFamiliesAndVersions(): Promise<void> {
   await prisma.agentFamily.upsert({
     where: { slug: 'inventory-risk-analyst' },
     create: {
+      ...localScope,
       id: inventoryFamilyId,
       slug: 'inventory-risk-analyst',
       name: 'Inventory Risk Analyst',
@@ -845,7 +854,7 @@ async function seedSources(): Promise<void> {
     };
     await prisma.knowledgeSource.upsert({
       where: { id },
-      create: { id, ...mutable },
+      create: { id, ...localScope, ...mutable },
       update: mutable,
     });
   }
@@ -870,6 +879,7 @@ async function seedCertification(): Promise<void> {
   if (existingConfig === null) {
     await prisma.certificationGateConfig.create({
       data: {
+        ...localScope,
         id: gateConfigId,
         version: 1,
         state: CertificationGateConfigState.ACTIVE,
@@ -883,7 +893,7 @@ async function seedCertification(): Promise<void> {
   }
 
   await prisma.evalCase.createMany({
-    data: [...evalCases, inventoryEvalCase],
+    data: [...evalCases, inventoryEvalCase].map((evalCase) => ({ ...evalCase, ...localScope })),
     skipDuplicates: true,
   });
   const snapshotCase = (evalCase: (typeof evalCases)[number] | typeof inventoryEvalCase) =>
@@ -904,6 +914,7 @@ async function seedCertification(): Promise<void> {
     const caseSnapshot = snapshotCase(inventoryEvalCase);
     await prisma.evalCorpusVersion.create({
       data: {
+        ...localScope,
         id: inventoryCorpusId,
         version: 1,
         contentHash: inventoryCorpusHash,
@@ -925,6 +936,7 @@ async function seedCertification(): Promise<void> {
   if (existingCorpus === null) {
     await prisma.evalCorpusVersion.create({
       data: {
+        ...localScope,
         id: corpusId,
         version: 2,
         contentHash: corpusHash,
@@ -1286,6 +1298,7 @@ async function seedCertification(): Promise<void> {
   await prisma.auditEvent.createMany({
     data: [
       {
+        ...localScope,
         id: 'f1b364f8-61a5-4e24-a8d7-903b7ac36c28',
         actorId: seedActor,
         action: 'certification.corpus.seeded',
@@ -1294,6 +1307,7 @@ async function seedCertification(): Promise<void> {
         details: { version: 2, caseCount: evalCases.length },
       },
       {
+        ...localScope,
         id: '4337219b-d6f7-4612-9e53-1824e7398562',
         actorId: seedActor,
         action: 'certification.gates.seeded',
@@ -1324,6 +1338,7 @@ async function seedCertification(): Promise<void> {
       if (auditEvent === null) {
         await transaction.auditEvent.create({
           data: {
+            ...localScope,
             id: input.auditEventId,
             actorId: seedActor,
             action: 'promotion.approved',
@@ -1400,7 +1415,41 @@ async function seedCertification(): Promise<void> {
   });
 }
 
+async function seedLocalScope(): Promise<void> {
+  const workspace = await prisma.workspace.upsert({
+    where: { slug: LOCAL_WORKSPACE_SLUG },
+    create: {
+      id: LOCAL_WORKSPACE_ID,
+      slug: LOCAL_WORKSPACE_SLUG,
+      name: 'Local workspace',
+    },
+    update: { name: 'Local workspace' },
+  });
+  if (workspace.id !== LOCAL_WORKSPACE_ID) {
+    throw new Error('The local workspace slug is bound to an unexpected ID');
+  }
+  const department = await prisma.department.upsert({
+    where: {
+      workspaceId_slug: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        slug: LOCAL_DEPARTMENT_SLUG,
+      },
+    },
+    create: {
+      id: LOCAL_DEPARTMENT_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      slug: LOCAL_DEPARTMENT_SLUG,
+      name: 'Personal',
+    },
+    update: { name: 'Personal' },
+  });
+  if (department.id !== LOCAL_DEPARTMENT_ID) {
+    throw new Error('The local department slug is bound to an unexpected ID');
+  }
+}
+
 async function main(): Promise<void> {
+  await seedLocalScope();
   await seedFamiliesAndVersions();
   await seedSources();
   await seedCertification();

@@ -1,0 +1,38 @@
+apiVersion: paul-os/v1
+kind: Protocol
+metadata:
+  id: 70000000-0000-4000-8000-000000000002
+  slug: console-grammar
+  version: 1.0.0
+  owner: local-platform-owner
+  purpose: Enforce decision-grade attention, plain language, provenance, and accessible review.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: 00000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  mandatory: true
+  precedence: deny_overrides_allow
+  enforcementPoints:
+    - screen_copy
+    - surface_summary
+    - attention_projection
+    - review_action
+    - evidence_render
+    - motion_review
+    - accessibility_review
+  rules:
+    - one_primary_action_per_screen_and_card
+    - l1_cards_use_no_more_than_two_lines
+    - tables_stay_below_progressive_disclosure
+    - numbers_require_trend_comparison_or_budget
+    - purple_means_decision
+    - amber_means_degraded_with_text_and_icon
+    - red_is_reserved_for_explicit_safety_stops
+    - nominal_states_remain_visually_quiet
+    - show_deltas_before_full_state
+    - every_item_explains_why_it_is_visible
+    - critical_copy_passes_cold_read_evaluation
+    - keyboard_shortcuts_never_mutate_directly
+    - motion_honors_reduced_motion

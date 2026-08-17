@@ -28,6 +28,10 @@ import { PrismaWorkerStore } from '../src/store.js';
 
 const databaseEnabled = process.env['RUN_DATABASE_INTEGRATION'] === 'true';
 const describeDatabase = databaseEnabled ? describe : describe.skip;
+const localScope = {
+  workspaceId: '00000000-0000-4000-8000-000000000001',
+  departmentId: '00000000-0000-4000-8000-000000000002',
+} as const;
 
 const prisma = new PrismaClient();
 const store = new PrismaWorkerStore(prisma);
@@ -78,6 +82,7 @@ async function dailyBriefRelease(projectId: string | null = null): Promise<Relea
   });
   family ??= await prisma.resourceFamily.create({
     data: {
+      ...localScope,
       kind: ResourceKind.SKILL,
       slug: 'daily-brief',
       name: 'Daily Brief',
@@ -130,6 +135,7 @@ async function dailyBriefRelease(projectId: string | null = null): Promise<Relea
   });
   return prisma.releaseBundle.create({
     data: {
+      ...localScope,
       digest: createHash('sha256').update(`release:${suffix}`).digest('hex'),
       projectId,
       createdBy: 'worker-test',
@@ -153,6 +159,7 @@ async function createRun(
 ): Promise<ExecutionRun> {
   return prisma.executionRun.create({
     data: {
+      ...localScope,
       releaseId: release.id,
       authorityGrantId: grant.id,
       releaseDigest: release.digest,
@@ -199,6 +206,7 @@ async function fixture(
   const release = await dailyBriefRelease(options.projectId ?? null);
   const grant = await prisma.authorityGrant.create({
     data: {
+      ...localScope,
       releaseId: release.id,
       releaseDigest: release.digest,
       contextDigest: options.contextDigest ?? contextDigest,
@@ -271,7 +279,7 @@ async function activateProductionRelease(release: ReleaseBundle): Promise<void> 
   await prisma.$transaction(async (transaction) => {
     const channel = await transaction.productionChannel.upsert({
       where: { key: channelKey },
-      create: { key: channelKey, projectId: release.projectId },
+      create: { ...localScope, key: channelKey, projectId: release.projectId },
       update: {},
     });
     const decision = await transaction.releasePromotionDecision.create({
@@ -569,6 +577,48 @@ describeDatabase('PrismaWorkerStore integration', () => {
 
   it('records a deterministic outcome, metrics, spend, and reservation release atomically', async () => {
     const created = await fixture();
+    const digestActor = `human:worker-digest-${randomUUID()}`;
+    const digestEvent = await prisma.platformEvent.create({
+      data: {
+        ...localScope,
+        kind: 'observation.created',
+        entityType: 'Observation',
+        entityId: randomUUID(),
+        summary: {},
+        actorId: digestActor,
+      },
+    });
+    await prisma.attentionCursor.create({
+      data: {
+        ...localScope,
+        departmentScopeKey: localScope.departmentId,
+        actorId: digestActor,
+      },
+    });
+    const digestSnapshot = await prisma.digestSnapshot.create({
+      data: {
+        ...localScope,
+        departmentScopeKey: localScope.departmentId,
+        actorId: digestActor,
+        windowStartedAt: digestEvent.occurredAt,
+        windowEndedAt: new Date(),
+        eventSequenceFrom: digestEvent.sequence,
+        eventSequenceThrough: digestEvent.sequence,
+        summary: {
+          headline: 'One observation is ready for the Daily Brief.',
+          runCount: 0,
+          totalCostUsd: 0,
+          promotionCount: 0,
+          observationCount: 1,
+          windowStartedAt: digestEvent.occurredAt.toISOString(),
+          windowEndedAt: new Date().toISOString(),
+        },
+      },
+    });
+    await prisma.executionRun.update({
+      where: { id: created.run.id },
+      data: { digestSnapshotId: digestSnapshot.id },
+    });
     const engine = new ExecutionEngine(
       store,
       new DeterministicDailyBriefProvider(),
@@ -576,17 +626,38 @@ describeDatabase('PrismaWorkerStore integration', () => {
       logger,
     );
     await engine.runNext('worker:success');
-    const [run, grant, outcome, metrics] = await Promise.all([
+    const [run, grant, outcome, metrics, runEvents, delivery, cursor] = await Promise.all([
       prisma.executionRun.findUniqueOrThrow({ where: { id: created.run.id } }),
       prisma.authorityGrant.findUniqueOrThrow({ where: { id: created.grant.id } }),
       prisma.outcomeRecord.findUnique({ where: { runId: created.run.id } }),
       prisma.metricSample.findMany({ where: { runId: created.run.id } }),
+      prisma.executionRunEvent.findMany({
+        where: { runId: created.run.id },
+        orderBy: { sequence: 'asc' },
+      }),
+      prisma.digestDeliveryAttempt.findFirst({
+        where: { snapshotId: digestSnapshot.id, state: 'DELIVERED' },
+      }),
+      prisma.attentionCursor.findUniqueOrThrow({
+        where: {
+          workspaceId_departmentScopeKey_actorId: {
+            workspaceId: localScope.workspaceId,
+            departmentScopeKey: localScope.departmentId,
+            actorId: digestActor,
+          },
+        },
+      }),
     ]);
     expect(run.state).toBe(ExecutionRunState.SUCCEEDED);
     expect(outcome).not.toBeNull();
     expect(metrics.map(({ name }) => name)).toContain('model.cost');
     expect(Number(grant.reservedCostUsd)).toBe(0);
     expect(Number(grant.spentCostUsd)).toBeGreaterThan(0);
+    expect(runEvents.map(({ state }) => state)).toEqual(
+      expect.arrayContaining(['running', 'succeeded']),
+    );
+    expect(delivery?.briefingRunId).toBe(created.run.id);
+    expect(cursor.lastDeliveredEventSequence).toBe(digestEvent.sequence);
   });
 
   it('records incurred provider cost but publishes no outcome after a late cancellation', async () => {

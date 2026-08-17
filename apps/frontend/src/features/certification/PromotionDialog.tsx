@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
-import { promotionRequestSchema } from '@agent-builder/contracts';
+import { consoleCriticalCopy, promotionRequestSchema } from '@agent-builder/contracts';
 import { Modal } from '../../components/Modal';
 import { Notice } from '../../components/Notice';
 
@@ -35,9 +35,10 @@ export function PromotionDialog({
 
   return (
     <Modal kicker="Human approval required" onClose={onClose} title={`Promote ${agentName}`}>
-      <p>
-        This decision makes the challenger the active family champion and retires the previous
-        champion atomically. The evidence and rationale become immutable governance records.
+      <p>{consoleCriticalCopy.promotion.introduction.join(' ')}</p>
+      <p className="os-disclosure">
+        {consoleCriticalCopy.promotion.actions[0].consequence}{' '}
+        {consoleCriticalCopy.promotion.actions[0].undo}
       </p>
       {validationError ? <Notice tone="error">{validationError}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -56,7 +57,7 @@ export function PromotionDialog({
             Cancel
           </button>
           <button className="primary-button" disabled={isPromoting} type="submit">
-            {isPromoting ? 'Recording decision…' : 'Confirm promotion'}
+            {isPromoting ? 'Recording decision…' : consoleCriticalCopy.promotion.actions[0].label}
           </button>
         </div>
       </form>

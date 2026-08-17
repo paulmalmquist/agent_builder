@@ -7,7 +7,7 @@ export function NotFoundPage() {
       <h1>That instrument panel does not exist.</h1>
       <p>Return to the governed builder or browse the agent catalog.</p>
       <div className="not-found-actions">
-        <Link className="primary-button" to="/">
+        <Link className="primary-button" to="/build">
           Open builder
         </Link>
         <Link className="secondary-button" to="/library">

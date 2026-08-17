@@ -26,6 +26,11 @@ describe('Paul OS console surfaces', () => {
     expect(
       screen.getByText('Permit bounded synthetic daily briefing executions.'),
     ).toBeInTheDocument();
+    await user.click(screen.getByText('FLIGHT RECORDER'));
+    const flightRecorder = screen.getByRole('list', { name: /Run .* phases/i });
+    for (const phase of ['REQUEST', 'AUTHORITY', 'EXECUTION', 'OUTCOME']) {
+      expect(within(flightRecorder).getByText(phase)).toBeInTheDocument();
+    }
     const scheduleHeading = await screen.findByRole('heading', {
       name: 'Daily operations briefing',
     });
@@ -38,7 +43,7 @@ describe('Paul OS console surfaces', () => {
     await user.click(screen.getByRole('button', { name: 'REVIEW AUTHORITY REQUEST' }));
     const dialog = screen.getByRole('dialog', { name: 'Approve execution envelope' });
     expect(within(dialog).getByText(/applies only to release/i)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole('button', { name: 'Approve & queue run' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Approve authority' }));
 
     await waitFor(() => {
       expect(

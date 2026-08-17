@@ -16,6 +16,7 @@ import {
 import { appendAuditEvent } from '../audit.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
+import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { requireHumanActor } from './actors.js';
 import type { GateConfigApi } from './types.js';
 
@@ -44,14 +45,17 @@ export class GateConfigService implements GateConfigApi {
 
   async list(includeSuperseded: boolean) {
     const records = await this.prisma.certificationGateConfig.findMany({
-      where: includeSuperseded ? {} : { state: CertificationGateConfigState.ACTIVE },
+      where: {
+        ...aggregateScopeWhere(),
+        ...(includeSuperseded ? {} : { state: CertificationGateConfigState.ACTIVE }),
+      },
       orderBy: { version: 'desc' },
     });
     const active =
       records.find((record) => record.state === CertificationGateConfigState.ACTIVE) ??
       (includeSuperseded
         ? await this.prisma.certificationGateConfig.findFirst({
-            where: { state: CertificationGateConfigState.ACTIVE },
+            where: { state: CertificationGateConfigState.ACTIVE, ...aggregateScopeWhere() },
           })
         : null);
     if (!active)
@@ -71,11 +75,12 @@ export class GateConfigService implements GateConfigApi {
   async publish(rawInput: PublishGateConfigRequest) {
     const input = publishGateConfigRequestSchema.parse(rawInput);
     const actorId = requireHumanActor();
+    const scope = aggregateScope();
     return this.prisma.$transaction(
       async (transaction) => {
         await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('certification-gate-config-publish'))`;
         const current = await transaction.certificationGateConfig.findFirst({
-          where: { state: CertificationGateConfigState.ACTIVE },
+          where: { state: CertificationGateConfigState.ACTIVE, ...aggregateScopeWhere() },
           orderBy: { version: 'desc' },
         });
         if ((current?.version ?? null) !== input.baseVersion) {
@@ -98,6 +103,7 @@ export class GateConfigService implements GateConfigApi {
         }
         const created = await transaction.certificationGateConfig.create({
           data: {
+            ...scope,
             version: (current?.version ?? 0) + 1,
             state: CertificationGateConfigState.ACTIVE,
             promotionFreshnessHours: input.promotionFreshnessHours,

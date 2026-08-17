@@ -17,6 +17,7 @@ import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { toEvaluationTest } from '../mappers.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScopeWhere } from '../scope.js';
 import { assertAgentTransition } from './transitions.js';
 import type { DeploymentApi } from './types.js';
 
@@ -26,7 +27,9 @@ export class DeploymentService implements DeploymentApi {
   async recover(agentId: string) {
     const actorId = currentActorId();
     return this.prisma.$transaction(async (transaction) => {
-      const agent = await transaction.agent.findUnique({ where: { id: agentId } });
+      const agent = await transaction.agent.findFirst({
+        where: { id: agentId, family: aggregateScopeWhere() },
+      });
       if (!agent) {
         throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent was not found', { agentId });
       }
@@ -76,7 +79,9 @@ export class DeploymentService implements DeploymentApi {
   async shadowDeploy(agentId: string) {
     const actorId = currentActorId();
     return this.prisma.$transaction(async (transaction) => {
-      const agent = await transaction.agent.findUnique({ where: { id: agentId } });
+      const agent = await transaction.agent.findFirst({
+        where: { id: agentId, family: aggregateScopeWhere() },
+      });
       if (!agent) {
         throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent was not found', { agentId });
       }
@@ -160,8 +165,8 @@ export class DeploymentService implements DeploymentApi {
   }
 
   async evaluation(agentId: string) {
-    const agent = await this.prisma.agent.findUnique({
-      where: { id: agentId },
+    const agent = await this.prisma.agent.findFirst({
+      where: { id: agentId, family: aggregateScopeWhere() },
       select: { id: true },
     });
     if (!agent) {

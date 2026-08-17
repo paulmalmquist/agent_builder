@@ -48,6 +48,7 @@ import {
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScopeWhere } from '../scope.js';
 import { assertAgentTransition, assertCertificationTransition } from './transitions.js';
 import { toGateConfig } from './gate-config-service.js';
 import type { CertificationApi } from './types.js';
@@ -253,8 +254,8 @@ export class CertificationService implements CertificationApi, CertificationWork
     try {
       return await this.prisma.$transaction(
         async (transaction) => {
-          const agent = await transaction.agent.findUnique({
-            where: { id: agentId },
+          const agent = await transaction.agent.findFirst({
+            where: { id: agentId, family: aggregateScopeWhere() },
             include: { family: true, spec: true },
           });
           if (!agent)
@@ -262,6 +263,7 @@ export class CertificationService implements CertificationApi, CertificationWork
           const active = await transaction.certificationRun.findFirst({
             where: {
               agentVersionId: agentId,
+              family: aggregateScopeWhere(),
               state: { in: [DatabaseRunState.QUEUED, DatabaseRunState.RUNNING] },
             },
           });
@@ -291,11 +293,12 @@ export class CertificationService implements CertificationApi, CertificationWork
           );
           const subjectHash = agent.manifestHash ?? manifestHash(manifest);
           const corpus = await transaction.evalCorpusVersion.findFirst({
+            where: aggregateScopeWhere(),
             orderBy: { version: 'desc' },
             include: { memberships: { orderBy: { ordinal: 'asc' } } },
           });
           const gateConfig = await transaction.certificationGateConfig.findFirst({
-            where: { state: 'ACTIVE' },
+            where: { state: 'ACTIVE', ...aggregateScopeWhere() },
             orderBy: { version: 'desc' },
           });
           if (!corpus || !gateConfig) {
@@ -307,7 +310,12 @@ export class CertificationService implements CertificationApi, CertificationWork
           }
           const champion =
             !isChampion && agent.family.championAgentId !== null
-              ? await transaction.agent.findUnique({ where: { id: agent.family.championAgentId } })
+              ? await transaction.agent.findFirst({
+                  where: {
+                    id: agent.family.championAgentId,
+                    family: aggregateScopeWhere(),
+                  },
+                })
               : null;
           const championManifest =
             champion === null
@@ -449,6 +457,7 @@ export class CertificationService implements CertificationApi, CertificationWork
         const active = await this.prisma.certificationRun.findFirst({
           where: {
             agentVersionId: agentId,
+            family: aggregateScopeWhere(),
             state: { in: [DatabaseRunState.QUEUED, DatabaseRunState.RUNNING] },
           },
           orderBy: { requestedAt: 'desc' },
@@ -460,8 +469,8 @@ export class CertificationService implements CertificationApi, CertificationWork
   }
 
   async getRun(runId: string, limit: number, cursor?: string): Promise<CertificationRunDetail> {
-    const record = await this.prisma.certificationRun.findUnique({
-      where: { id: runId },
+    const record = await this.prisma.certificationRun.findFirst({
+      where: { id: runId, family: aggregateScopeWhere() },
       include: {
         gateResults: { orderBy: { gate: 'asc' } },
         promotionDecision: { select: { id: true } },
@@ -510,14 +519,14 @@ export class CertificationService implements CertificationApi, CertificationWork
   }
 
   async listRuns(agentId: string, query: { limit: number; cursor?: string }) {
-    const agent = await this.prisma.agent.findUnique({
-      where: { id: agentId },
+    const agent = await this.prisma.agent.findFirst({
+      where: { id: agentId, family: aggregateScopeWhere() },
       select: { id: true },
     });
     if (!agent)
       throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent version was not found', { agentId });
     const records = await this.prisma.certificationRun.findMany({
-      where: { agentVersionId: agentId },
+      where: { agentVersionId: agentId, family: aggregateScopeWhere() },
       orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
       ...(query.cursor === undefined ? {} : { cursor: { id: query.cursor }, skip: 1 }),
       take: query.limit + 1,
@@ -535,7 +544,11 @@ export class CertificationService implements CertificationApi, CertificationWork
     const claimed = await this.prisma.$transaction(async (transaction) => {
       const startedAt = new Date();
       const changed = await transaction.certificationRun.updateMany({
-        where: { id: runId, state: DatabaseRunState.QUEUED },
+        where: {
+          id: runId,
+          state: DatabaseRunState.QUEUED,
+          family: aggregateScopeWhere(),
+        },
         data: {
           state: DatabaseRunState.RUNNING,
           progress: 1,
@@ -876,7 +889,7 @@ export class CertificationService implements CertificationApi, CertificationWork
 
   async reapRunningRuns(): Promise<number> {
     const running = await this.prisma.certificationRun.findMany({
-      where: { state: DatabaseRunState.RUNNING },
+      where: { state: DatabaseRunState.RUNNING, family: aggregateScopeWhere() },
       select: { id: true },
     });
     for (const run of running)
@@ -890,7 +903,7 @@ export class CertificationService implements CertificationApi, CertificationWork
 
   async queuedRunIds(): Promise<string[]> {
     const runs = await this.prisma.certificationRun.findMany({
-      where: { state: DatabaseRunState.QUEUED },
+      where: { state: DatabaseRunState.QUEUED, family: aggregateScopeWhere() },
       orderBy: { requestedAt: 'asc' },
       select: { id: true },
     });
@@ -986,25 +999,26 @@ export class CertificationService implements CertificationApi, CertificationWork
       });
     const [corpus, config, agent, family, champion] = await Promise.all([
       this.prisma.evalCorpusVersion.findFirst({
+        where: aggregateScopeWhere(),
         orderBy: { version: 'desc' },
         select: { version: true },
       }),
       this.prisma.certificationGateConfig.findFirst({
-        where: { state: 'ACTIVE' },
+        where: { state: 'ACTIVE', ...aggregateScopeWhere() },
         select: { version: true },
       }),
-      this.prisma.agent.findUnique({
-        where: { id: run.agentVersionId },
+      this.prisma.agent.findFirst({
+        where: { id: run.agentVersionId, family: aggregateScopeWhere() },
         include: { spec: { select: { revision: true } } },
       }),
-      this.prisma.agentFamily.findUnique({
-        where: { id: run.familyId },
+      this.prisma.agentFamily.findFirst({
+        where: { id: run.familyId, ...aggregateScopeWhere() },
         select: { championAgentId: true },
       }),
       run.championVersionId === null
         ? null
-        : this.prisma.agent.findUnique({
-            where: { id: run.championVersionId },
+        : this.prisma.agent.findFirst({
+            where: { id: run.championVersionId, family: aggregateScopeWhere() },
             select: { manifestHash: true },
           }),
     ]);
@@ -1077,8 +1091,8 @@ export class CertificationService implements CertificationApi, CertificationWork
   }
 
   private async assertRunning(runId: string): Promise<void> {
-    const run = await this.prisma.certificationRun.findUnique({
-      where: { id: runId },
+    const run = await this.prisma.certificationRun.findFirst({
+      where: { id: runId, family: aggregateScopeWhere() },
       select: { state: true },
     });
     if (run?.state !== DatabaseRunState.RUNNING)

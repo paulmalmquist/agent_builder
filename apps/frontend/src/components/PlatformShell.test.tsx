@@ -5,22 +5,24 @@ import { PlatformShell } from './PlatformShell';
 import { renderWithClient } from '../test/render';
 
 describe('platform search', () => {
-  it('uses Paul OS identity and exposes the five consolidated surfaces', () => {
+  it('uses Paul OS identity and reserves the only navigation badge for decisions', async () => {
     renderWithClient(
       <Routes>
         <Route element={<PlatformShell />} path="/">
-          <Route index element={<div>Builder route</div>} />
+          <Route index element={<div>Attention route</div>} />
         </Route>
       </Routes>,
     );
 
     expect(screen.getByText('PAUL OS')).toBeInTheDocument();
     const navigation = screen.getByRole('navigation', { name: 'Paul OS' });
-    expect(within(navigation).getAllByRole('link')).toHaveLength(5);
-    expect(within(navigation).getByRole('link', { name: /BUILD/i })).toHaveAttribute(
+    expect(within(navigation).getAllByRole('link')).toHaveLength(6);
+    expect(within(navigation).getByRole('link', { name: /ATTENTION/i })).toHaveAttribute(
       'aria-current',
       'page',
     );
+    expect(await screen.findByLabelText('1 decisions need review')).toBeInTheDocument();
+    expect(within(navigation).getAllByLabelText(/decisions need review/i)).toHaveLength(1);
     expect(screen.getByText('GOVERNED AGENT PLATFORM')).toBeInTheDocument();
   });
 
@@ -29,7 +31,7 @@ describe('platform search', () => {
     renderWithClient(
       <Routes>
         <Route element={<PlatformShell />} path="/">
-          <Route index element={<div>Builder route</div>} />
+          <Route index element={<div>Attention route</div>} />
         </Route>
       </Routes>,
     );

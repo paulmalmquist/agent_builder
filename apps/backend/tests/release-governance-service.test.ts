@@ -232,7 +232,7 @@ describe('ReleaseGovernanceService', () => {
     };
     const transaction = {
       $queryRaw: jest.fn().mockResolvedValue([]),
-      releaseBundle: { findUnique: jest.fn().mockResolvedValue(release) },
+      releaseBundle: { findFirst: jest.fn().mockResolvedValue(release) },
       releaseEvaluation: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(evaluationRecord),
@@ -311,7 +311,7 @@ describe('ReleaseGovernanceService', () => {
     let createCount = 0;
     const transaction = {
       $queryRaw: jest.fn().mockResolvedValue([]),
-      releaseBundle: { findUnique: jest.fn().mockResolvedValue(releaseWithHistory) },
+      releaseBundle: { findFirst: jest.fn().mockResolvedValue(releaseWithHistory) },
       releaseEvaluation: {
         findUnique: jest.fn(({ where }: { where: Record<string, Record<string, string>> }) => {
           const key = Object.values(where)[0]?.['historySnapshotDigest'];
@@ -414,6 +414,7 @@ describe('ReleaseGovernanceService', () => {
       releaseId,
       releaseDigest: release.digest,
       verdict: ReleaseEvaluationVerdict.PASSED,
+      declineDecisions: [],
     };
     const certifiedRelease = {
       ...release,
@@ -446,10 +447,10 @@ describe('ReleaseGovernanceService', () => {
     const transaction = {
       $executeRaw: jest.fn().mockResolvedValue(1),
       $queryRaw: jest.fn().mockResolvedValue([]),
-      releaseBundle: { findUnique: jest.fn().mockResolvedValue(certifiedRelease) },
-      releaseEvaluation: { findUnique: jest.fn().mockResolvedValue(evidence) },
+      releaseBundle: { findFirst: jest.fn().mockResolvedValue(certifiedRelease) },
+      releaseEvaluation: { findFirst: jest.fn().mockResolvedValue(evidence) },
       productionChannel: {
-        findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(channel),
         update: jest.fn().mockResolvedValue({
           ...channel,
@@ -461,6 +462,7 @@ describe('ReleaseGovernanceService', () => {
       },
       releasePromotionDecision: { create: jest.fn().mockResolvedValue(decision) },
       auditEvent: { create: jest.fn().mockResolvedValue({ id: 'audit-id' }) },
+      platformEvent: { create: jest.fn().mockResolvedValue({ id: 'platform-event-id' }) },
     };
     const prisma = {
       $transaction: jest.fn((operation: (client: typeof transaction) => unknown) =>
@@ -487,7 +489,7 @@ describe('ReleaseGovernanceService', () => {
     expect(promoted.channel.currentReleaseId).toBe(releaseId);
     expect(promoted.decision.decidedBy).toBe('human:test');
 
-    transaction.releaseBundle.findUnique.mockResolvedValue({
+    transaction.releaseBundle.findFirst.mockResolvedValue({
       ...certifiedRelease,
       id: secondReleaseId,
       digest: 'd'.repeat(64),
@@ -496,7 +498,7 @@ describe('ReleaseGovernanceService', () => {
         resourceVersion: { ...member.resourceVersion, sourceCommit: 'legacy-unverified' },
       })),
     });
-    transaction.releaseEvaluation.findUnique.mockResolvedValue({
+    transaction.releaseEvaluation.findFirst.mockResolvedValue({
       ...evidence,
       releaseId: secondReleaseId,
       releaseDigest: 'd'.repeat(64),

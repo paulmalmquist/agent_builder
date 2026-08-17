@@ -1,5 +1,9 @@
 import type { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import {
+  attentionItemDetailSchema,
+  attentionItemParamsSchema,
+  attentionResolutionSchema,
+  attentionResponseSchema,
   automationScheduleListQuerySchema,
   automationScheduleListResponseSchema,
   automationScheduleSchema,
@@ -15,6 +19,7 @@ import {
   createMemoryCandidateRequestSchema,
   createObservationRequestSchema,
   createReleaseEvaluationRequestSchema,
+  declineReleaseRequestSchema,
   createReleaseRequestSchema,
   executionRunListQuerySchema,
   executionRunListResponseSchema,
@@ -37,6 +42,9 @@ import {
   productionChannelSchema,
   promoteReleaseRequestSchema,
   releaseEvaluationSchema,
+  releaseDeclineResponseSchema,
+  rejectExecutionRunRequestSchema,
+  resolveAttentionItemRequestSchema,
   rollbackReleaseRequestSchema,
   releaseBundleSchema,
   repositoryImportRequestSchema,
@@ -82,6 +90,32 @@ function send<TSchema extends z.ZodTypeAny>(
 }
 
 export function registerPlatformRoutes(router: Router, services: PlatformServices): void {
+  router.get(
+    '/v1/attention',
+    asyncRoute(async (_request, response) => {
+      send(response, 200, attentionResponseSchema, await services.attention.list());
+    }),
+  );
+  router.post(
+    '/v1/attention-items/:itemId/resolve',
+    asyncRoute(async (request, response) => {
+      const { itemId } = attentionItemParamsSchema.parse(request.params);
+      const input = resolveAttentionItemRequestSchema.parse(request.body);
+      send(
+        response,
+        200,
+        attentionResolutionSchema,
+        await services.attention.resolveItem(itemId, input),
+      );
+    }),
+  );
+  router.get(
+    '/v1/attention-items/:itemId',
+    asyncRoute(async (request, response) => {
+      const { itemId } = attentionItemParamsSchema.parse(request.params);
+      send(response, 200, attentionItemDetailSchema, await services.attention.getItem(itemId));
+    }),
+  );
   router.get(
     '/v1/resources',
     asyncRoute(async (request, response) => {
@@ -166,6 +200,19 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
         200,
         productionChannelMutationResponseSchema,
         await services.releaseGovernance.promote(channelKey, input),
+      );
+    }),
+  );
+  router.post(
+    '/v1/production-channels/:channelKey/decline',
+    asyncRoute(async (request, response) => {
+      const channelKey = productionChannelKeySchema.parse(request.params['channelKey']);
+      const input = declineReleaseRequestSchema.parse(request.body);
+      send(
+        response,
+        200,
+        releaseDeclineResponseSchema,
+        await services.releaseGovernance.decline(channelKey, input),
       );
     }),
   );
@@ -423,6 +470,19 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
       if (services.dispatchMode === 'in_process')
         services.executionDispatcher.enqueue(result.run.id);
       send(response, 200, approveExecutionRunResponseSchema, result);
+    }),
+  );
+  router.post(
+    '/v1/execution-runs/:runId/reject',
+    uuidParam('runId'),
+    asyncRoute(async (request, response) => {
+      const input = rejectExecutionRunRequestSchema.parse(request.body);
+      send(
+        response,
+        200,
+        executionRunSchema,
+        await services.execution.rejectRun(request.params['runId'] as string, input),
+      );
     }),
   );
   router.post(

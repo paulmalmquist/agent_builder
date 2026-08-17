@@ -25,6 +25,7 @@ import {
   metricSampleSchema,
   outcomeListResponseSchema,
   outcomeRecordSchema,
+  rejectExecutionRunRequestSchema,
   resourceManifestSchema,
   skillSpecSchema,
   type AuthorityGrant,
@@ -49,7 +50,13 @@ import { appendAuditEvent } from '../audit.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { requireHumanActor } from './actors.js';
+import {
+  appendExecutionRunEvent,
+  appendPlatformEvent,
+  recordDigestDeliveryForRun,
+} from './attention-service.js';
 
 const providerKindMap = {
   deterministic: ModelProviderKind.DETERMINISTIC,
@@ -177,6 +184,7 @@ function toRun(record: DatabaseExecutionRun): ExecutionRun {
       'ExecutionRun.requiredToolScopes',
     ),
     authorityGrantId: record.authorityGrantId,
+    digestSnapshotId: record.digestSnapshotId,
     state: runStateWire[record.state],
     input: parseJson(jsonObjectSchema, record.input, 'ExecutionRun.input'),
     providerKind: providerKindWire[record.providerKind],
@@ -291,8 +299,8 @@ export class ExecutionService implements ExecutionWorkerApi {
   }
 
   private async release(releaseId: string): Promise<ReleaseForExecution> {
-    const release = await this.prisma.releaseBundle.findUnique({
-      where: { id: releaseId },
+    const release = await this.prisma.releaseBundle.findFirst({
+      where: { id: releaseId, ...aggregateScopeWhere() },
       include: {
         resources: { include: { resourceVersion: { include: { family: true } } } },
       },
@@ -316,6 +324,8 @@ export class ExecutionService implements ExecutionWorkerApi {
       blockers.push(`Authority grant is ${grantStateWire[grant.state]}`);
     if (grant.releaseId !== release.id || grant.releaseDigest !== release.digest)
       blockers.push('Authority grant release digest does not match');
+    if (grant.workspaceId !== release.workspaceId || grant.departmentId !== release.departmentId)
+      blockers.push('Authority grant release scope does not match');
     if (grant.contextDigest !== contextDigest)
       blockers.push('Authority grant execution context does not match');
     if (grant.projectId !== release.projectId)
@@ -361,6 +371,14 @@ export class ExecutionService implements ExecutionWorkerApi {
     }
     if (grant.releaseId !== run.releaseId || grant.releaseDigest !== run.releaseDigest) {
       blockers.push('Authority grant release digest does not match');
+    }
+    if (
+      grant.workspaceId !== run.workspaceId ||
+      grant.departmentId !== run.departmentId ||
+      release.workspaceId !== run.workspaceId ||
+      release.departmentId !== run.departmentId
+    ) {
+      blockers.push('Authority grant release scope does not match');
     }
     if (grant.contextDigest !== run.contextDigest) {
       blockers.push('Authority grant execution context does not match');
@@ -414,8 +432,12 @@ export class ExecutionService implements ExecutionWorkerApi {
       WHERE "id" = ${run.authorityGrantId}::uuid
       FOR UPDATE
     `;
-    const grant = await transaction.authorityGrant.findUnique({
-      where: { id: run.authorityGrantId },
+    const grant = await transaction.authorityGrant.findFirst({
+      where: {
+        id: run.authorityGrantId,
+        workspaceId: run.workspaceId,
+        departmentId: run.departmentId,
+      },
     });
     if (grant === null) return;
     const reservedCostUsd = Math.max(
@@ -485,7 +507,11 @@ export class ExecutionService implements ExecutionWorkerApi {
     limit: number;
   }): Promise<z.infer<typeof authorityGrantListResponseSchema>> {
     await this.prisma.authorityGrant.updateMany({
-      where: { state: AuthorityGrantState.ACTIVE, validUntil: { lte: new Date() } },
+      where: {
+        state: AuthorityGrantState.ACTIVE,
+        validUntil: { lte: new Date() },
+        ...aggregateScopeWhere(),
+      },
       data: { state: AuthorityGrantState.EXPIRED },
     });
     const state =
@@ -495,7 +521,7 @@ export class ExecutionService implements ExecutionWorkerApi {
             | AuthorityGrantState
             | undefined);
     const records = await this.prisma.authorityGrant.findMany({
-      where: state === undefined ? {} : { state },
+      where: { ...aggregateScopeWhere(), ...(state === undefined ? {} : { state }) },
       orderBy: { createdAt: 'desc' },
       take: query.limit,
     });
@@ -521,6 +547,7 @@ export class ExecutionService implements ExecutionWorkerApi {
     const record = await this.prisma.$transaction(async (transaction) => {
       const created = await transaction.authorityGrant.create({
         data: {
+          ...aggregateScope(),
           releaseId: release.id,
           releaseDigest: release.digest,
           contextDigest: parsed.contextDigest,
@@ -577,7 +604,9 @@ export class ExecutionService implements ExecutionWorkerApi {
         WHERE "id" = ${grantId}::uuid
         FOR UPDATE
       `;
-          const existing = await transaction.authorityGrant.findUnique({ where: { id: grantId } });
+          const existing = await transaction.authorityGrant.findFirst({
+            where: { id: grantId, ...aggregateScopeWhere() },
+          });
           if (existing === null)
             throw new AppError(404, 'AUTHORITY_GRANT_NOT_FOUND', 'Authority grant was not found');
           if (existing.state === AuthorityGrantState.REVOKED) {
@@ -688,19 +717,25 @@ export class ExecutionService implements ExecutionWorkerApi {
             | ExecutionRunState
             | undefined);
     const records = await this.prisma.executionRun.findMany({
-      where: databaseState === undefined ? {} : { state: databaseState },
+      where: {
+        ...aggregateScopeWhere(),
+        ...(databaseState === undefined ? {} : { state: databaseState }),
+      },
       orderBy: { createdAt: 'desc' },
       take: query.limit,
     });
     return executionRunListResponseSchema.parse({ items: records.map(toRun) });
   }
 
-  async createRun(input: z.input<typeof createExecutionRunRequestSchema>): Promise<ExecutionRun> {
+  async createRun(
+    input: z.input<typeof createExecutionRunRequestSchema>,
+    options: { digestSnapshotId?: string | null } = {},
+  ): Promise<ExecutionRun> {
     const parsed = createExecutionRunRequestSchema.parse(input);
     const executionContext = await this.executionContext();
     const contextSummary = summarizeExecutionContext(executionContext);
-    const idempotent = await this.prisma.executionRun.findUnique({
-      where: { idempotencyKey: parsed.idempotencyKey },
+    const idempotent = await this.prisma.executionRun.findFirst({
+      where: { idempotencyKey: parsed.idempotencyKey, ...aggregateScopeWhere() },
     });
     if (idempotent !== null) {
       const sameRequest =
@@ -713,7 +748,8 @@ export class ExecutionService implements ExecutionWorkerApi {
         idempotent.maxOutputTokens === parsed.maxOutputTokens &&
         Number(idempotent.maxEstimatedCostUsd) === parsed.maxEstimatedCostUsd;
       const sameDevelopmentMode = idempotent.developmentDraft === parsed.developmentDraft;
-      if (!sameRequest || !sameDevelopmentMode) {
+      const sameDigestSnapshot = idempotent.digestSnapshotId === (options.digestSnapshotId ?? null);
+      if (!sameRequest || !sameDevelopmentMode || !sameDigestSnapshot) {
         throw new AppError(
           409,
           'IDEMPOTENCY_KEY_REUSED',
@@ -723,8 +759,8 @@ export class ExecutionService implements ExecutionWorkerApi {
       return toRun(idempotent);
     }
     const release = await this.release(parsed.releaseId);
-    const channel = await this.prisma.productionChannel.findUnique({
-      where: { key: release.projectId ?? 'default' },
+    const channel = await this.prisma.productionChannel.findFirst({
+      where: { key: release.projectId ?? 'default', ...aggregateScopeWhere() },
     });
     const isProductionRelease = channel?.currentReleaseId === release.id;
     const requiresProductionEpochApproval =
@@ -791,7 +827,9 @@ export class ExecutionService implements ExecutionWorkerApi {
     const grant =
       parsed.authorityGrantId === null
         ? null
-        : await this.prisma.authorityGrant.findUnique({ where: { id: parsed.authorityGrantId } });
+        : await this.prisma.authorityGrant.findFirst({
+            where: { id: parsed.authorityGrantId, ...aggregateScopeWhere() },
+          });
     const blockers = this.grantBlockers(
       grant,
       release,
@@ -815,8 +853,10 @@ export class ExecutionService implements ExecutionWorkerApi {
       async (transaction) => {
         const created = await transaction.executionRun.create({
           data: {
+            ...aggregateScope(),
             releaseId: release.id,
             authorityGrantId: state === ExecutionRunState.QUEUED ? (grant?.id ?? null) : null,
+            digestSnapshotId: options.digestSnapshotId ?? null,
             releaseDigest: release.digest,
             contextDigest: executionContext.digest,
             contextProvenance: toPrismaJson(
@@ -875,6 +915,11 @@ export class ExecutionService implements ExecutionWorkerApi {
           entityId: created.id,
           details: { releaseId: release.id, state: runStateWire[state] },
         });
+        await appendExecutionRunEvent(transaction, created, {
+          phase: 'request',
+          state: runStateWire[state],
+          message: created.message,
+        });
         return created;
       },
       { isolationLevel: 'Serializable' },
@@ -893,7 +938,9 @@ export class ExecutionService implements ExecutionWorkerApi {
     }
     const result = await this.prisma.$transaction(
       async (transaction) => {
-        const run = await transaction.executionRun.findUnique({ where: { id: runId } });
+        const run = await transaction.executionRun.findFirst({
+          where: { id: runId, ...aggregateScopeWhere() },
+        });
         if (run === null)
           throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
         if (run.state !== ExecutionRunState.AWAITING_APPROVAL) {
@@ -903,8 +950,12 @@ export class ExecutionService implements ExecutionWorkerApi {
             'Only an awaiting run can be approved',
           );
         }
-        const release = await transaction.releaseBundle.findUnique({
-          where: { id: run.releaseId },
+        const release = await transaction.releaseBundle.findFirst({
+          where: {
+            id: run.releaseId,
+            workspaceId: run.workspaceId,
+            departmentId: run.departmentId,
+          },
           include: { resources: { include: { resourceVersion: { include: { family: true } } } } },
         });
         if (release === null || release.digest !== run.releaseDigest) {
@@ -912,6 +963,8 @@ export class ExecutionService implements ExecutionWorkerApi {
         }
         const grant = await transaction.authorityGrant.create({
           data: {
+            workspaceId: run.workspaceId,
+            departmentId: run.departmentId,
             releaseId: release.id,
             releaseDigest: release.digest,
             contextDigest: run.contextDigest,
@@ -974,6 +1027,11 @@ export class ExecutionService implements ExecutionWorkerApi {
           entityId: runId,
           details: { authorityGrantId: grant.id, releaseDigest: release.digest },
         });
+        await appendExecutionRunEvent(transaction, updatedRun, {
+          phase: 'authority',
+          state: 'approved',
+          message: 'A human approved bounded authority for this run.',
+        });
         return {
           grant: await transaction.authorityGrant.findUniqueOrThrow({ where: { id: grant.id } }),
           run: updatedRun,
@@ -984,8 +1042,80 @@ export class ExecutionService implements ExecutionWorkerApi {
     return { grant: toGrant(result.grant), run: toRun(result.run) };
   }
 
+  async rejectRun(
+    runId: string,
+    input: z.input<typeof rejectExecutionRunRequestSchema>,
+  ): Promise<ExecutionRun> {
+    const actor = requireHumanActor();
+    const { rationale } = rejectExecutionRunRequestSchema.parse(input);
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const run = await transaction.executionRun.findFirst({
+        where: { id: runId, ...aggregateScopeWhere() },
+      });
+      if (run === null) {
+        throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
+      }
+      if (run.state !== ExecutionRunState.AWAITING_APPROVAL) {
+        throw new AppError(
+          409,
+          'RUN_NOT_AWAITING_APPROVAL',
+          'Only a run awaiting approval can be rejected',
+        );
+      }
+      const approval = await transaction.approvalRequest.findUnique({ where: { runId } });
+      if (approval?.state !== ApprovalRequestState.PENDING) {
+        throw new AppError(
+          409,
+          'APPROVAL_ALREADY_DECIDED',
+          'The authority request has already been decided',
+        );
+      }
+      const finishedAt = new Date();
+      const updated = await transaction.executionRun.update({
+        where: { id: runId },
+        data: { state: ExecutionRunState.CANCELLED, message: 'Rejected', finishedAt },
+      });
+      await transaction.approvalRequest.update({
+        where: { runId },
+        data: {
+          state: ApprovalRequestState.REJECTED,
+          decidedBy: actor,
+          rationale,
+          decidedAt: finishedAt,
+        },
+      });
+      await appendExecutionRunEvent(transaction, run, {
+        phase: 'authority',
+        state: 'rejected',
+        message: 'A human rejected this run request.',
+        occurredAt: finishedAt,
+      });
+      await appendPlatformEvent(transaction, {
+        kind: 'execution.rejected',
+        entityType: 'ExecutionRun',
+        entityId: runId,
+        summary: { releaseId: run.releaseId, rationale },
+        occurredAt: finishedAt,
+      });
+      await recordDigestDeliveryForRun(transaction, run, {
+        state: 'failed',
+        code: 'RUN_REJECTED',
+      });
+      await appendAuditEvent(transaction, {
+        action: 'execution.rejected',
+        entityType: 'ExecutionRun',
+        entityId: runId,
+        details: { rationale },
+      });
+      return updated;
+    });
+    return toRun(result);
+  }
+
   async getRun(runId: string): Promise<ExecutionRun> {
-    const record = await this.prisma.executionRun.findUnique({ where: { id: runId } });
+    const record = await this.prisma.executionRun.findFirst({
+      where: { id: runId, ...aggregateScopeWhere() },
+    });
     if (record === null)
       throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
     return toRun(record);
@@ -994,7 +1124,9 @@ export class ExecutionService implements ExecutionWorkerApi {
   async cancelRun(runId: string): Promise<ExecutionRun> {
     const actor = currentActorId();
     const result = await this.prisma.$transaction(async (transaction) => {
-      const run = await transaction.executionRun.findUnique({ where: { id: runId } });
+      const run = await transaction.executionRun.findFirst({
+        where: { id: runId, ...aggregateScopeWhere() },
+      });
       if (run === null)
         throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
       if (
@@ -1016,6 +1148,22 @@ export class ExecutionService implements ExecutionWorkerApi {
           where: { runId, state: ApprovalRequestState.PENDING },
           data: { state: ApprovalRequestState.CANCELLED, decidedBy: actor, decidedAt: new Date() },
         });
+        await appendExecutionRunEvent(transaction, run, {
+          phase: 'outcome',
+          state: 'cancelled',
+          message: 'The run was cancelled before execution began.',
+          metadata: { code: 'RUN_CANCELLED' },
+        });
+        await appendPlatformEvent(transaction, {
+          kind: 'execution.cancelled',
+          entityType: 'ExecutionRun',
+          entityId: runId,
+          summary: { code: 'RUN_CANCELLED' },
+        });
+        await recordDigestDeliveryForRun(transaction, run, {
+          state: 'failed',
+          code: 'RUN_CANCELLED',
+        });
       }
       await appendAuditEvent(transaction, {
         action: 'execution.cancelled',
@@ -1032,7 +1180,10 @@ export class ExecutionService implements ExecutionWorkerApi {
 
   async listOutcomes(runId?: string): Promise<z.infer<typeof outcomeListResponseSchema>> {
     const records = await this.prisma.outcomeRecord.findMany({
-      where: runId === undefined ? {} : { runId },
+      where: {
+        run: aggregateScopeWhere(),
+        ...(runId === undefined ? {} : { runId }),
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -1058,7 +1209,7 @@ export class ExecutionService implements ExecutionWorkerApi {
 
   async listMetrics(runId?: string): Promise<z.infer<typeof metricListResponseSchema>> {
     const records = await this.prisma.metricSample.findMany({
-      where: runId === undefined ? {} : { runId },
+      where: { ...aggregateScopeWhere(), ...(runId === undefined ? {} : { runId }) },
       orderBy: { observedAt: 'desc' },
       take: 500,
     });
@@ -1080,6 +1231,7 @@ export class ExecutionService implements ExecutionWorkerApi {
   async recoverExpiredLeases(): Promise<number> {
     const expired = await this.prisma.executionRun.findMany({
       where: {
+        ...aggregateScopeWhere(),
         state: ExecutionRunState.RUNNING,
         leaseExpiresAt: { lt: new Date() },
       },
@@ -1104,14 +1256,15 @@ export class ExecutionService implements ExecutionWorkerApi {
         await this.reconcileReservation(transaction, run);
         const cancelled = run.cancelRequestedAt !== null;
         const exhausted = run.attempts >= run.maxAttempts;
+        const recoveredState = cancelled
+          ? ExecutionRunState.CANCELLED
+          : exhausted
+            ? ExecutionRunState.FAILED
+            : ExecutionRunState.QUEUED;
         await transaction.executionRun.update({
           where: { id },
           data: {
-            state: cancelled
-              ? ExecutionRunState.CANCELLED
-              : exhausted
-                ? ExecutionRunState.FAILED
-                : ExecutionRunState.QUEUED,
+            state: recoveredState,
             message: cancelled
               ? 'Cancelled during worker recovery'
               : exhausted
@@ -1130,6 +1283,39 @@ export class ExecutionService implements ExecutionWorkerApi {
             heartbeatAt: null,
           },
         });
+        await appendExecutionRunEvent(transaction, run, {
+          phase: 'worker-recovery',
+          state: cancelled ? 'cancelled' : exhausted ? 'failed' : 'queued',
+          message: cancelled
+            ? 'Worker recovery completed a pending cancellation.'
+            : exhausted
+              ? 'Worker recovery exhausted the retry limit.'
+              : 'Worker recovery returned the run to the queue.',
+          metadata: { attempt: run.attempts, maxAttempts: run.maxAttempts },
+        });
+        await appendAuditEvent(transaction, {
+          action: cancelled
+            ? 'execution.recovery_cancelled'
+            : exhausted
+              ? 'execution.recovery_failed'
+              : 'execution.requeued_after_restart',
+          entityType: 'ExecutionRun',
+          entityId: run.id,
+          details:
+            cancelled || exhausted
+              ? { code: cancelled ? 'RUN_CANCELLED' : 'WORKER_LEASE_EXHAUSTED' }
+              : { attempt: run.attempts, maxAttempts: run.maxAttempts },
+        });
+        if (cancelled || exhausted) {
+          const code = cancelled ? 'RUN_CANCELLED' : 'WORKER_LEASE_EXHAUSTED';
+          await appendPlatformEvent(transaction, {
+            kind: cancelled ? 'execution.cancelled' : 'execution.failed',
+            entityType: 'ExecutionRun',
+            entityId: run.id,
+            summary: { code },
+          });
+          await recordDigestDeliveryForRun(transaction, run, { state: 'failed', code });
+        }
       });
     }
     return expired.length;
@@ -1137,7 +1323,7 @@ export class ExecutionService implements ExecutionWorkerApi {
 
   async queuedRunIds(limit = 100): Promise<string[]> {
     const rows = await this.prisma.executionRun.findMany({
-      where: { state: ExecutionRunState.QUEUED },
+      where: { state: ExecutionRunState.QUEUED, ...aggregateScopeWhere() },
       orderBy: { createdAt: 'asc' },
       take: limit,
       select: { id: true },
@@ -1153,8 +1339,8 @@ export class ExecutionService implements ExecutionWorkerApi {
           WHERE "id" = ${runId}::uuid
           FOR UPDATE
         `;
-        const run = await transaction.executionRun.findUnique({
-          where: { id: runId },
+        const run = await transaction.executionRun.findFirst({
+          where: { id: runId, ...aggregateScopeWhere() },
           include: {
             release: {
               include: {
@@ -1175,8 +1361,12 @@ export class ExecutionService implements ExecutionWorkerApi {
           WHERE "id" = ${run.authorityGrantId}::uuid
           FOR UPDATE
         `;
-        const grant = await transaction.authorityGrant.findUnique({
-          where: { id: run.authorityGrantId },
+        const grant = await transaction.authorityGrant.findFirst({
+          where: {
+            id: run.authorityGrantId,
+            workspaceId: run.workspaceId,
+            departmentId: run.departmentId,
+          },
         });
         const input = parseJson(jsonObjectSchema, run.input, 'ExecutionRun.input');
         const requiredTools = parseJson(
@@ -1202,8 +1392,12 @@ export class ExecutionService implements ExecutionWorkerApi {
             ),
         );
         if (!run.developmentDraft) {
-          const channel = await transaction.productionChannel.findUnique({
-            where: { key: run.projectId ?? 'default' },
+          const channel = await transaction.productionChannel.findFirst({
+            where: {
+              key: run.projectId ?? 'default',
+              workspaceId: run.workspaceId,
+              departmentId: run.departmentId,
+            },
           });
           if (channel?.currentReleaseId !== run.releaseId) {
             blockers.unshift('Release is no longer the current production release');
@@ -1307,7 +1501,12 @@ export class ExecutionService implements ExecutionWorkerApi {
   async heartbeat(runId: string, workerId: string, leaseMs = 60_000): Promise<boolean> {
     const now = new Date();
     const result = await this.prisma.executionRun.updateMany({
-      where: { id: runId, state: ExecutionRunState.RUNNING, leaseOwner: workerId },
+      where: {
+        id: runId,
+        state: ExecutionRunState.RUNNING,
+        leaseOwner: workerId,
+        ...aggregateScopeWhere(),
+      },
       data: { heartbeatAt: now, leaseExpiresAt: new Date(now.getTime() + leaseMs) },
     });
     return result.count === 1;
@@ -1323,7 +1522,12 @@ export class ExecutionService implements ExecutionWorkerApi {
           FOR UPDATE
         `;
         const candidate = await transaction.executionRun.findFirst({
-          where: { id: runId, state: ExecutionRunState.RUNNING, leaseOwner: workerId },
+          where: {
+            id: runId,
+            state: ExecutionRunState.RUNNING,
+            leaseOwner: workerId,
+            ...aggregateScopeWhere(),
+          },
           include: {
             release: {
               include: {
@@ -1361,8 +1565,12 @@ export class ExecutionService implements ExecutionWorkerApi {
           WHERE "id" = ${candidate.authorityGrantId}::uuid
           FOR UPDATE
         `;
-        const grant = await transaction.authorityGrant.findUnique({
-          where: { id: candidate.authorityGrantId },
+        const grant = await transaction.authorityGrant.findFirst({
+          where: {
+            id: candidate.authorityGrantId,
+            workspaceId: candidate.workspaceId,
+            departmentId: candidate.departmentId,
+          },
         });
         const blockers = this.claimedGrantBlockers(grant, candidate, candidate.release);
         if (blockers.length > 0) {
@@ -1471,6 +1679,22 @@ export class ExecutionService implements ExecutionWorkerApi {
                 heartbeatAt: null,
               },
             });
+            await appendExecutionRunEvent(transaction, latest, {
+              phase: 'outcome',
+              state: 'cancelled',
+              message: 'The run was cancelled before its outcome was committed.',
+              costUsd: actualCost,
+            });
+            await appendPlatformEvent(transaction, {
+              kind: 'execution.cancelled',
+              entityType: 'ExecutionRun',
+              entityId: runId,
+              summary: { costUsd: actualCost },
+            });
+            await recordDigestDeliveryForRun(transaction, latest, {
+              state: 'failed',
+              code: 'RUN_CANCELLED',
+            });
             return;
           }
           if (actualCost > Number(latest.estimatedUpperCostUsd) + Number.EPSILON) {
@@ -1497,26 +1721,46 @@ export class ExecutionService implements ExecutionWorkerApi {
           await transaction.metricSample.createMany({
             data: [
               {
+                workspaceId: latest.workspaceId,
+                departmentId: latest.departmentId,
                 runId,
                 name: 'model.input_tokens',
                 value: response.usage.inputTokens,
                 unit: 'tokens',
               },
               {
+                workspaceId: latest.workspaceId,
+                departmentId: latest.departmentId,
                 runId,
                 name: 'model.output_tokens',
                 value: response.usage.outputTokens,
                 unit: 'tokens',
               },
               {
+                workspaceId: latest.workspaceId,
+                departmentId: latest.departmentId,
                 runId,
                 name: 'model.cost',
                 value: actualCost,
                 unit: 'usd',
                 metadata: { pricingVersion: this.config.model.pricingVersion },
               },
-              { runId, name: 'run.latency', value: latencyMs, unit: 'ms' },
-              { runId, name: 'outcome.quality', value: qualityScore, unit: 'ratio' },
+              {
+                workspaceId: latest.workspaceId,
+                departmentId: latest.departmentId,
+                runId,
+                name: 'run.latency',
+                value: latencyMs,
+                unit: 'ms',
+              },
+              {
+                workspaceId: latest.workspaceId,
+                departmentId: latest.departmentId,
+                runId,
+                name: 'outcome.quality',
+                value: qualityScore,
+                unit: 'ratio',
+              },
             ],
           });
           await transaction.executionRun.update({
@@ -1542,6 +1786,23 @@ export class ExecutionService implements ExecutionWorkerApi {
               model: this.provider.model,
               pricingVersion: this.config.model.pricingVersion,
             },
+          });
+          await appendExecutionRunEvent(transaction, latest, {
+            phase: 'outcome',
+            state: 'succeeded',
+            message: 'The validated Daily Brief outcome completed.',
+            durationMs: Math.max(0, Math.round(latencyMs)),
+            costUsd: actualCost,
+          });
+          await appendPlatformEvent(transaction, {
+            kind: 'execution.succeeded',
+            entityType: 'ExecutionRun',
+            entityId: runId,
+            summary: { costUsd: actualCost, latencyMs, qualityScore },
+          });
+          await recordDigestDeliveryForRun(transaction, latest, {
+            state: 'delivered',
+            costUsd: actualCost,
           });
         },
         { isolationLevel: 'Serializable' },
@@ -1584,6 +1845,22 @@ export class ExecutionService implements ExecutionWorkerApi {
         entityType: 'ExecutionRun',
         entityId: runId,
         details: cancelled ? {} : { code },
+      });
+      await appendExecutionRunEvent(transaction, run, {
+        phase: 'outcome',
+        state: cancelled ? 'cancelled' : 'failed',
+        message: cancelled ? 'The run was cancelled.' : 'The run failed before an outcome.',
+        metadata: cancelled ? {} : { code },
+      });
+      await appendPlatformEvent(transaction, {
+        kind: cancelled ? 'execution.cancelled' : 'execution.failed',
+        entityType: 'ExecutionRun',
+        entityId: runId,
+        summary: cancelled ? {} : { code },
+      });
+      await recordDigestDeliveryForRun(transaction, run, {
+        state: 'failed',
+        code: cancelled ? 'RUN_CANCELLED' : code,
       });
     });
   }

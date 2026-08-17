@@ -274,6 +274,7 @@ let grantState: 'active' | 'revoked' | 'exhausted' | 'expired' = 'active';
 let automationScheduleState: 'active' | 'paused' = 'active';
 let improvementCandidateState: 'proposed' | 'incubating' | 'rejected' = 'proposed';
 let memoryCandidateState: 'staged' | 'accepted' | 'rejected' = 'staged';
+let degradedAttentionResolved = false;
 
 export function resetFixtures() {
   specFixture = null;
@@ -284,6 +285,116 @@ export function resetFixtures() {
   automationScheduleState = 'active';
   improvementCandidateState = 'proposed';
   memoryCandidateState = 'staged';
+  degradedAttentionResolved = false;
+}
+
+function attentionItem() {
+  return {
+    id: `execution_approval:${executionRunId}`,
+    kind: 'execution_approval' as const,
+    shelf: 'decide' as const,
+    headline: 'Daily Briefing is ready for its first approved run',
+    delta: 'One new immutable release asks to run with read-only calendar access.',
+    status: 'decide' as const,
+    primaryAction: {
+      kind: 'approve_run' as const,
+      label: 'Review and approve',
+      consequence: 'Approves this exact release, input, scope, context, and budget envelope.',
+      undo: 'Revoke the grant at any time to stop later matching runs.',
+      resourceId: executionRunId,
+      requiresRationale: true,
+    },
+    secondaryAction: {
+      kind: 'reject_run' as const,
+      label: 'Reject request',
+      consequence: 'Cancels this run and records the reason without granting authority.',
+      undo: 'Create a new request if its scope or evidence changes.',
+      resourceId: executionRunId,
+      requiresRationale: true,
+    },
+    cost: { period: 'run' as const, usd: 0.4, budgetUsd: 0.5 },
+    reason: 'The first run of every newly promoted release requires your approval.',
+    provenance: {
+      sourceType: 'execution_run',
+      sourceId: executionRunId,
+      actorId: 'test-operator',
+      requestId: 'test-request',
+      explanation: 'A human-started production run reached its first-run authority gate.',
+    },
+    occurredAt: now,
+    payload: {
+      sourceType: 'execution_run',
+      sourceId: executionRunId,
+      detailPath: `/runs?run=${executionRunId}`,
+      scopes: ['Calendar — read only'],
+      runId: executionRunId,
+      candidateId: null,
+      channelKey: null,
+      releaseId,
+      evaluationId: null,
+      expiresAt: '2026-08-01T14:00:00.000Z',
+      reviewFacts: [
+        { label: 'Release', value: 'Daily Briefing · immutable production digest' },
+        { label: 'Authority', value: 'Calendar — read only' },
+        { label: 'Budget', value: 'About $0.40 per run · $0.50 maximum' },
+      ],
+      metadata: {},
+    },
+  };
+}
+
+function degradedAttentionItem() {
+  return {
+    id: `stalled_run:${executionRunId}`,
+    kind: 'stalled_run' as const,
+    shelf: 'degraded' as const,
+    headline: 'One run exhausted its retry limit',
+    delta: 'Three attempts failed · no outcome was published.',
+    status: 'degraded' as const,
+    primaryAction: {
+      kind: 'open_details' as const,
+      label: 'Review failure',
+      consequence: 'Opens the exact failure history without changing the run.',
+      undo: 'Close the detail to leave the immutable failure unchanged.',
+      resourceId: executionRunId,
+      requiresRationale: false,
+    },
+    secondaryAction: {
+      kind: 'resolve_item' as const,
+      label: 'Acknowledge failure',
+      consequence: 'Removes this resolved stop from your active review queue.',
+      undo: 'The immutable run history remains available in Runs and Evidence.',
+      resourceId: `stalled_run:${executionRunId}`,
+      requiresRationale: true,
+    },
+    cost: { period: 'run' as const, usd: 0.12, budgetUsd: 0.5 },
+    reason: 'The worker exhausted the configured retry policy without producing an outcome.',
+    provenance: {
+      sourceType: 'execution_run',
+      sourceId: executionRunId,
+      actorId: 'system:worker',
+      requestId: null,
+      explanation: 'The worker recorded a terminal failure after its final bounded retry.',
+    },
+    occurredAt: now,
+    payload: {
+      sourceType: 'execution_run',
+      sourceId: executionRunId,
+      detailPath: `/runs?run=${executionRunId}`,
+      scopes: [],
+      runId: executionRunId,
+      candidateId: null,
+      channelKey: null,
+      releaseId,
+      evaluationId: null,
+      expiresAt: null,
+      reviewFacts: [
+        { label: 'Run state', value: 'Failed after the final retry' },
+        { label: 'Cost', value: '$0.12 incurred' },
+      ],
+      metadata: {},
+    },
+  };
 }
 
 const platformResource = {
@@ -606,6 +717,70 @@ function requireSpec() {
 }
 
 export const handlers = [
+  http.get('http://localhost/v1/attention', () => {
+    const decide = platformRunState === 'awaiting_approval' ? [attentionItem()] : [];
+    return HttpResponse.json({
+      generatedAt: now,
+      decide,
+      degraded: degradedAttentionResolved ? [] : [degradedAttentionItem()],
+      digest: {
+        headline: '34 runs · $2.10 · 2 promotions this week',
+        runCount: 34,
+        totalCostUsd: 2.1,
+        promotionCount: 2,
+        observationCount: 1,
+        windowStartedAt: '2026-07-30T14:00:00.000Z',
+        windowEndedAt: now,
+      },
+      decideBadgeCount: decide.length,
+      lastDeliveredBriefingAt: '2026-07-30T11:00:00.000Z',
+    });
+  }),
+
+  http.get('http://localhost/v1/attention-items/:itemId', ({ params }) =>
+    HttpResponse.json({
+      item: String(params.itemId).startsWith('stalled_run')
+        ? degradedAttentionItem()
+        : attentionItem(),
+      timeline: [
+        {
+          id: '26262626-2626-4262-8262-262626262626',
+          phase: 'authority-check',
+          state: 'awaiting_approval',
+          message: 'The immutable release is waiting for its first human authority decision.',
+          durationMs: 18,
+          costUsd: 0,
+          occurredAt: now,
+        },
+      ],
+      details: { releaseDigest: 'a'.repeat(64), toolScopeCount: 1 },
+    }),
+  ),
+
+  http.post('http://localhost/v1/attention-items/:itemId/resolve', async ({ params, request }) => {
+    const body = (await request.json()) as { rationale?: unknown };
+    if (typeof body.rationale !== 'string' || body.rationale.trim().length < 10) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'A rationale of at least 10 characters is required.',
+            requestId: 'test-request',
+          },
+        },
+        { status: 400 },
+      );
+    }
+    degradedAttentionResolved = true;
+    return HttpResponse.json({
+      id: '29292929-2929-4292-8292-292929292929',
+      itemId: String(params.itemId),
+      rationale: body.rationale.trim(),
+      resolvedBy: 'test-operator',
+      resolvedAt: now,
+    });
+  }),
+
   http.get('http://localhost/v1/resources', () => HttpResponse.json({ items: [platformResource] })),
 
   http.get('http://localhost/v1/execution-runs', () =>
@@ -639,6 +814,11 @@ export const handlers = [
   }),
 
   http.post(`http://localhost/v1/execution-runs/${executionRunId}/cancel`, () => {
+    platformRunState = 'cancelled';
+    return HttpResponse.json(platformRun());
+  }),
+
+  http.post(`http://localhost/v1/execution-runs/${executionRunId}/reject`, () => {
     platformRunState = 'cancelled';
     return HttpResponse.json(platformRun());
   }),

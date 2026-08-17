@@ -152,6 +152,27 @@ export function EvidencePage() {
           ) : null}
           {releaseEvaluation.data ? (
             <>
+              <div className="evidence-verdict">
+                <span
+                  aria-hidden="true"
+                  className="evidence-verdict-mark"
+                  data-verdict={releaseEvaluation.data.verdict}
+                />
+                <div>
+                  <span className="page-kicker">VERDICT</span>
+                  <h2>
+                    {releaseEvaluation.data.verdict === 'passed'
+                      ? 'This release passed every applicable evidence gate.'
+                      : 'This release has evidence failures to resolve.'}
+                  </h2>
+                  <p>
+                    {releaseEvaluation.data.gateResults.filter((gate) => gate.status === 'failed')
+                      .length === 0
+                      ? `${releaseEvaluation.data.gateResults.filter((gate) => gate.status === 'passed').length} gates passed · 0 regressed.`
+                      : `${releaseEvaluation.data.gateResults.filter((gate) => gate.status === 'failed').length} gates failed · open technical evidence below.`}
+                  </p>
+                </div>
+              </div>
               <div className="release-evaluation-summary">
                 <span
                   className="os-status-chip"
@@ -167,66 +188,72 @@ export function EvidencePage() {
                 <span>HISTORY · {releaseEvaluation.data.historySnapshotDigest.slice(0, 12)}</span>
                 <span>RUN LINEAGE · {releaseEvaluation.data.evidence.historyRunIds.length}</span>
               </div>
-              <div aria-label="Server-owned gate results" className="release-gate-grid">
-                {releaseEvaluation.data.gateResults.map((gate) => (
-                  <article className="evidence-card" key={gate.key}>
-                    <small>
-                      {gateLabels[gate.key]} · {gate.evidenceSource.replaceAll('_', ' ')}
-                    </small>
-                    <strong className="metric-value">
-                      {gate.status === 'not_applicable' || gate.measuredValue === null
-                        ? 'N/A'
-                        : formatGateValue(gate, gate.measuredValue)}
-                    </strong>
-                    <span
-                      className="os-status-chip"
-                      data-state={
-                        gate.status === 'passed'
-                          ? 'succeeded'
-                          : gate.status === 'failed'
-                            ? 'failed'
-                            : 'not_started'
-                      }
-                    >
-                      {gate.status.replaceAll('_', ' ')}
-                    </span>
-                    <p>
-                      THRESHOLD · {gate.operator.toUpperCase()}{' '}
-                      {formatGateValue(gate, gate.threshold)} · SAMPLES {gate.sampleSize}
-                    </p>
-                    <p>{gate.detail}</p>
-                  </article>
-                ))}
-              </div>
-              <div className="release-case-list">
-                {releaseEvaluation.data.results.map((result) => (
-                  <article className="evidence-card" key={result.caseKey}>
-                    <header>
-                      <div>
-                        <h2>{result.caseKey.replaceAll('-', ' ')}</h2>
-                        <p>Server-recorded deterministic assertions</p>
-                      </div>
+              <details className="evidence-technical-detail">
+                <summary>
+                  Inspect all gates and case assertions
+                  <span>{releaseEvaluation.data.results.length} CASES</span>
+                </summary>
+                <div aria-label="Server-owned gate results" className="release-gate-grid">
+                  {releaseEvaluation.data.gateResults.map((gate) => (
+                    <article className="evidence-card" key={gate.key}>
+                      <small>
+                        {gateLabels[gate.key]} · {gate.evidenceSource.replaceAll('_', ' ')}
+                      </small>
+                      <strong className="metric-value">
+                        {gate.status === 'not_applicable' || gate.measuredValue === null
+                          ? 'N/A'
+                          : formatGateValue(gate, gate.measuredValue)}
+                      </strong>
                       <span
                         className="os-status-chip"
-                        data-state={result.passed ? 'succeeded' : 'failed'}
+                        data-state={
+                          gate.status === 'passed'
+                            ? 'succeeded'
+                            : gate.status === 'failed'
+                              ? 'failed'
+                              : 'not_started'
+                        }
                       >
-                        {result.passed ? 'passed' : 'failed'}
+                        {gate.status.replaceAll('_', ' ')}
                       </span>
-                    </header>
-                    <ul className="release-assertion-list">
-                      {result.assertions.map((assertion) => (
-                        <li key={assertion.key}>
-                          <span aria-hidden="true">{assertion.passed ? '●' : '○'}</span>
-                          <div>
-                            <strong>{assertion.key.replaceAll('_', ' ')}</strong>
-                            <p>{assertion.detail}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
-                ))}
-              </div>
+                      <p>
+                        THRESHOLD · {gate.operator.toUpperCase()}{' '}
+                        {formatGateValue(gate, gate.threshold)} · SAMPLES {gate.sampleSize}
+                      </p>
+                      <p>{gate.detail}</p>
+                    </article>
+                  ))}
+                </div>
+                <div className="release-case-list">
+                  {releaseEvaluation.data.results.map((result) => (
+                    <article className="evidence-card" key={result.caseKey}>
+                      <header>
+                        <div>
+                          <h2>{result.caseKey.replaceAll('-', ' ')}</h2>
+                          <p>Server-recorded deterministic assertions</p>
+                        </div>
+                        <span
+                          className="os-status-chip"
+                          data-state={result.passed ? 'succeeded' : 'failed'}
+                        >
+                          {result.passed ? 'passed' : 'failed'}
+                        </span>
+                      </header>
+                      <ul className="release-assertion-list">
+                        {result.assertions.map((assertion) => (
+                          <li key={assertion.key}>
+                            <span aria-hidden="true">{assertion.passed ? '●' : '○'}</span>
+                            <div>
+                              <strong>{assertion.key.replaceAll('_', ' ')}</strong>
+                              <p>{assertion.detail}</p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              </details>
               <p className="os-disclosure">{releaseEvaluation.data.disclaimer}</p>
             </>
           ) : null}

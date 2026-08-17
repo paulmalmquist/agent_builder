@@ -22,6 +22,7 @@ import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { toGenerationJob, toSpecSnapshot } from '../mappers.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScopeWhere } from '../scope.js';
 import { assertAgentTransition, assertJobTransition, assertSpecTransition } from './transitions.js';
 import type { GenerationApi } from './types.js';
 
@@ -38,8 +39,8 @@ export class GenerationService implements GenerationApi {
     try {
       return await this.prisma.$transaction(
         async (transaction) => {
-          const spec = await transaction.agentSpec.findUnique({
-            where: { id: specId },
+          const spec = await transaction.agentSpec.findFirst({
+            where: { id: specId, agent: { family: aggregateScopeWhere() } },
             include: { agent: true },
           });
           if (!spec) {
@@ -157,7 +158,7 @@ export class GenerationService implements GenerationApi {
       if (error instanceof AppError) {
         if (error.code === 'GENERATION_IN_PROGRESS' && error.details === undefined) {
           const existing = await this.prisma.generationJob.findFirst({
-            where: { specId },
+            where: { specId, agent: { family: aggregateScopeWhere() } },
             orderBy: { createdAt: 'desc' },
           });
           if (existing) throw this.generationInProgress(existing.id, existing.agentId);
@@ -171,6 +172,7 @@ export class GenerationService implements GenerationApi {
         const existing = await this.prisma.generationJob.findFirst({
           where: {
             specId,
+            agent: { family: aggregateScopeWhere() },
             ...(error.code === 'P2002' ? { state: { in: activeJobStates } } : {}),
           },
           orderBy: { createdAt: 'desc' },
@@ -182,7 +184,9 @@ export class GenerationService implements GenerationApi {
   }
 
   async getJob(jobId: string): Promise<GenerationJob> {
-    const job = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
+    const job = await this.prisma.generationJob.findFirst({
+      where: { id: jobId, agent: { family: aggregateScopeWhere() } },
+    });
     if (!job) {
       throw new AppError(404, 'GENERATION_JOB_NOT_FOUND', 'Generation job was not found', {
         jobId,
@@ -193,7 +197,9 @@ export class GenerationService implements GenerationApi {
 
   async claim(jobId: string): Promise<GeneratorInput | null> {
     return this.prisma.$transaction(async (transaction) => {
-      const job = await transaction.generationJob.findUnique({ where: { id: jobId } });
+      const job = await transaction.generationJob.findFirst({
+        where: { id: jobId, agent: { family: aggregateScopeWhere() } },
+      });
       if (!job || job.state !== DatabaseJobState.QUEUED) return null;
       assertJobTransition('queued', 'running');
       const claimed = await transaction.generationJob.updateMany({
@@ -237,7 +243,9 @@ export class GenerationService implements GenerationApi {
     const manifest = agentManifestSchema.parse(rawManifest);
     const actorId = currentActorId();
     await this.prisma.$transaction(async (transaction) => {
-      const job = await transaction.generationJob.findUnique({ where: { id: jobId } });
+      const job = await transaction.generationJob.findFirst({
+        where: { id: jobId, agent: { family: aggregateScopeWhere() } },
+      });
       if (!job || job.state !== DatabaseJobState.RUNNING) return;
       if (
         manifest.agentId !== job.agentId ||
@@ -295,7 +303,9 @@ export class GenerationService implements GenerationApi {
     const error = generationErrorSchema.parse({ code, message });
     const actorId = currentActorId();
     await this.prisma.$transaction(async (transaction) => {
-      const job = await transaction.generationJob.findUnique({ where: { id: jobId } });
+      const job = await transaction.generationJob.findFirst({
+        where: { id: jobId, agent: { family: aggregateScopeWhere() } },
+      });
       if (
         !job ||
         job.state === DatabaseJobState.SUCCEEDED ||
@@ -332,7 +342,7 @@ export class GenerationService implements GenerationApi {
 
   async reapRunningJobs(): Promise<number> {
     const running = await this.prisma.generationJob.findMany({
-      where: { state: DatabaseJobState.RUNNING },
+      where: { state: DatabaseJobState.RUNNING, agent: { family: aggregateScopeWhere() } },
       select: { id: true },
     });
     for (const job of running) {
@@ -347,7 +357,7 @@ export class GenerationService implements GenerationApi {
 
   async queuedJobIds(): Promise<string[]> {
     const jobs = await this.prisma.generationJob.findMany({
-      where: { state: DatabaseJobState.QUEUED },
+      where: { state: DatabaseJobState.QUEUED, agent: { family: aggregateScopeWhere() } },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
     });

@@ -3,6 +3,9 @@ import {
   agentFamilyVersionsResponseSchema,
   agentSearchResponseSchema,
   agentSpecSchema,
+  attentionItemDetailSchema,
+  attentionResolutionSchema,
+  attentionResponseSchema,
   apiErrorSchema,
   apiRoutes,
   certificationRunAcceptedSchema,
@@ -34,6 +37,8 @@ import {
   improvementCandidateSchema,
   platformApiRoutes,
   productionChannelSchema,
+  productionChannelMutationResponseSchema,
+  releaseDeclineResponseSchema,
   releaseEvaluationSchema,
   resourceListResponseSchema,
   type AgentCatalogQuery,
@@ -78,6 +83,9 @@ export type ImprovementCandidateList = ReturnType<
   typeof improvementCandidateListResponseSchema.parse
 >;
 export type MemoryCandidateList = ReturnType<typeof memoryCandidateListResponseSchema.parse>;
+export type AttentionResponse = ReturnType<typeof attentionResponseSchema.parse>;
+export type AttentionItemDetail = ReturnType<typeof attentionItemDetailSchema.parse>;
+export type AttentionResolution = ReturnType<typeof attentionResolutionSchema.parse>;
 
 export type ResourceFilters = {
   kind?: ResourceVersion['kind'];
@@ -115,6 +123,14 @@ export type ReviewImprovementInput = {
 export type ReviewMemoryInput =
   | { decision: 'accept' | 'reject'; rationale: string }
   | { decision: 'edit_accept'; editedValue: Record<string, unknown>; rationale: string };
+
+export type DeclineReleaseInput = {
+  releaseId: string;
+  evaluationId: string;
+  rationale: string;
+};
+
+export type PromoteReleaseInput = DeclineReleaseInput;
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const apiBaseUrl = configuredBaseUrl?.replace(/\/+$/, '') ?? '';
@@ -384,6 +400,22 @@ export const agentApi = {
 };
 
 export const platformApi = {
+  getAttention() {
+    return request(platformApiRoutes.attention, attentionResponseSchema);
+  },
+
+  getAttentionItem(itemId: string) {
+    return request(platformApiRoutes.attentionItem(itemId), attentionItemDetailSchema);
+  },
+
+  resolveAttentionItem(itemId: string, rationale: string) {
+    return request(
+      platformApiRoutes.resolveAttentionItem(itemId),
+      attentionResolutionSchema,
+      jsonBody({ rationale }),
+    );
+  },
+
   listResources(filters: ResourceFilters = {}) {
     return request(
       appendParams(platformApiRoutes.resources, {
@@ -415,6 +447,14 @@ export const platformApi = {
       platformApiRoutes.approveExecutionRun(runId),
       approveExecutionRunResponseSchema,
       jsonBody(value),
+    );
+  },
+
+  rejectExecutionRun(runId: string, rationale: string) {
+    return request(
+      platformApiRoutes.rejectExecutionRun(runId),
+      executionRunSchema,
+      jsonBody({ rationale }),
     );
   },
 
@@ -468,6 +508,22 @@ export const platformApi = {
 
   getProductionChannel(channelKey: string) {
     return request(platformApiRoutes.productionChannel(channelKey), productionChannelSchema);
+  },
+
+  promoteRelease(channelKey: string, value: PromoteReleaseInput) {
+    return request(
+      platformApiRoutes.promoteRelease(channelKey),
+      productionChannelMutationResponseSchema,
+      jsonBody(value),
+    );
+  },
+
+  declineRelease(channelKey: string, value: DeclineReleaseInput) {
+    return request(
+      platformApiRoutes.declineRelease(channelKey),
+      releaseDeclineResponseSchema,
+      jsonBody(value),
+    );
   },
 
   getReleaseEvaluation(evaluationId: string) {

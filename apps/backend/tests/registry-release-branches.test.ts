@@ -13,6 +13,7 @@ import { stringify } from 'yaml';
 import { requestContextMiddleware } from '../src/request-context.js';
 import { RegistryService } from '../src/services/registry-service.js';
 import { ReleaseGovernanceService } from '../src/services/release-governance-service.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const FAMILY_ID = '10000000-0000-4000-8000-000000000001';
 const DEPENDENCY_ID = '20000000-0000-4000-8000-000000000002';
@@ -135,6 +136,8 @@ function databaseVersion(input: {
     updatedAt: now,
     family: {
       id: familyId,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      departmentId: LOCAL_DEPARTMENT_ID,
       kind,
       slug,
       name: slug,
@@ -147,6 +150,11 @@ function databaseVersion(input: {
 }
 
 function prismaTransaction<T extends object>(transaction: T): PrismaClient {
+  for (const delegate of Object.values(transaction) as Array<Record<string, unknown>>) {
+    if (typeof delegate['findUnique'] === 'function' && delegate['findFirst'] === undefined) {
+      delegate['findFirst'] = delegate['findUnique'];
+    }
+  }
   return {
     $transaction: jest.fn((operation: (client: T) => unknown) =>
       Promise.resolve(operation(transaction)),
@@ -220,6 +228,8 @@ describe('RegistryService release and import guard branches', () => {
       resourceFamily: {
         findUnique: jest.fn().mockResolvedValue({
           id: FAMILY_ID,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          departmentId: LOCAL_DEPARTMENT_ID,
           kind: ResourceKind.REFERENCE,
           slug: 'other-slug',
         }),
@@ -236,6 +246,8 @@ describe('RegistryService release and import guard branches', () => {
       resourceFamily: {
         findUnique: jest.fn().mockResolvedValue({
           id: FAMILY_ID,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          departmentId: LOCAL_DEPARTMENT_ID,
           kind: ResourceKind.SKILL,
           slug: 'branch-skill',
         }),
@@ -258,6 +270,8 @@ describe('RegistryService release and import guard branches', () => {
       resourceFamily: {
         findUnique: jest.fn().mockResolvedValue({
           id: FAMILY_ID,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          departmentId: LOCAL_DEPARTMENT_ID,
           kind: ResourceKind.SKILL,
           slug: 'branch-skill',
         }),
@@ -594,7 +608,7 @@ describe('RegistryService release and import guard branches', () => {
       ],
     };
     const existingTransaction = {
-      releaseBundle: { findUnique: jest.fn().mockResolvedValue(releaseRecord), create: jest.fn() },
+      releaseBundle: { findFirst: jest.fn().mockResolvedValue(releaseRecord), create: jest.fn() },
     };
     const existingPrisma = {
       resourceVersion: { findMany: jest.fn().mockResolvedValue([second, first]) },
@@ -613,7 +627,7 @@ describe('RegistryService release and import guard branches', () => {
     const createdRecord = { ...releaseRecord, id: SECOND_RELEASE_ID };
     const createTransaction = {
       releaseBundle: {
-        findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(createdRecord),
       },
       auditEvent: { create: jest.fn().mockResolvedValue({ id: 'audit-id' }) },
@@ -634,7 +648,7 @@ describe('RegistryService release and import guard branches', () => {
     const listAndGetPrisma = {
       resourceVersion: { findMany: jest.fn().mockResolvedValue([first]) },
       releaseBundle: {
-        findUnique: jest.fn().mockResolvedValueOnce(releaseRecord).mockResolvedValueOnce(null),
+        findFirst: jest.fn().mockResolvedValueOnce(releaseRecord).mockResolvedValueOnce(null),
       },
     } as unknown as PrismaClient;
     const queryService = new RegistryService(listAndGetPrisma, 'a'.repeat(40));
@@ -675,7 +689,7 @@ describe('RegistryService release and import guard branches', () => {
         ],
       };
       const transaction = {
-        releaseBundle: { findUnique: jest.fn().mockResolvedValue(releaseRecord) },
+        releaseBundle: { findFirst: jest.fn().mockResolvedValue(releaseRecord) },
       };
       const prisma = {
         resourceVersion: { findMany: jest.fn().mockResolvedValue([version]) },
@@ -821,6 +835,7 @@ function evaluationRecord(overrides: Record<string, unknown> = {}) {
     requestedBy: 'branch-test',
     createdAt: now,
     finishedAt: now,
+    declineDecisions: [],
     ...overrides,
   };
 }
@@ -898,7 +913,7 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
 
     const directPrisma = {
       releaseEvaluation: {
-        findUnique: jest
+        findFirst: jest
           .fn()
           .mockResolvedValueOnce(evaluationRecord({ verdict: ReleaseEvaluationVerdict.FAILED }))
           .mockResolvedValueOnce(null),
@@ -932,6 +947,7 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
       },
       resourceVersion: { updateMany: jest.fn() },
       auditEvent: { create: jest.fn().mockResolvedValue({ id: 'audit-id' }) },
+      platformEvent: { create: jest.fn().mockResolvedValue({ id: 'platform-event-id' }) },
     };
     const result = await new ReleaseGovernanceService(prismaTransaction(transaction)).evaluate({
       releaseId: RELEASE_ID,
@@ -945,7 +961,7 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
     const neverPromoted = { ...channel(null), promotedBy: null, promotedAt: null };
     const prisma = {
       productionChannel: {
-        findUnique: jest.fn().mockResolvedValueOnce(neverPromoted).mockResolvedValueOnce(null),
+        findFirst: jest.fn().mockResolvedValueOnce(neverPromoted).mockResolvedValueOnce(null),
       },
     } as unknown as PrismaClient;
     const service = new ReleaseGovernanceService(prisma);
@@ -1151,6 +1167,7 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
         create: jest.fn().mockResolvedValue(rollbackDecision),
       },
       auditEvent: { create: jest.fn().mockResolvedValue({ id: 'audit-id' }) },
+      platformEvent: { create: jest.fn().mockResolvedValue({ id: 'platform-event-id' }) },
     };
     const rolledBack = await runAsHuman(() =>
       new ReleaseGovernanceService(prismaTransaction(successTransaction)).rollback('default', {

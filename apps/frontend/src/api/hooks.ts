@@ -27,6 +27,8 @@ import {
   type ResourceFilters,
   type ReviewImprovementInput,
   type ReviewMemoryInput,
+  type DeclineReleaseInput,
+  type PromoteReleaseInput,
   type RunFilters,
 } from './client';
 
@@ -45,7 +47,10 @@ export const queryKeys = {
   certificationRun: (runId: string | null) => ['certification-run', runId] as const,
   certificationRuns: (agentId: string | null) => ['certification-runs', agentId] as const,
   platformResources: (filters: ResourceFilters) => ['platform-resources', filters] as const,
+  attention: ['attention'] as const,
+  attentionItem: (itemId: string | null) => ['attention-item', itemId] as const,
   executionRuns: (filters: RunFilters) => ['execution-runs', filters] as const,
+  executionRun: (runId: string | null) => ['execution-run', runId] as const,
   authorityGrants: (filters: GrantFilters) => ['authority-grants', filters] as const,
   outcomes: (runId?: string) => ['outcomes', runId ?? 'all'] as const,
   metrics: (runId?: string) => ['metrics', runId ?? 'all'] as const,
@@ -56,6 +61,35 @@ export const queryKeys = {
   improvementCandidates: ['improvement-candidates'] as const,
   memoryCandidates: ['memory-candidates'] as const,
 };
+
+export function useAttention() {
+  return useQuery({
+    queryKey: queryKeys.attention,
+    queryFn: () => platformApi.getAttention(),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useAttentionItem(itemId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.attentionItem(itemId),
+    queryFn: () => platformApi.getAttentionItem(itemId ?? ''),
+    enabled: itemId !== null,
+  });
+}
+
+export function useResolveAttentionItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, rationale }: { itemId: string; rationale: string }) =>
+      platformApi.resolveAttentionItem(itemId, rationale),
+    onSuccess: (_resolution, variables) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attentionItem(variables.itemId) }),
+      ]),
+  });
+}
 
 export function useAgentSearch(query: string, enabled = true, retainPreviousData = true) {
   return useQuery({
@@ -84,6 +118,14 @@ export function useExecutionRuns(filters: RunFilters = {}) {
       );
       return hasOpenWork ? 2_000 : 10_000;
     },
+  });
+}
+
+export function useExecutionRun(runId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.executionRun(runId),
+    queryFn: () => platformApi.getExecutionRun(runId ?? ''),
+    enabled: runId !== null,
   });
 }
 
@@ -167,7 +209,11 @@ export function useReviewImprovementCandidate() {
   return useMutation({
     mutationFn: ({ candidateId, value }: { candidateId: string; value: ReviewImprovementInput }) =>
       platformApi.reviewImprovementCandidate(candidateId, value),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.improvementCandidates }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.improvementCandidates }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
   });
 }
 
@@ -183,7 +229,11 @@ export function useReviewMemoryCandidate() {
   return useMutation({
     mutationFn: ({ candidateId, value }: { candidateId: string; value: ReviewMemoryInput }) =>
       platformApi.reviewMemoryCandidate(candidateId, value),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.memoryCandidates }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.memoryCandidates }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
   });
 }
 
@@ -196,6 +246,47 @@ export function useApproveExecutionRun() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
         queryClient.invalidateQueries({ queryKey: ['authority-grants'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
+  });
+}
+
+export function useRejectExecutionRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, rationale }: { runId: string; rationale: string }) =>
+      platformApi.rejectExecutionRun(runId, rationale),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+      ]),
+  });
+}
+
+export function usePromoteRelease() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelKey, value }: { channelKey: string; value: PromoteReleaseInput }) =>
+      platformApi.promoteRelease(channelKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['production-channel'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform-resources'] }),
+      ]),
+  });
+}
+
+export function useDeclineRelease() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelKey, value }: { channelKey: string; value: DeclineReleaseInput }) =>
+      platformApi.declineRelease(channelKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['production-channel'] }),
       ]),
   });
 }

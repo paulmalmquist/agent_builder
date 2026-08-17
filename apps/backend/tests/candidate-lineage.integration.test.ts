@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ImprovementCandidateState, PrismaClient } from '@prisma/client';
 import { stringify } from 'yaml';
 import { RegistryService } from '../src/services/registry-service.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const runDatabaseIntegration = process.env['RUN_DATABASE_INTEGRATION'] === 'true';
 const describeDatabase = runDatabaseIntegration ? describe : describe.skip;
@@ -52,6 +53,8 @@ describeDatabase('repository-import improvement-candidate lineage', () => {
     const slug = `lineage-skill-${suffix}`;
     const observation = await prisma.observation.create({
       data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
         signalKey: `candidate-lineage:${randomUUID()}`,
         signalType: 'candidate_lineage_test',
         summary: 'A synthetic observation needs a traceable Git definition.',

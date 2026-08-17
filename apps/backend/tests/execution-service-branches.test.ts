@@ -16,17 +16,23 @@ import type { JsonValue } from '@agent-builder/contracts';
 import { defaultDailyBriefExecutionContext, type ModelProvider } from '@paul-os/runtime';
 import { loadConfig, type AppConfig } from '../src/config.js';
 import { requestContextMiddleware } from '../src/request-context.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 import { ExecutionService } from '../src/services/execution-service.js';
 
 const RELEASE_ID = '10000000-0000-4000-8000-000000000001';
 const OTHER_RELEASE_ID = '10000000-0000-4000-8000-000000000002';
 const GRANT_ID = '20000000-0000-4000-8000-000000000001';
 const RUN_ID = '30000000-0000-4000-8000-000000000001';
+const DIGEST_SNAPSHOT_ID = '30000000-0000-4000-8000-000000000002';
 const RESOURCE_ID = '40000000-0000-4000-8000-000000000001';
 const FAMILY_ID = '50000000-0000-4000-8000-000000000001';
 const DIGEST = 'a'.repeat(64);
 const CONTEXT_DIGEST = defaultDailyBriefExecutionContext.digest;
 const NOW = new Date('2026-08-16T12:00:00.000Z');
+const VISIBLE_SCOPE = {
+  workspaceId: LOCAL_WORKSPACE_ID,
+  OR: [{ departmentId: null }, { departmentId: LOCAL_DEPARTMENT_ID }],
+};
 const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
   ? path.resolve(process.cwd(), '..', '..')
   : process.cwd();
@@ -79,6 +85,8 @@ function releaseRecord(
   const slug = options.slug ?? 'daily-brief';
   return {
     id,
+    workspaceId: LOCAL_WORKSPACE_ID,
+    departmentId: LOCAL_DEPARTMENT_ID,
     digest,
     projectId,
     createdBy: 'human:test',
@@ -124,6 +132,8 @@ function releaseRecord(
 function grantRecord(overrides: Partial<DatabaseAuthorityGrant> = {}): DatabaseAuthorityGrant {
   return {
     id: GRANT_ID,
+    workspaceId: LOCAL_WORKSPACE_ID,
+    departmentId: LOCAL_DEPARTMENT_ID,
     releaseId: RELEASE_ID,
     releaseDigest: DIGEST,
     contextDigest: CONTEXT_DIGEST,
@@ -152,8 +162,11 @@ function grantRecord(overrides: Partial<DatabaseAuthorityGrant> = {}): DatabaseA
 function runRecord(overrides: Partial<DatabaseExecutionRun> = {}): DatabaseExecutionRun {
   return {
     id: RUN_ID,
+    workspaceId: LOCAL_WORKSPACE_ID,
+    departmentId: LOCAL_DEPARTMENT_ID,
     releaseId: RELEASE_ID,
     authorityGrantId: GRANT_ID,
+    digestSnapshotId: null,
     releaseDigest: DIGEST,
     contextDigest: CONTEXT_DIGEST,
     contextProvenance: [{ source: 'core', classification: 'public', tokenContribution: 27 }],
@@ -208,27 +221,34 @@ function callArgument(mock: ReturnType<typeof asyncMock>, call = 0): Record<stri
 }
 
 function database() {
+  const releaseFind = asyncMock(releaseRecord());
   const releaseBundle = {
-    findUnique: asyncMock(releaseRecord()),
+    findUnique: releaseFind,
+    findFirst: releaseFind,
   };
+  const channelFind = asyncMock({
+    key: 'project-alpha',
+    currentReleaseId: RELEASE_ID,
+    promotedAt: NOW,
+  });
   const productionChannel = {
-    findUnique: asyncMock({
-      key: 'project-alpha',
-      currentReleaseId: RELEASE_ID,
-      promotedAt: NOW,
-    }),
+    findUnique: channelFind,
+    findFirst: channelFind,
   };
+  const grantFind = asyncMock(grantRecord());
   const authorityGrant = {
-    findUnique: asyncMock(grantRecord()),
+    findUnique: grantFind,
+    findFirst: grantFind,
     findMany: asyncMock([] as DatabaseAuthorityGrant[]),
     create: asyncMock(grantRecord()),
     update: asyncMock(grantRecord()),
     updateMany: asyncMock({ count: 1 }),
     findUniqueOrThrow: asyncMock(grantRecord()),
   };
+  const runFind = asyncMock(null as DatabaseExecutionRun | null);
   const executionRun = {
-    findUnique: asyncMock(null as DatabaseExecutionRun | null),
-    findFirst: asyncMock(null as DatabaseExecutionRun | null),
+    findUnique: runFind,
+    findFirst: runFind,
     findMany: asyncMock([] as DatabaseExecutionRun[]),
     create: asyncMock(runRecord()),
     update: asyncMock(runRecord()),
@@ -241,9 +261,25 @@ function database() {
     updateMany: asyncMock({ count: 1 }),
   };
   const auditEvent = { create: asyncMock({ id: 'audit-id' }) };
+  const platformEvent = { create: asyncMock({ id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' }) };
+  const executionRunEvent = {
+    aggregate: jest.fn(async () => ({ _max: { sequence: null } })),
+    create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      ...data,
+      occurredAt: data['occurredAt'] ?? NOW,
+    })),
+  };
+  const digestSnapshot = { findUnique: asyncMock(null) };
+  const digestDeliveryAttempt = { create: asyncMock({ id: 'digest-attempt-id' }) };
+  const attentionCursor = {
+    findUnique: asyncMock(null),
+    updateMany: asyncMock({ count: 0 }),
+  };
   const outcomeRecord = { findMany: asyncMock([]) };
   const metricSample = { findMany: asyncMock([]) };
   const transaction = {
+    $executeRaw: jest.fn(async () => 1),
     $queryRaw: jest.fn(async () => []),
     releaseBundle,
     productionChannel,
@@ -251,6 +287,11 @@ function database() {
     executionRun,
     approvalRequest,
     auditEvent,
+    platformEvent,
+    executionRunEvent,
+    digestSnapshot,
+    digestDeliveryAttempt,
+    attentionCursor,
     outcomeRecord,
     metricSample,
   };
@@ -271,6 +312,11 @@ function database() {
     executionRun,
     approvalRequest,
     auditEvent,
+    platformEvent,
+    executionRunEvent,
+    digestSnapshot,
+    digestDeliveryAttempt,
+    attentionCursor,
     outcomeRecord,
     metricSample,
   };
@@ -567,6 +613,8 @@ describe('ExecutionService idempotency and run admission', () => {
     db.releaseBundle.findUnique.mockResolvedValueOnce(releaseRecord({ tools: ['calendar.read'] }));
     db.authorityGrant.findUnique.mockResolvedValueOnce(
       grantRecord({
+        workspaceId: OTHER_RELEASE_ID,
+        departmentId: null,
         state: AuthorityGrantState.REVOKED,
         releaseId: OTHER_RELEASE_ID,
         releaseDigest: 'b'.repeat(64),
@@ -595,6 +643,7 @@ describe('ExecutionService idempotency and run admission', () => {
       expect.arrayContaining([
         'Authority grant is revoked',
         'Authority grant release digest does not match',
+        'Authority grant release scope does not match',
         'Authority grant project does not match',
         'Authority grant is outside its validity window',
         'Authority grant run budget is exhausted',
@@ -617,8 +666,9 @@ describe('ExecutionService authority and read operations', () => {
     const service = new ExecutionService(db.prisma, config(), modelProvider());
     expect((await service.listGrants({ limit: 10 })).items[0]?.revokedAt).toBe(NOW.toISOString());
     await service.listGrants({ state: 'revoked', limit: 2 });
-    expect(callArgument(db.authorityGrant.findMany)['where']).toEqual({});
+    expect(callArgument(db.authorityGrant.findMany)['where']).toEqual(VISIBLE_SCOPE);
     expect(callArgument(db.authorityGrant.findMany, 1)['where']).toEqual({
+      ...VISIBLE_SCOPE,
       state: AuthorityGrantState.REVOKED,
     });
     expect(db.authorityGrant.updateMany).toHaveBeenCalledTimes(2);
@@ -778,6 +828,7 @@ describe('ExecutionService authority and read operations', () => {
     });
     await service.listRuns({ state: 'failed', limit: 1 });
     expect(callArgument(db.executionRun.findMany, 1)['where']).toEqual({
+      ...VISIBLE_SCOPE,
       state: ExecutionRunState.FAILED,
     });
     expect((await service.getRun(RUN_ID)).finishedAt).toBe(NOW.toISOString());
@@ -811,11 +862,23 @@ describe('ExecutionService authority and read operations', () => {
   it('cancels a waiting run immediately and cancels its pending approval', async () => {
     const db = database();
     db.executionRun.findUnique.mockResolvedValueOnce(
-      runRecord({ state: ExecutionRunState.AWAITING_APPROVAL, authorityGrantId: null }),
+      runRecord({
+        state: ExecutionRunState.AWAITING_APPROVAL,
+        authorityGrantId: null,
+        digestSnapshotId: DIGEST_SNAPSHOT_ID,
+      }),
     );
     db.executionRun.update.mockResolvedValueOnce(
       runRecord({ state: ExecutionRunState.CANCELLED, authorityGrantId: null, finishedAt: NOW }),
     );
+    db.digestSnapshot.findUnique.mockResolvedValueOnce({
+      id: DIGEST_SNAPSHOT_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      departmentId: LOCAL_DEPARTMENT_ID,
+      departmentScopeKey: LOCAL_DEPARTMENT_ID,
+      actorId: 'human:test',
+      attempts: [],
+    });
     const result = await new ExecutionService(db.prisma, config(), modelProvider()).cancelRun(
       RUN_ID,
     );
@@ -823,6 +886,23 @@ describe('ExecutionService authority and read operations', () => {
     expect(db.approvalRequest.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ state: ApprovalRequestState.CANCELLED }),
+      }),
+    );
+    expect(db.executionRunEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ phase: 'outcome', state: 'cancelled' }),
+      }),
+    );
+    expect(db.platformEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ kind: 'execution.cancelled' }) }),
+    );
+    expect(db.digestDeliveryAttempt.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshotId: DIGEST_SNAPSHOT_ID,
+          state: 'FAILED',
+          error: { code: 'RUN_CANCELLED' },
+        }),
       }),
     );
   });
@@ -980,6 +1060,59 @@ describe('ExecutionService approval, recovery, and worker guards', () => {
     await new ExecutionService(db.prisma, config(), modelProvider()).recoverExpiredLeases();
     expect(db.executionRun.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ state: expectedState }) }),
+    );
+    expect(db.executionRunEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ phase: 'worker-recovery' }),
+      }),
+    );
+    if (expectedState === ExecutionRunState.QUEUED) {
+      expect(db.platformEvent.create).not.toHaveBeenCalled();
+    } else {
+      expect(db.platformEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            kind:
+              expectedState === ExecutionRunState.CANCELLED
+                ? 'execution.cancelled'
+                : 'execution.failed',
+          }),
+        }),
+      );
+    }
+  });
+
+  it('records a failed digest attempt when orphan recovery exhausts a briefing run', async () => {
+    const db = database();
+    const candidate = runRecord({
+      state: ExecutionRunState.RUNNING,
+      digestSnapshotId: DIGEST_SNAPSHOT_ID,
+      leaseExpiresAt: new Date(Date.now() - 60_000),
+      attempts: 3,
+      maxAttempts: 3,
+    });
+    db.executionRun.findMany.mockResolvedValueOnce([candidate]);
+    db.executionRun.findUnique.mockResolvedValueOnce(candidate);
+    db.digestSnapshot.findUnique.mockResolvedValueOnce({
+      id: DIGEST_SNAPSHOT_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      departmentId: LOCAL_DEPARTMENT_ID,
+      departmentScopeKey: LOCAL_DEPARTMENT_ID,
+      actorId: 'human:test',
+      attempts: [],
+    });
+
+    await new ExecutionService(db.prisma, config(), modelProvider()).recoverExpiredLeases();
+
+    expect(db.digestDeliveryAttempt.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshotId: DIGEST_SNAPSHOT_ID,
+          state: 'FAILED',
+          briefingRunId: RUN_ID,
+          error: { code: 'WORKER_LEASE_EXHAUSTED' },
+        }),
+      }),
     );
   });
 
@@ -1221,9 +1354,15 @@ describe('ExecutionService evidence collection reads', () => {
     const service = new ExecutionService(db.prisma, config(), modelProvider());
     expect((await service.listOutcomes()).items[0]?.confidence).toBeNull();
     await service.listOutcomes(RUN_ID);
-    expect(callArgument(db.outcomeRecord.findMany, 1)['where']).toEqual({ runId: RUN_ID });
+    expect(callArgument(db.outcomeRecord.findMany, 1)['where']).toEqual({
+      run: VISIBLE_SCOPE,
+      runId: RUN_ID,
+    });
     expect((await service.listMetrics()).items[0]?.runId).toBeNull();
     await service.listMetrics(RUN_ID);
-    expect(callArgument(db.metricSample.findMany, 1)['where']).toEqual({ runId: RUN_ID });
+    expect(callArgument(db.metricSample.findMany, 1)['where']).toEqual({
+      ...VISIBLE_SCOPE,
+      runId: RUN_ID,
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { ExecutionRun } from '@agent-builder/contracts';
+import { consoleCriticalCopy, type ExecutionRun } from '@agent-builder/contracts';
 import type { ApproveRunInput } from '../../api/client';
 import { Modal } from '../../components/Modal';
 import { Notice } from '../../components/Notice';
@@ -53,6 +53,8 @@ export function ApprovalDialog({
 
   return (
     <Modal kicker="DIGEST-BOUND AUTHORITY" onClose={onClose} title="Approve execution envelope">
+      <p>{consoleCriticalCopy.runApproval.introduction.join(' ')}</p>
+      <p>{consoleCriticalCopy.runApproval.body.join(' ')}</p>
       <p>
         This grant applies only to release <code>{run.releaseDigest.slice(0, 14)}…</code>. Scope,
         expiry, run count, or budget changes require a new human decision.
@@ -134,9 +136,13 @@ export function ApprovalDialog({
             disabled={isApproving || totalCost < perRunCost}
             type="submit"
           >
-            {isApproving ? 'Binding authority…' : 'Approve & queue run'}
+            {isApproving ? 'Binding authority…' : consoleCriticalCopy.runApproval.actions[0].label}
           </button>
         </div>
+        <p className="os-disclosure full-field">
+          {consoleCriticalCopy.runApproval.actions[0].consequence}{' '}
+          {consoleCriticalCopy.runApproval.actions[0].undo}
+        </p>
       </form>
     </Modal>
   );

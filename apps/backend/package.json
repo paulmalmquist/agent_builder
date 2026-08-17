@@ -12,6 +12,7 @@
     "start": "node dist/server.js",
     "test": "jest --config jest.config.cjs",
     "test:coverage": "jest --config jest.config.cjs --coverage",
+    "certify:console-copy": "node dist/console-copy-certify.js",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:seed": "tsx prisma/seed.ts",

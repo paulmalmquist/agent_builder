@@ -25,6 +25,18 @@ async function requestJson(path, options = {}, expectedStatus = 200) {
   return body;
 }
 
+async function optionalJson(path) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { 'content-type': 'application/json' },
+  });
+  if (response.status === 404) return null;
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
+  }
+  return body;
+}
+
 async function exactResource(kind, slug) {
   const response = await requestJson(
     `/v1/resources?kind=${encodeURIComponent(kind)}&query=${encodeURIComponent(slug)}&limit=20`,
@@ -32,6 +44,21 @@ async function exactResource(kind, slug) {
   const matches = response.items.filter((item) => item.kind === kind && item.slug === slug);
   if (matches.length !== 1) {
     throw new Error(`Expected one ${kind} resource named ${slug}; found ${matches.length}`);
+  }
+  return matches[0];
+}
+
+async function exactResourceVersion(kind, slug, version) {
+  const response = await requestJson(
+    `/v1/resources?kind=${encodeURIComponent(kind)}&query=${encodeURIComponent(slug)}&limit=100`,
+  );
+  const matches = response.items.filter(
+    (item) => item.kind === kind && item.slug === slug && item.version === version,
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected one ${kind} resource named ${slug}@${version}; found ${matches.length}`,
+    );
   }
   return matches[0];
 }
@@ -81,54 +108,65 @@ async function assertOutcomeAndMetrics(runId, label) {
   return { outcome: outcomes.items[0], metrics: metrics.items };
 }
 
-// A synthetic signal is recorded as a provenance-bearing observation. There is intentionally
-// no separate mutable Signal resource: signal identity and evidence enter through Observation.
-const initialObservation = await requestJson(
-  '/v1/observations',
-  {
-    method: 'POST',
-    body: JSON.stringify({
-      signalKey: `compose-planning-signal-${smokeId}`,
-      signalType: 'repeated_planning_friction',
-      summary: 'Synthetic planning inputs need a concise, governed daily briefing.',
-      evidence: { fixture: 'compose_lifecycle', occurrenceCount: 3 },
-      provenance: { source: 'synthetic_acceptance', smokeId },
-      sourceRunId: null,
-      sourceOutcomeId: null,
-    }),
-  },
-  201,
-);
-const incubatorCandidate = await requestJson(
-  '/v1/improvement-candidates',
-  {
-    method: 'POST',
-    body: JSON.stringify({
-      observationId: initialObservation.id,
-      title: 'Produce a governed daily planning brief',
-      proposedTarget: 'Skill:daily-brief@1.0.0',
-      proposedChange: 'Compile planning inputs into a cited, bounded daily briefing outcome.',
-      evidenceRefs: [`observation:${initialObservation.id}`],
-    }),
-  },
-  201,
-);
-const incubatingCandidate = await requestJson(
-  `/v1/improvement-candidates/${incubatorCandidate.id}/review`,
-  {
-    method: 'POST',
-    body: JSON.stringify({
-      decision: 'incubate',
-      rationale: 'Accept the synthetic observation as the governed Compose lifecycle fixture.',
-    }),
-  },
-  200,
-);
-assert(incubatingCandidate.state === 'incubating', 'The initial candidate was not incubated');
-
 // Exercise the real compiler/import boundary. The seed provides exact dependency pins, so this
 // frozen candidate import is idempotent while still proving the HTTP contract used by Git content.
+// A preserved volume may already contain the immutable, lineage-bound import from an earlier smoke
+// run. In that case we verify and reuse it instead of creating an unattachable duplicate candidate.
 const manifestYaml = await readFile(dailyBriefManifestUrl, 'utf8');
+const existingSkillResponse = await requestJson(
+  '/v1/resources?kind=Skill&query=daily-brief&limit=100',
+);
+const existingSkill = existingSkillResponse.items.find(
+  (item) => item.kind === 'Skill' && item.slug === 'daily-brief' && item.version === '1.0.0',
+);
+let expectedCandidateId = null;
+if (existingSkill === undefined) {
+  // A synthetic signal is recorded as a provenance-bearing observation. There is intentionally
+  // no separate mutable Signal resource: signal identity and evidence enter through Observation.
+  const initialObservation = await requestJson(
+    '/v1/observations',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        signalKey: `compose-planning-signal-${smokeId}`,
+        signalType: 'repeated_planning_friction',
+        summary: 'Synthetic planning inputs need a concise, governed daily briefing.',
+        evidence: { fixture: 'compose_lifecycle', occurrenceCount: 3 },
+        provenance: { source: 'synthetic_acceptance', smokeId },
+        sourceRunId: null,
+        sourceOutcomeId: null,
+      }),
+    },
+    201,
+  );
+  const incubatorCandidate = await requestJson(
+    '/v1/improvement-candidates',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        observationId: initialObservation.id,
+        title: 'Produce a governed daily planning brief',
+        proposedTarget: 'Skill:daily-brief@1.0.0',
+        proposedChange: 'Compile planning inputs into a cited, bounded daily briefing outcome.',
+        evidenceRefs: [`observation:${initialObservation.id}`],
+      }),
+    },
+    201,
+  );
+  const incubatingCandidate = await requestJson(
+    `/v1/improvement-candidates/${incubatorCandidate.id}/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        decision: 'incubate',
+        rationale: 'Accept the synthetic observation as the governed Compose lifecycle fixture.',
+      }),
+    },
+    200,
+  );
+  assert(incubatingCandidate.state === 'incubating', 'The initial candidate was not incubated');
+  expectedCandidateId = incubatingCandidate.id;
+}
 const imported = await requestJson(
   '/v1/repository-imports',
   {
@@ -136,15 +174,20 @@ const imported = await requestJson(
     body: JSON.stringify({
       manifestYaml,
       sourcePath: '02-skills/daily-brief/manifest.yaml',
-      improvementCandidateId: incubatingCandidate.id,
+      ...(expectedCandidateId === null ? {} : { improvementCandidateId: expectedCandidateId }),
     }),
   },
   201,
 );
 assert(imported.resource.slug === 'daily-brief', 'The compiled skill import returned another slug');
-assert(imported.resource.lifecycle === 'candidate', 'The imported skill is not a candidate');
 assert(
-  imported.import.improvementCandidateId === incubatingCandidate.id,
+  ['candidate', 'evaluated', 'certified'].includes(imported.resource.lifecycle),
+  'The imported skill has an invalid governed lifecycle',
+);
+assert(
+  imported.import.improvementCandidateId !== null &&
+    (expectedCandidateId === null ||
+      imported.import.improvementCandidateId === expectedCandidateId),
   'The imported skill did not retain its reviewed improvement-candidate lineage',
 );
 
@@ -181,7 +224,7 @@ assert(
   'Release evidence omitted the fixture-quality disclaimer',
 );
 const [certifiedSkill, certifiedSuite, certifiedReference] = await Promise.all([
-  exactResource('Skill', 'daily-brief'),
+  exactResourceVersion('Skill', skill.slug, skill.version),
   exactResource('EvaluationSuite', 'daily-brief-contract'),
   exactResource('Reference', 'briefing-principles'),
 ]);
@@ -192,20 +235,27 @@ assert(
   'Passing evidence did not certify the subject dependency closure',
 );
 
-const promotion = await requestJson(
-  '/v1/production-channels/default/promote',
-  {
-    method: 'POST',
-    body: JSON.stringify({
-      releaseId: release.id,
-      evaluationId: evaluation.id,
-      rationale: 'Promote the synthetic Compose smoke release with immutable test evidence.',
-    }),
-  },
-  200,
-);
+const existingChannel = await optionalJson('/v1/production-channels/default');
+const promotion =
+  existingChannel?.currentReleaseId === release.id
+    ? { channel: existingChannel, decision: null }
+    : await requestJson(
+        '/v1/production-channels/default/promote',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            releaseId: release.id,
+            evaluationId: evaluation.id,
+            rationale: 'Promote the synthetic Compose smoke release with immutable test evidence.',
+          }),
+        },
+        200,
+      );
 assert(promotion.channel.currentReleaseId === release.id, 'Promotion did not swap the channel');
-assert(promotion.decision.action === 'promoted', 'Promotion evidence recorded another action');
+assert(
+  promotion.decision === null || promotion.decision.action === 'promoted',
+  'Promotion evidence recorded another action',
+);
 
 const firstInput = {
   date: '2026-08-16',

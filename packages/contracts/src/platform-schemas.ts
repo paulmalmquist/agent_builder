@@ -476,6 +476,7 @@ export const executionRunSchema = z.object({
   projectId: z.string().nullable(),
   requiredToolScopes: z.array(z.string()),
   authorityGrantId: uuidSchema.nullable(),
+  digestSnapshotId: uuidSchema.nullable().default(null),
   state: executionRunStateSchema,
   input: jsonObjectSchema,
   providerKind: modelProviderKindSchema,

@@ -36,6 +36,7 @@ import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { toAgentSpec, toSourceDescriptor } from '../mappers.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScope, aggregateScopeWhere, isInPrincipalScope } from '../scope.js';
 import { assertSpecTransition } from './transitions.js';
 import type { SpecApi } from './types.js';
 
@@ -97,6 +98,7 @@ export class SpecService implements SpecApi {
     }
 
     const actorId = currentActorId();
+    const scope = aggregateScope();
     const agentId = randomUUID();
     const specId = randomUUID();
     return this.prisma.$transaction(
@@ -104,11 +106,11 @@ export class SpecService implements SpecApi {
         const base =
           request.baseAgentId === null
             ? null
-            : await transaction.agent.findUnique({
-                where: { id: request.baseAgentId },
+            : await transaction.agent.findFirst({
+                where: { id: request.baseAgentId, family: aggregateScopeWhere() },
                 include: { family: true, spec: true },
               });
-        if (request.baseAgentId !== null && !base) {
+        if (request.baseAgentId !== null && (!base || !isInPrincipalScope(base.family))) {
           throw new AppError(404, 'BASE_AGENT_NOT_FOUND', 'Base agent was not found', {
             agentId: request.baseAgentId,
           });
@@ -160,6 +162,7 @@ export class SpecService implements SpecApi {
           versionNumber = 1;
           await transaction.agentFamily.create({
             data: {
+              ...scope,
               id: familyId,
               slug: familySlug,
               name: request.outcomes.name,
@@ -365,7 +368,7 @@ export class SpecService implements SpecApi {
       );
     }
     const sources = await this.prisma.knowledgeSource.findMany({
-      where: { id: { in: descriptorIds } },
+      where: { id: { in: descriptorIds }, ...aggregateScopeWhere() },
     });
     const found = new Set(sources.map((source) => source.id));
     const missing = descriptorIds.filter((id) => !found.has(id));
@@ -405,6 +408,7 @@ export class SpecService implements SpecApi {
     confirmation: z.infer<typeof interpretationConfirmationSchema> | undefined,
   ): Promise<AgentSpec> {
     const actorId = currentActorId();
+    await this.findSpec(specId);
     return this.prisma.$transaction(async (transaction) => {
       const current = await transaction.agentSpec.findUnique({ where: { id: specId } });
       if (!current)
@@ -596,8 +600,8 @@ export class SpecService implements SpecApi {
     > = [],
     sectionValue?: SectionValue,
   ): Promise<void> {
-    const interpretation = await transaction.specInterpretation.findUnique({
-      where: { id: interpretationId },
+    const interpretation = await transaction.specInterpretation.findFirst({
+      where: { id: interpretationId, ...aggregateScopeWhere() },
       include: { attachedSpec: { select: { id: true } } },
     });
     if (!interpretation)
@@ -619,6 +623,7 @@ export class SpecService implements SpecApi {
     }
     if (attachedInterpretationId !== null && attachedInterpretationId !== interpretationId) {
       const tree = await transaction.specInterpretation.findMany({
+        where: aggregateScopeWhere(),
         select: { id: true, parentInterpretationId: true },
       });
       const parentById = new Map(tree.map((node) => [node.id, node.parentInterpretationId]));
@@ -740,7 +745,9 @@ export class SpecService implements SpecApi {
   }
 
   private async findSpec(specId: string): Promise<DatabaseAgentSpec> {
-    const spec = await this.prisma.agentSpec.findUnique({ where: { id: specId } });
+    const spec = await this.prisma.agentSpec.findFirst({
+      where: { id: specId, agent: { family: aggregateScopeWhere() } },
+    });
     if (!spec)
       throw new AppError(404, 'SPEC_NOT_FOUND', 'Agent specification was not found', { specId });
     return spec;

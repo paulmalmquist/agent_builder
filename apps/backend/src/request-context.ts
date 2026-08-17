@@ -3,22 +3,49 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Request, RequestHandler } from 'express';
 import type { AppConfig } from './config.js';
 import { AppError } from './errors.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from './scope-constants.js';
 
 export interface RequestActor {
   id: string;
   authentication: 'bearer' | 'local' | 'system';
 }
 
+export interface RequestPrincipal {
+  actorId: string;
+  workspaceId: string;
+  departmentId: string | null;
+  authentication: RequestActor['authentication'];
+  requestId: string | null;
+}
+
 export interface RequestContext {
   requestId: string | null;
+  principal: RequestPrincipal;
+  /** Compatibility view for existing actor-attributed services. */
   actor: RequestActor;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
-const systemContext: RequestContext = {
+const systemPrincipal: RequestPrincipal = {
+  actorId: 'system:background',
+  workspaceId: LOCAL_WORKSPACE_ID,
+  departmentId: LOCAL_DEPARTMENT_ID,
+  authentication: 'system',
   requestId: null,
-  actor: { id: 'system:background', authentication: 'system' },
 };
+const systemContext: RequestContext = {
+  requestId: systemPrincipal.requestId,
+  principal: systemPrincipal,
+  actor: { id: systemPrincipal.actorId, authentication: systemPrincipal.authentication },
+};
+
+function contextFromPrincipal(principal: RequestPrincipal): RequestContext {
+  return {
+    requestId: principal.requestId,
+    principal,
+    actor: { id: principal.actorId, authentication: principal.authentication },
+  };
+}
 
 function safeTokenMatch(provided: string, expected: string): boolean {
   const providedBytes = Buffer.from(provided);
@@ -64,13 +91,13 @@ export function requestContextMiddleware(
       typeof (request as Request & { id?: unknown }).id === 'string'
         ? ((request as Request & { id: string }).id ?? null)
         : null;
-    const context: RequestContext = {
+    const context = contextFromPrincipal({
+      actorId: isPublicRoute ? 'anonymous' : auth.actorId,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      departmentId: LOCAL_DEPARTMENT_ID,
+      authentication: auth.enabled && !isPublicRoute ? 'bearer' : 'local',
       requestId,
-      actor: {
-        id: isPublicRoute ? 'anonymous' : auth.actorId,
-        authentication: auth.enabled && !isPublicRoute ? 'bearer' : 'local',
-      },
-    };
+    });
     storage.run(context, next);
   };
 }
@@ -80,7 +107,15 @@ export function currentRequestContext(): RequestContext {
 }
 
 export function currentActorId(): string {
-  return currentRequestContext().actor.id;
+  return currentRequestPrincipal().actorId;
+}
+
+export function currentRequestPrincipal(): RequestPrincipal {
+  return currentRequestContext().principal;
+}
+
+export function runWithPrincipal<T>(principal: RequestPrincipal, operation: () => T): T {
+  return storage.run(contextFromPrincipal(principal), operation);
 }
 
 export function runAsSystem<T>(operation: () => T): T {

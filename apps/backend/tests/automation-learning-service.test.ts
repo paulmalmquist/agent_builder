@@ -12,7 +12,10 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import { createApp } from '../src/app.js';
-import { AutomationLearningService } from '../src/services/automation-learning-service.js';
+import {
+  appendPlatformDigestSignals,
+  AutomationLearningService,
+} from '../src/services/automation-learning-service.js';
 import type { ExecutionService } from '../src/services/execution-service.js';
 import type { ServiceBundle } from '../src/services/types.js';
 
@@ -106,10 +109,14 @@ const memory = {
 };
 
 function harness() {
+  const scheduleFind = jest.fn(() => Promise.resolve(schedule));
+  const improvementFind = jest.fn(() => Promise.resolve(improvement));
+  const memoryFind = jest.fn(() => Promise.resolve(memory));
   const transaction = {
     automationSchedule: {
       create: jest.fn(() => Promise.resolve(schedule)),
-      findUnique: jest.fn(() => Promise.resolve(schedule)),
+      findUnique: scheduleFind,
+      findFirst: scheduleFind,
       findMany: jest.fn(() =>
         Promise.resolve([{ ...schedule, channel: { currentReleaseId: releaseId } }]),
       ),
@@ -126,42 +133,59 @@ function harness() {
     observation: { create: jest.fn(() => Promise.resolve(observation)) },
     improvementCandidate: {
       create: jest.fn(() => Promise.resolve(improvement)),
-      findUnique: jest.fn(() => Promise.resolve(improvement)),
+      findUnique: improvementFind,
+      findFirst: improvementFind,
       update: jest.fn(({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({ ...improvement, ...data }),
       ),
     },
     memoryCandidate: {
       create: jest.fn(() => Promise.resolve(memory)),
-      findUnique: jest.fn(() => Promise.resolve(memory)),
+      findUnique: memoryFind,
+      findFirst: memoryFind,
       update: jest.fn(({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({ ...memory, ...data }),
       ),
     },
     auditEvent: { create: jest.fn(() => Promise.resolve({ id: randomUUID() })) },
+    platformEvent: { create: jest.fn(() => Promise.resolve({ id: randomUUID() })) },
+    $executeRaw: jest.fn(() => Promise.resolve(0)),
     $queryRaw: jest
       .fn()
       .mockResolvedValueOnce([{ acquired: true }])
       .mockResolvedValueOnce([{ id: scheduleId }])
       .mockResolvedValueOnce([{ id: dispatchId }]),
   };
+  const releaseFind = jest.fn(() =>
+    Promise.resolve({ id: releaseId, digest: 'a'.repeat(64), projectId: null }),
+  );
+  const channelFind = jest.fn(() =>
+    Promise.resolve({ key: 'default', currentReleaseId: releaseId }),
+  );
+  const grantFind = jest.fn(() =>
+    Promise.resolve({ id: grantId, releaseId, releaseDigest: 'a'.repeat(64) }),
+  );
+  const topScheduleFind = jest.fn(() => Promise.resolve(schedule));
+  const outcomeFind = jest.fn(() => Promise.resolve({ id: outcomeId, runId }));
+  const runFind = jest.fn(() => Promise.resolve({ id: runId, state: ExecutionRunState.SUCCEEDED }));
+  const observationFind = jest.fn(() => Promise.resolve(observation));
   const prisma = {
     releaseBundle: {
-      findUnique: jest.fn(() =>
-        Promise.resolve({ id: releaseId, digest: 'a'.repeat(64), projectId: null }),
-      ),
+      findUnique: releaseFind,
+      findFirst: releaseFind,
     },
     productionChannel: {
-      findUnique: jest.fn(() => Promise.resolve({ key: 'default', currentReleaseId: releaseId })),
+      findUnique: channelFind,
+      findFirst: channelFind,
     },
     authorityGrant: {
-      findUnique: jest.fn(() =>
-        Promise.resolve({ id: grantId, releaseId, releaseDigest: 'a'.repeat(64) }),
-      ),
+      findUnique: grantFind,
+      findFirst: grantFind,
     },
     automationSchedule: {
       findMany: jest.fn(() => Promise.resolve([schedule])),
-      findUnique: jest.fn(() => Promise.resolve(schedule)),
+      findUnique: topScheduleFind,
+      findFirst: topScheduleFind,
     },
     automationDispatch: {
       findMany: jest.fn(() =>
@@ -181,13 +205,15 @@ function harness() {
         ]),
       ),
     },
-    outcomeRecord: { findUnique: jest.fn(() => Promise.resolve({ id: outcomeId, runId })) },
+    outcomeRecord: { findUnique: outcomeFind, findFirst: outcomeFind },
     executionRun: {
-      findUnique: jest.fn(() => Promise.resolve({ id: runId, state: ExecutionRunState.SUCCEEDED })),
+      findUnique: runFind,
+      findFirst: runFind,
     },
     observation: {
       findMany: jest.fn(() => Promise.resolve([observation])),
-      findUnique: jest.fn(() => Promise.resolve(observation)),
+      findUnique: observationFind,
+      findFirst: observationFind,
     },
     improvementCandidate: { findMany: jest.fn(() => Promise.resolve([improvement])) },
     memoryCandidate: { findMany: jest.fn(() => Promise.resolve([memory])) },
@@ -248,6 +274,35 @@ function scheduleBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('AutomationLearningService', () => {
+  it('packs every sanitized digest line into the Daily Brief signals input', () => {
+    const inputTemplate = structuredClone(schedule.inputTemplate);
+    const summary = {
+      headline: '2 runs · $0.42 · 1 promotion since the last briefing',
+      runCount: 2,
+      totalCostUsd: 0.42,
+      promotionCount: 1,
+      observationCount: 1,
+      windowStartedAt: '2026-08-16T10:00:00.000Z',
+      windowEndedAt: '2026-08-16T12:00:00.000Z',
+      eventCount: 2,
+      eventLines: ['A run completed for $0.42.', 'A certified release moved into production.'],
+      omittedEventCount: 0,
+    };
+
+    appendPlatformDigestSignals(inputTemplate, summary);
+
+    expect(inputTemplate.signals).toEqual([
+      `Platform digest: ${summary.headline}.`,
+      'Platform activity: A run completed for $0.42. A certified release moved into production.',
+    ]);
+    expect(() =>
+      appendPlatformDigestSignals(
+        { ...structuredClone(schedule.inputTemplate), signals: Array(99).fill('existing') },
+        summary,
+      ),
+    ).toThrow('The Daily Brief signals array has no room');
+  });
+
   it('maps schedules and executes a restart-safe due scheduling pass', async () => {
     const { service, execution, transaction } = harness();
     await expect(service.listSchedules({ state: 'active', limit: 20 })).resolves.toMatchObject({
@@ -264,6 +319,7 @@ describe('AutomationLearningService', () => {
     });
     expect(execution.createRun).toHaveBeenCalledWith(
       expect.objectContaining({ releaseId, authorityGrantId: grantId }),
+      { digestSnapshotId: null },
     );
     expect(transaction.executionRun.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { maxAttempts: 3 } }),

@@ -29,6 +29,9 @@
     "smoke:compose": "node scripts/compose-worker-smoke.mjs",
     "test:coverage": "npm run test:prepare && npm run test:backend -- --coverage && npm run test:worker -- --coverage && npm run test:frontend -- --coverage",
     "check:sanitized": "node scripts/check-sanitized.mjs",
+    "generate:console-copy": "npm run build -w @agent-builder/contracts && npm run build -w @paul-os/runtime && node packages/runtime/dist/cli.js console-copy generate 05-reference/console-critical-copy/fixtures/copy.json",
+    "check:console-copy": "npm run build -w @agent-builder/contracts && npm run build -w @paul-os/runtime && node packages/runtime/dist/cli.js console-copy check 05-reference/console-critical-copy/fixtures/copy.json",
+    "certify:console-copy": "npm run build -w @agent-builder/contracts && npm run build -w @paul-os/runtime && npm run build -w @agent-builder/backend && npm run certify:console-copy -w @agent-builder/backend",
     "db:generate": "npm run db:generate -w @agent-builder/backend",
     "db:deploy": "npm run db:deploy -w @agent-builder/backend",
     "db:seed": "npm run build -w @agent-builder/contracts && npm run build -w @paul-os/runtime && npm run db:seed -w @agent-builder/backend"

@@ -19,6 +19,7 @@ import {
 } from '@agent-builder/contracts';
 import { appendAuditEvent } from '../audit.js';
 import { AppError } from '../errors.js';
+import { aggregateScopeWhere } from '../scope.js';
 import { assertAgentTransition } from './transitions.js';
 import { requireHumanActor } from './actors.js';
 import type { PromotionApi } from './types.js';
@@ -63,16 +64,16 @@ export class PromotionService implements PromotionApi {
     try {
       return await this.prisma.$transaction(
         async (transaction) => {
-          const agent = await transaction.agent.findUnique({
-            where: { id: agentId },
+          const agent = await transaction.agent.findFirst({
+            where: { id: agentId, family: aggregateScopeWhere() },
             include: { family: true, spec: { select: { revision: true } } },
           });
           if (!agent)
             throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent version was not found', { agentId });
           await transaction.$queryRaw`SELECT "id" FROM "AgentFamily" WHERE "id" = ${agent.familyId}::uuid FOR UPDATE`;
           await transaction.$queryRaw`SELECT "id" FROM "CertificationRun" WHERE "id" = ${input.runId}::uuid FOR UPDATE`;
-          const run = await transaction.certificationRun.findUnique({
-            where: { id: input.runId },
+          const run = await transaction.certificationRun.findFirst({
+            where: { id: input.runId, family: aggregateScopeWhere() },
             include: {
               promotionDecision: true,
               gateResults: true,
@@ -136,11 +137,21 @@ export class PromotionService implements PromotionApi {
             );
           }
           const [latestCorpus, activeConfig, currentChampion] = await Promise.all([
-            transaction.evalCorpusVersion.findFirst({ orderBy: { version: 'desc' } }),
-            transaction.certificationGateConfig.findFirst({ where: { state: 'ACTIVE' } }),
+            transaction.evalCorpusVersion.findFirst({
+              where: aggregateScopeWhere(),
+              orderBy: { version: 'desc' },
+            }),
+            transaction.certificationGateConfig.findFirst({
+              where: { state: 'ACTIVE', ...aggregateScopeWhere() },
+            }),
             agent.family.championAgentId === null
               ? Promise.resolve(null)
-              : transaction.agent.findUnique({ where: { id: agent.family.championAgentId } }),
+              : transaction.agent.findFirst({
+                  where: {
+                    id: agent.family.championAgentId,
+                    family: aggregateScopeWhere(),
+                  },
+                }),
           ]);
           if (latestCorpus?.version !== run.corpusVersion)
             throw this.ineligible('corpus_superseded', 'A newer evaluation corpus is published');
@@ -289,16 +300,16 @@ export class PromotionService implements PromotionApi {
     try {
       return await this.prisma.$transaction(
         async (transaction) => {
-          const candidate = await transaction.agent.findUnique({
-            where: { id: agentId },
+          const candidate = await transaction.agent.findFirst({
+            where: { id: agentId, family: aggregateScopeWhere() },
             select: { familyId: true },
           });
           if (!candidate)
             throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent version was not found', { agentId });
           await transaction.$queryRaw`SELECT "id" FROM "AgentFamily" WHERE "id" = ${candidate.familyId}::uuid FOR UPDATE`;
           await transaction.$queryRaw`SELECT "id" FROM "Agent" WHERE "id" = ${agentId}::uuid FOR UPDATE`;
-          const agent = await transaction.agent.findUnique({
-            where: { id: agentId },
+          const agent = await transaction.agent.findFirst({
+            where: { id: agentId, family: aggregateScopeWhere() },
             include: { family: true },
           });
           if (!agent)

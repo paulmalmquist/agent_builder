@@ -52,6 +52,7 @@ import type { RegistryService } from './registry-service.js';
 import type { AutomationLearningService } from './automation-learning-service.js';
 import type { ReleaseGovernanceService } from './release-governance-service.js';
 import type { AutomationSchedulerApi } from '../automation/scheduler.js';
+import type { AttentionService } from './attention-service.js';
 
 export interface CatalogApi {
   list(query: AgentCatalogQuery): Promise<AgentCatalogResponse>;
@@ -168,6 +169,7 @@ export interface ServiceBundle {
 }
 
 export interface PlatformServices {
+  attention: AttentionService;
   registry: RegistryService;
   releaseGovernance: ReleaseGovernanceService;
   execution: ExecutionService;

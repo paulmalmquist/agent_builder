@@ -1,0 +1,16 @@
+apiVersion: paul-os/v1
+kind: Reference
+metadata:
+  id: 50000000-0000-4000-8000-000000000002
+  slug: console-critical-copy
+  version: 1.0.0
+  owner: local-platform-owner
+  purpose: Provide versioned plain-language copy for consequential Paul OS console screens.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies: []
+spec:
+  artifact: fixtures/copy.json
+  mediaType: application/json
+  immutableAfterCandidate: true
+  citationLabel: console-critical-copy-v1

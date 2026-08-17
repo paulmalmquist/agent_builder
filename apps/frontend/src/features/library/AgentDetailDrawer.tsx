@@ -78,7 +78,7 @@ export function AgentDetailDrawer({ agentId, onClose }: AgentDetailDrawerProps) 
     const mode = drawerSearchParams.get('mode');
     if (mode) params.set('mode', mode);
     onClose();
-    void navigate(`/?${params.toString()}`);
+    void navigate(`/build?${params.toString()}`);
   }
 
   return (

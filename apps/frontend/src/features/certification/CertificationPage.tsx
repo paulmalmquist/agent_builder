@@ -298,6 +298,36 @@ export function CertificationPage() {
       ) : null}
       {startRun.isError ? <Notice tone="error">{getErrorMessage(startRun.error)}</Notice> : null}
 
+      {runDetail ? (
+        <section className="certification-verdict-first" aria-label="Certification verdict">
+          <span
+            aria-hidden="true"
+            className="evidence-verdict-mark"
+            data-verdict={runDetail.run.state === 'passed' ? 'passed' : 'failed'}
+          />
+          <div>
+            <span className="page-kicker">VERDICT · {runDetail.run.state.toUpperCase()}</span>
+            <h2>
+              {runDetail.run.state === 'passed'
+                ? 'This challenger passed every applicable certification gate.'
+                : runDetail.run.state === 'failed'
+                  ? 'This challenger has certification failures to resolve.'
+                  : 'Certification evidence is still being produced.'}
+            </h2>
+            <p>
+              {runDetail.gates.filter((gate) => gate.status === 'passed').length} gates passed ·{' '}
+              {runDetail.gates.filter((gate) => gate.status === 'failed').length} failed ·{' '}
+              {runDetail.run.caseCounts.passed}/{runDetail.run.caseCounts.total} cases passed.
+            </p>
+            <small>
+              {runDetail.run.evaluationMode === 'corpus_coverage'
+                ? 'Coverage certification measures fixture agreement, not semantic answer quality.'
+                : `Evidence was produced by ${runDetail.run.executorKind} ${runDetail.run.executorVersion}.`}
+            </small>
+          </div>
+        </section>
+      ) : null}
+
       <section
         aria-label="Certification participants"
         className="certification-participants"

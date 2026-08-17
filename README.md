@@ -85,6 +85,21 @@ Registry, Runs & Approvals, Evidence, and Incubator. Existing builder, library, 
 routes remain available during the compatibility period described in
 `docs/adr/0009-legacy-api-sunset.md`.
 
+Critical screen copy has one shared TypeScript source that the Attention UI imports. Its governed
+Reference projection is regenerated with `npm run generate:console-copy`; every pull request runs
+`npm run check:console-copy` to reject projection drift and readability failures without credentials.
+
+Semantic cold-read certification is an explicit release action: configure PostgreSQL and an
+approved semantic provider, then run `npm run certify:console-copy`. `direct_allowed` accepts the
+credential-gated Anthropic adapter. `gateway_only` rejects direct providers before any model call
+and remains unavailable until an approved gateway adapter exists. Deterministic or unavailable
+providers never produce certification. Every attempt stores sanitized gate results and answer
+digests—not prompts, screen text, or model responses—in the append-only audit ledger. Copy evidence
+does not create release-promotion evidence or change a resource lifecycle.
+Container publication runs only after the protected `Console Copy Certification` workflow succeeds
+for the same source commit. That workflow uploads sanitized SHA-bound evidence; the publishing
+workflow verifies it before building any image.
+
 ## Legacy Agent Builder flow
 
 1. Search with `GET /agents?query=...` and score candidates with `POST /agents/similarity`.

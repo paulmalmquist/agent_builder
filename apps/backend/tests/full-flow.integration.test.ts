@@ -43,6 +43,7 @@ import type { InterpretationService } from '../src/services/interpretation-servi
 import { MaintenanceService } from '../src/services/maintenance-service.js';
 import { PromotionService } from '../src/services/promotion-service.js';
 import type { ServiceBundle } from '../src/services/types.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const runDatabaseIntegration = process.env['RUN_DATABASE_INTEGRATION'] === 'true';
 const describeDatabase = runDatabaseIntegration ? describe : describe.skip;
@@ -647,6 +648,8 @@ spec:
     const familyId = randomUUID();
     await prisma.resourceFamily.create({
       data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
         id: familyId,
         kind: ResourceKind.SKILL,
         slug: `frozen-insert-${familyId.slice(0, 8)}`,
@@ -1309,6 +1312,8 @@ spec:
     const expiredInterpretationId = randomUUID();
     await prisma.specInterpretation.create({
       data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
         id: expiredInterpretationId,
         prompt: 'Expired unattached integration interpretation prompt.',
         promptHash: 'f'.repeat(64),
@@ -1386,6 +1391,8 @@ spec:
     const prohibitedLegacyFamilyId = randomUUID();
     await prisma.agentFamily.create({
       data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
         id: prohibitedLegacyFamilyId,
         slug: `legacy-insert-${prohibitedLegacyFamilyId.slice(0, 8)}`,
         name: 'Legacy Insert Guard Fixture',

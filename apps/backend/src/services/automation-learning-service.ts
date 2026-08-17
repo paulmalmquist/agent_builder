@@ -29,6 +29,7 @@ import {
   scheduleDueAutomationsResponseSchema,
   updateAutomationScheduleStateRequestSchema,
   type AutomationSchedule,
+  type DigestSnapshot,
   type ImprovementCandidate,
   type JsonValue,
   type MemoryCandidate,
@@ -38,11 +39,76 @@ import type { z } from 'zod';
 import { AppError } from '../errors.js';
 import { appendAuditEvent } from '../audit.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { requireHumanActor } from './actors.js';
 import type { ExecutionService } from './execution-service.js';
+import type { AttentionService } from './attention-service.js';
+import { appendPlatformEvent } from './attention-service.js';
 
 const stringListSchema = createImprovementCandidateRequestSchema.shape.evidenceRefs;
+const MAX_DAILY_BRIEF_SIGNALS = 100;
+const MAX_DAILY_BRIEF_SIGNAL_LENGTH = 1_000;
+
+function packDigestEventLines(lines: readonly string[]): string[] {
+  const prefix = 'Platform activity: ';
+  const packed: string[] = [];
+  let current = prefix;
+  for (const line of lines) {
+    if (prefix.length + line.length > MAX_DAILY_BRIEF_SIGNAL_LENGTH) {
+      throw new AppError(
+        422,
+        'AUTOMATION_DIGEST_INPUT_INVALID',
+        'A platform digest line exceeds the Daily Brief signal limit',
+      );
+    }
+    const candidate = current === prefix ? `${prefix}${line}` : `${current} ${line}`;
+    if (candidate.length > MAX_DAILY_BRIEF_SIGNAL_LENGTH) {
+      packed.push(current);
+      current = `${prefix}${line}`;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current !== prefix) packed.push(current);
+  return packed;
+}
+
+export function appendPlatformDigestSignals(
+  inputTemplate: Record<string, JsonValue>,
+  summary: DigestSnapshot['summary'],
+): void {
+  if (summary.omittedEventCount !== 0) {
+    throw new AppError(
+      422,
+      'AUTOMATION_DIGEST_INPUT_INVALID',
+      'An incomplete historical digest cannot advance the briefing cursor',
+    );
+  }
+  const currentSignals = inputTemplate['signals'];
+  if (
+    !Array.isArray(currentSignals) ||
+    !currentSignals.every((value) => typeof value === 'string')
+  ) {
+    throw new AppError(
+      422,
+      'AUTOMATION_DIGEST_INPUT_INVALID',
+      'A digest-enabled Daily Brief requires a string signals array',
+    );
+  }
+  const digestSignals = [
+    `Platform digest: ${summary.headline}.`,
+    ...packDigestEventLines(summary.eventLines),
+  ];
+  if (currentSignals.length + digestSignals.length > MAX_DAILY_BRIEF_SIGNALS) {
+    throw new AppError(
+      422,
+      'AUTOMATION_DIGEST_INPUT_INVALID',
+      'The Daily Brief signals array has no room for the bounded platform digest',
+    );
+  }
+  inputTemplate['signals'] = [...currentSignals, ...digestSignals];
+}
 
 const scheduleStateWire = {
   [AutomationScheduleState.ACTIVE]: 'active',
@@ -90,6 +156,7 @@ function toSchedule(record: DatabaseSchedule): AutomationSchedule {
       record.inputTemplate,
       'AutomationSchedule.inputTemplate',
     ),
+    includePlatformDigest: record.includePlatformDigest,
     inputConstraints: parseJson(
       jsonObjectSchema,
       record.inputConstraints,
@@ -223,6 +290,7 @@ export class AutomationLearningService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly execution: ExecutionService,
+    private readonly attention?: AttentionService,
   ) {}
 
   async listSchedules(query: {
@@ -230,15 +298,17 @@ export class AutomationLearningService {
     limit: number;
   }): Promise<z.infer<typeof automationScheduleListResponseSchema>> {
     const records = await this.prisma.automationSchedule.findMany({
-      where:
-        query.state === undefined
+      where: {
+        ...aggregateScopeWhere(),
+        ...(query.state === undefined
           ? {}
           : {
               state:
                 query.state === 'active'
                   ? AutomationScheduleState.ACTIVE
                   : AutomationScheduleState.PAUSED,
-            },
+            }),
+      },
       orderBy: { nextRunAt: 'asc' },
       take: query.limit,
     });
@@ -246,7 +316,9 @@ export class AutomationLearningService {
   }
 
   async getSchedule(scheduleId: string): Promise<AutomationSchedule> {
-    const record = await this.prisma.automationSchedule.findUnique({ where: { id: scheduleId } });
+    const record = await this.prisma.automationSchedule.findFirst({
+      where: { id: scheduleId, ...aggregateScopeWhere() },
+    });
     if (record === null)
       throw new AppError(404, 'AUTOMATION_NOT_FOUND', 'Automation schedule was not found');
     return toSchedule(record);
@@ -270,11 +342,17 @@ export class AutomationLearningService {
       );
     }
     const [release, channel, grant] = await Promise.all([
-      this.prisma.releaseBundle.findUnique({ where: { id: parsed.releaseId } }),
-      this.prisma.productionChannel.findUnique({ where: { key: parsed.channelKey } }),
+      this.prisma.releaseBundle.findFirst({
+        where: { id: parsed.releaseId, ...aggregateScopeWhere() },
+      }),
+      this.prisma.productionChannel.findFirst({
+        where: { key: parsed.channelKey, ...aggregateScopeWhere() },
+      }),
       parsed.authorityGrantId === null
         ? Promise.resolve(null)
-        : this.prisma.authorityGrant.findUnique({ where: { id: parsed.authorityGrantId } }),
+        : this.prisma.authorityGrant.findFirst({
+            where: { id: parsed.authorityGrantId, ...aggregateScopeWhere() },
+          }),
     ]);
     if (release === null) throw new AppError(404, 'RELEASE_NOT_FOUND', 'Release was not found');
     if (channel === null)
@@ -302,6 +380,7 @@ export class AutomationLearningService {
     const record = await this.prisma.$transaction(async (transaction) => {
       const created = await transaction.automationSchedule.create({
         data: {
+          ...aggregateScope(),
           name: parsed.name,
           channelKey: parsed.channelKey,
           releaseId: release.id,
@@ -316,6 +395,7 @@ export class AutomationLearningService {
             parsed.inputTemplate,
             'AutomationSchedule.inputTemplate',
           ),
+          includePlatformDigest: parsed.includePlatformDigest,
           inputConstraints: toPrismaJson(
             jsonObjectSchema,
             parsed.inputConstraints,
@@ -364,8 +444,8 @@ export class AutomationLearningService {
     const actor = requireHumanActor();
     const parsed = updateAutomationScheduleStateRequestSchema.parse(input);
     const record = await this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.automationSchedule.findUnique({
-        where: { id: scheduleId },
+      const current = await transaction.automationSchedule.findFirst({
+        where: { id: scheduleId, ...aggregateScopeWhere() },
       });
       if (current === null)
         throw new AppError(404, 'AUTOMATION_NOT_FOUND', 'Automation schedule was not found');
@@ -399,9 +479,12 @@ export class AutomationLearningService {
   ): Promise<z.infer<typeof scheduleDueAutomationsResponseSchema>> {
     const claimToken = randomUUID();
     const leaseExpiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+    const scope = aggregateScope();
     const claimed = await this.prisma.$transaction(async (transaction) => {
       const lock = await transaction.$queryRaw<Array<{ acquired: boolean }>>`
-        SELECT pg_try_advisory_xact_lock(hashtext('paul-os-automation-scheduler')) AS acquired
+        SELECT pg_try_advisory_xact_lock(
+          hashtext(${'paul-os-automation-scheduler:' + scope.workspaceId})
+        ) AS acquired
       `;
       if (lock[0]?.acquired !== true) {
         return {
@@ -413,13 +496,16 @@ export class AutomationLearningService {
       }
       const rows = await transaction.$queryRaw<Array<{ id: string }>>`
         SELECT "id" FROM "AutomationSchedule"
-        WHERE "state" = 'active' AND "nextRunAt" <= ${now}
+        WHERE "state" = 'active'
+          AND "nextRunAt" <= ${now}
+          AND "workspaceId" = ${scope.workspaceId}::uuid
+          AND ("departmentId" IS NULL OR "departmentId" IS NOT DISTINCT FROM ${scope.departmentId}::uuid)
         ORDER BY "nextRunAt" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT ${limit}
       `;
       const schedules = await transaction.automationSchedule.findMany({
-        where: { id: { in: rows.map((row) => row.id) } },
+        where: { id: { in: rows.map((row) => row.id) }, ...aggregateScopeWhere() },
         include: { channel: true },
         orderBy: { nextRunAt: 'asc' },
       });
@@ -481,10 +567,15 @@ export class AutomationLearningService {
         });
       }
       const dispatchRows = await transaction.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "AutomationDispatch"
-        WHERE "state" = 'pending'
-           OR ("state" = 'processing' AND "leaseExpiresAt" <= ${now})
-        ORDER BY "createdAt" ASC
+        SELECT dispatch."id" FROM "AutomationDispatch" dispatch
+        JOIN "AutomationSchedule" schedule ON schedule."id" = dispatch."scheduleId"
+        WHERE (
+          dispatch."state" = 'pending'
+          OR (dispatch."state" = 'processing' AND dispatch."leaseExpiresAt" <= ${now})
+        )
+          AND schedule."workspaceId" = ${scope.workspaceId}::uuid
+          AND (schedule."departmentId" IS NULL OR schedule."departmentId" IS NOT DISTINCT FROM ${scope.departmentId}::uuid)
+        ORDER BY dispatch."createdAt" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT ${Math.max(limit, dispatchesCreated, 1)}
       `;
@@ -542,23 +633,49 @@ export class AutomationLearningService {
             'Scheduled release is no longer active',
           );
         }
-        const run = await this.execution.createRun({
-          releaseId: dispatch.schedule.releaseId,
-          authorityGrantId: dispatch.schedule.authorityGrantId,
-          input: parseJson(
-            jsonObjectSchema,
-            dispatch.schedule.inputTemplate,
-            'AutomationSchedule.inputTemplate',
-          ),
-          maxInputTokens: dispatch.schedule.maxInputTokens,
-          maxOutputTokens: dispatch.schedule.maxOutputTokens,
-          maxEstimatedCostUsd: Number(dispatch.schedule.maxEstimatedCostUsd),
-          idempotencyKey: dispatch.idempotencyKey,
-        });
+        const inputTemplate = parseJson(
+          jsonObjectSchema,
+          dispatch.schedule.inputTemplate,
+          'AutomationSchedule.inputTemplate',
+        );
+        let digestSnapshotId: string | null = null;
+        if (dispatch.schedule.includePlatformDigest) {
+          if (this.attention === undefined) {
+            throw new AppError(
+              503,
+              'DEPENDENCY_UNAVAILABLE',
+              'The platform digest service is unavailable',
+            );
+          }
+          try {
+            const snapshot = await this.attention.createDigestSnapshotForActor(
+              dispatch.schedule.createdBy,
+              now,
+            );
+            appendPlatformDigestSignals(inputTemplate, snapshot.summary);
+            digestSnapshotId = snapshot.id;
+          } catch (error) {
+            if (!(error instanceof AppError && error.code === 'DIGEST_WINDOW_EMPTY')) throw error;
+          }
+        }
+        const run = await this.execution.createRun(
+          {
+            releaseId: dispatch.schedule.releaseId,
+            authorityGrantId: dispatch.schedule.authorityGrantId,
+            input: inputTemplate,
+            maxInputTokens: dispatch.schedule.maxInputTokens,
+            maxOutputTokens: dispatch.schedule.maxOutputTokens,
+            maxEstimatedCostUsd: Number(dispatch.schedule.maxEstimatedCostUsd),
+            idempotencyKey: dispatch.idempotencyKey,
+          },
+          { digestSnapshotId },
+        );
         await this.prisma.$transaction(async (transaction) => {
           await transaction.executionRun.update({
             where: { id: run.id },
-            data: { maxAttempts: dispatch.schedule.maximumAttempts },
+            data: {
+              maxAttempts: dispatch.schedule.maximumAttempts,
+            },
           });
           const completed = await transaction.automationDispatch.updateMany({
             where: { id: dispatch.id, claimToken },
@@ -621,7 +738,10 @@ export class AutomationLearningService {
     limit: number;
   }): Promise<z.infer<typeof observationListResponseSchema>> {
     const records = await this.prisma.observation.findMany({
-      where: query.sourceRunId === undefined ? {} : { sourceRunId: query.sourceRunId },
+      where: {
+        ...aggregateScopeWhere(),
+        ...(query.sourceRunId === undefined ? {} : { sourceRunId: query.sourceRunId }),
+      },
       orderBy: { observedAt: 'desc' },
       take: query.limit,
     });
@@ -635,7 +755,9 @@ export class AutomationLearningService {
     const outcome =
       parsed.sourceOutcomeId === null
         ? null
-        : await this.prisma.outcomeRecord.findUnique({ where: { id: parsed.sourceOutcomeId } });
+        : await this.prisma.outcomeRecord.findFirst({
+            where: { id: parsed.sourceOutcomeId, run: aggregateScopeWhere() },
+          });
     if (parsed.sourceOutcomeId !== null && outcome === null) {
       throw new AppError(404, 'OUTCOME_NOT_FOUND', 'Source outcome was not found');
     }
@@ -648,13 +770,16 @@ export class AutomationLearningService {
     }
     const sourceRunId = parsed.sourceRunId ?? outcome?.runId ?? null;
     if (sourceRunId !== null) {
-      const run = await this.prisma.executionRun.findUnique({ where: { id: sourceRunId } });
+      const run = await this.prisma.executionRun.findFirst({
+        where: { id: sourceRunId, ...aggregateScopeWhere() },
+      });
       if (run === null)
         throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Source run was not found');
     }
     const record = await this.prisma.$transaction(async (transaction) => {
       const created = await transaction.observation.create({
         data: {
+          ...aggregateScope(),
           ...parsed,
           sourceRunId,
           evidence: toPrismaJson(jsonObjectSchema, parsed.evidence, 'Observation.evidence'),
@@ -667,6 +792,13 @@ export class AutomationLearningService {
         entityType: 'Observation',
         entityId: created.id,
         details: { signalKey: created.signalKey, sourceRunId },
+      });
+      await appendPlatformEvent(transaction, {
+        kind: 'observation.created',
+        entityType: 'Observation',
+        entityId: created.id,
+        summary: { signalType: created.signalType },
+        occurredAt: created.observedAt,
       });
       return created;
     });
@@ -686,7 +818,10 @@ export class AutomationLearningService {
             ? ImprovementCandidateState.INCUBATING
             : ImprovementCandidateState.REJECTED;
     const records = await this.prisma.improvementCandidate.findMany({
-      where: databaseState === undefined ? {} : { state: databaseState },
+      where: {
+        observation: aggregateScopeWhere(),
+        ...(databaseState === undefined ? {} : { state: databaseState }),
+      },
       orderBy: { createdAt: 'desc' },
       take: query.limit,
     });
@@ -698,7 +833,9 @@ export class AutomationLearningService {
   ): Promise<ImprovementCandidate> {
     const parsed = createImprovementCandidateRequestSchema.parse(input);
     if (
-      (await this.prisma.observation.findUnique({ where: { id: parsed.observationId } })) === null
+      (await this.prisma.observation.findFirst({
+        where: { id: parsed.observationId, ...aggregateScopeWhere() },
+      })) === null
     ) {
       throw new AppError(404, 'OBSERVATION_NOT_FOUND', 'Observation was not found');
     }
@@ -720,6 +857,13 @@ export class AutomationLearningService {
         entityId: created.id,
         details: { observationId: created.observationId },
       });
+      await appendPlatformEvent(transaction, {
+        kind: 'improvement.proposed',
+        entityType: 'ImprovementCandidate',
+        entityId: created.id,
+        summary: { observationId: created.observationId, proposedTarget: created.proposedTarget },
+        occurredAt: created.createdAt,
+      });
       return created;
     });
     return toImprovement(record);
@@ -732,8 +876,8 @@ export class AutomationLearningService {
     const actor = requireHumanActor();
     const parsed = reviewImprovementCandidateRequestSchema.parse(input);
     const record = await this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.improvementCandidate.findUnique({
-        where: { id: candidateId },
+      const current = await transaction.improvementCandidate.findFirst({
+        where: { id: candidateId, observation: aggregateScopeWhere() },
       });
       if (current === null)
         throw new AppError(404, 'IMPROVEMENT_NOT_FOUND', 'Improvement candidate was not found');
@@ -782,6 +926,7 @@ export class AutomationLearningService {
             : MemoryCandidateState.REJECTED;
     const records = await this.prisma.memoryCandidate.findMany({
       where: {
+        sourceRun: aggregateScopeWhere(),
         ...(databaseState === undefined ? {} : { state: databaseState }),
         ...(query.sourceRunId === undefined ? {} : { sourceRunId: query.sourceRunId }),
       },
@@ -795,7 +940,9 @@ export class AutomationLearningService {
     input: z.input<typeof createMemoryCandidateRequestSchema>,
   ): Promise<MemoryCandidate> {
     const parsed = createMemoryCandidateRequestSchema.parse(input);
-    const run = await this.prisma.executionRun.findUnique({ where: { id: parsed.sourceRunId } });
+    const run = await this.prisma.executionRun.findFirst({
+      where: { id: parsed.sourceRunId, ...aggregateScopeWhere() },
+    });
     if (run === null)
       throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Source run was not found');
     if (run.state !== ExecutionRunState.SUCCEEDED) {
@@ -841,7 +988,9 @@ export class AutomationLearningService {
     const actor = requireHumanActor();
     const parsed = reviewMemoryCandidateRequestSchema.parse(input);
     const record = await this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.memoryCandidate.findUnique({ where: { id: candidateId } });
+      const current = await transaction.memoryCandidate.findFirst({
+        where: { id: candidateId, sourceRun: aggregateScopeWhere() },
+      });
       if (current === null)
         throw new AppError(404, 'MEMORY_CANDIDATE_NOT_FOUND', 'Memory candidate was not found');
       if (current.state !== MemoryCandidateState.STAGED) {

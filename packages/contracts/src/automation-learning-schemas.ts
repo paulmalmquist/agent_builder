@@ -15,6 +15,7 @@ const automationScheduleInputSchema = z.object({
   intervalSeconds: z.number().int().min(60).max(31_536_000),
   nextRunAt: isoDateTimeSchema,
   inputTemplate: jsonObjectSchema,
+  includePlatformDigest: z.boolean().default(false),
   inputConstraints: jsonObjectSchema.default({}),
   catchUpPolicy: automationCatchUpPolicySchema.default('latest_only'),
   maxCatchUpRuns: z.number().int().min(1).max(100).default(10),
@@ -35,18 +36,34 @@ const automationScheduleInputSchema = z.object({
   outcomeExpectations: jsonObjectSchema.default({}),
 });
 
-export const createAutomationScheduleRequestSchema = automationScheduleInputSchema;
-export const automationScheduleSchema = automationScheduleInputSchema.extend({
-  id: uuidSchema,
-  releaseDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  projectId: z.string().nullable(),
-  state: automationScheduleStateSchema,
-  lastScheduledAt: isoDateTimeSchema.nullable(),
-  createdBy: z.string(),
-  updatedBy: z.string(),
-  createdAt: isoDateTimeSchema,
-  updatedAt: isoDateTimeSchema,
-});
+function validateDigestInput(
+  value: { includePlatformDigest: boolean; inputTemplate: Record<string, unknown> },
+  context: z.RefinementCtx,
+): void {
+  if (value.includePlatformDigest && !Array.isArray(value.inputTemplate['signals'])) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['inputTemplate', 'signals'],
+      message: 'signals must be an array when includePlatformDigest is enabled',
+    });
+  }
+}
+
+export const createAutomationScheduleRequestSchema =
+  automationScheduleInputSchema.superRefine(validateDigestInput);
+export const automationScheduleSchema = automationScheduleInputSchema
+  .extend({
+    id: uuidSchema,
+    releaseDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    projectId: z.string().nullable(),
+    state: automationScheduleStateSchema,
+    lastScheduledAt: isoDateTimeSchema.nullable(),
+    createdBy: z.string(),
+    updatedBy: z.string(),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema,
+  })
+  .superRefine(validateDigestInput);
 export const automationScheduleListQuerySchema = z.object({
   state: automationScheduleStateSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),

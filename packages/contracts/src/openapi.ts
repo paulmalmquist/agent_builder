@@ -29,6 +29,15 @@ import {
 } from './automation-learning-schemas.js';
 import { agentCatalogQueryObjectSchema, agentCatalogResponseSchema } from './catalog-schemas.js';
 import {
+  attentionItemDetailSchema,
+  attentionItemParamsSchema,
+  attentionResolutionSchema,
+  attentionResponseSchema,
+  declineReleaseRequestSchema,
+  rejectExecutionRunRequestSchema,
+  resolveAttentionItemRequestSchema,
+} from './attention-schemas.js';
+import {
   certificationRunAcceptedSchema,
   certificationRunDetailSchema,
   certificationRunDetailQuerySchema,
@@ -105,6 +114,7 @@ import {
   productionChannelSchema,
   promoteReleaseRequestSchema,
   releaseEvaluationSchema,
+  releaseDeclineResponseSchema,
   rollbackReleaseRequestSchema,
 } from './release-governance-schemas.js';
 
@@ -138,10 +148,49 @@ registry.register('ImprovementCandidate', improvementCandidateSchema);
 registry.register('MemoryCandidate', memoryCandidateSchema);
 registry.register('ReleaseEvaluation', releaseEvaluationSchema);
 registry.register('ProductionChannel', productionChannelSchema);
+registry.register('AttentionResponse', attentionResponseSchema);
+registry.register('AttentionItemDetail', attentionItemDetailSchema);
 
 const platformIdParam = (
   name: 'releaseId' | 'grantId' | 'runId' | 'scheduleId' | 'candidateId' | 'evaluationId',
 ) => z.object({ [name]: uuidSchema }) as z.ZodObject<Record<typeof name, typeof uuidSchema>>;
+
+registry.registerPath({
+  method: 'get',
+  path: '/v1/attention',
+  responses: {
+    200: { description: 'Decision-grade Attention queue', content: json(attentionResponseSchema) },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/attention-items/{itemId}/resolve',
+  request: {
+    params: attentionItemParamsSchema,
+    body: { content: json(resolveAttentionItemRequestSchema) },
+  },
+  responses: {
+    200: {
+      description: 'Immutable human acknowledgement of a terminal degraded item',
+      content: json(attentionResolutionSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/attention-items/{itemId}',
+  request: { params: attentionItemParamsSchema },
+  responses: {
+    200: {
+      description: 'Attention item with provenance and flight-recorder detail',
+      content: json(attentionItemDetailSchema),
+    },
+    404: errorResponse,
+  },
+});
 
 registry.registerPath({
   method: 'get',
@@ -260,6 +309,24 @@ registry.registerPath({
   },
 });
 registry.registerPath({
+  method: 'post',
+  path: '/v1/production-channels/{channelKey}/decline',
+  request: {
+    params: channelParam,
+    body: { content: json(declineReleaseRequestSchema) },
+  },
+  responses: {
+    200: {
+      description: 'Immutable human decline with no production-pointer mutation',
+      content: json(releaseDeclineResponseSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
+    422: errorResponse,
+  },
+});
+registry.registerPath({
   method: 'get',
   path: '/v1/authority-grants',
   request: { query: authorityGrantListQuerySchema },
@@ -345,6 +412,23 @@ registry.registerPath({
       description: 'Cancelled run or cancellation request',
       content: json(executionRunSchema),
     },
+    409: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/execution-runs/{runId}/reject',
+  request: {
+    params: platformIdParam('runId'),
+    body: { content: json(rejectExecutionRunRequestSchema) },
+  },
+  responses: {
+    200: {
+      description: 'Human rejection of a pending execution request',
+      content: json(executionRunSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
     409: errorResponse,
   },
 });

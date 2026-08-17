@@ -190,6 +190,23 @@ export const releasePromotionDecisionSchema = z.object({
   decidedAt: isoDateTimeSchema,
 });
 
+export const releaseDeclineDecisionSchema = z.object({
+  id: uuidSchema,
+  channelKey: productionChannelKeySchema,
+  action: z.literal('declined'),
+  releaseId: uuidSchema,
+  evaluationId: uuidSchema,
+  rationale: z.string(),
+  decidedBy: z.string(),
+  decidedAt: isoDateTimeSchema,
+});
+
+export const releaseDeclineResponseSchema = z.object({
+  // Declining evidence never creates or moves a production pointer.
+  channel: productionChannelSchema.nullable(),
+  decision: releaseDeclineDecisionSchema,
+});
+
 export const productionChannelMutationResponseSchema = z.object({
   channel: productionChannelSchema,
   decision: releasePromotionDecisionSchema,
@@ -200,3 +217,4 @@ export type ReleaseEvaluationExecutorKind = z.infer<typeof releaseEvaluationExec
 export type ReleaseEvaluationGateResult = z.infer<typeof releaseEvaluationGateResultSchema>;
 export type ReleaseEvaluationMode = z.infer<typeof releaseEvaluationModeSchema>;
 export type ProductionChannel = z.infer<typeof productionChannelSchema>;
+export type ReleaseDeclineDecision = z.infer<typeof releaseDeclineDecisionSchema>;

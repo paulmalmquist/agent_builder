@@ -36,7 +36,7 @@ describe('certification page', () => {
       screen.getByLabelText('Promotion rationale'),
       'The immutable coverage evidence meets every applicable gate.',
     );
-    await user.click(screen.getByRole('button', { name: 'Confirm promotion' }));
+    await user.click(screen.getByRole('button', { name: 'Promote release' }));
     expect(await screen.findByText(/challenger is now the active champion/i)).toBeInTheDocument();
   });
 

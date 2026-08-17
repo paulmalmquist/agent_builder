@@ -34,6 +34,7 @@ import { ExecutionService } from './execution-service.js';
 import { AutomationLearningService } from './automation-learning-service.js';
 import { ExecutionDispatcher } from '../execution/dispatcher.js';
 import { AutomationScheduler } from '../automation/scheduler.js';
+import { AttentionService } from './attention-service.js';
 
 export function createServices(
   prisma: PrismaClient,
@@ -100,13 +101,14 @@ export function createServices(
     }
   }
   const execution = new ExecutionService(prisma, config, modelProvider);
+  const attention = new AttentionService(prisma);
   const executionDispatcher = new ExecutionDispatcher(
     config.execution.concurrency,
     execution,
     logger,
     config.execution.leaseMs,
   );
-  const automationLearning = new AutomationLearningService(prisma, execution);
+  const automationLearning = new AutomationLearningService(prisma, execution, attention);
   const automationScheduler = new AutomationScheduler(
     automationLearning,
     (runId) => executionDispatcher.enqueue(runId),
@@ -134,6 +136,7 @@ export function createServices(
     maintenance,
     automationScheduler,
     platform: {
+      attention,
       registry: new RegistryService(prisma, config.repositorySourceCommit),
       releaseGovernance: new ReleaseGovernanceService(prisma),
       execution,

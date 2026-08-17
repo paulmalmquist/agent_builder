@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import {
   createReleaseEvaluationRequestSchema,
+  declineReleaseRequestSchema,
   evaluationSuiteSpecSchema,
   productionChannelMutationResponseSchema,
   productionChannelSchema,
@@ -18,6 +19,8 @@ import {
   releaseEvaluationEvidenceSchema,
   releaseEvaluationGateScoresSchema,
   releaseEvaluationSchema,
+  releaseDeclineDecisionSchema,
+  releaseDeclineResponseSchema,
   releasePromotionDecisionSchema,
   rollbackReleaseRequestSchema,
   resourceManifestSchema,
@@ -29,6 +32,8 @@ import { appendAuditEvent } from '../audit.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentRequestContext } from '../request-context.js';
+import { aggregateScope, aggregateScopeWhere } from '../scope.js';
+import { appendPlatformEvent } from './attention-service.js';
 import {
   DeterministicContractReleaseEvaluator,
   deterministicContractDisclaimer,
@@ -46,6 +51,7 @@ type ChannelRecord = Prisma.ProductionChannelGetPayload<{
   include: { currentRelease: true };
 }>;
 type DecisionRecord = Prisma.ReleasePromotionDecisionGetPayload<Record<string, never>>;
+type DeclineRecord = Prisma.ReleaseDeclineDecisionGetPayload<Record<string, never>>;
 
 function toEvaluation(record: EvaluationRecord): ReleaseEvaluation {
   const evidence = parseJson(
@@ -108,6 +114,19 @@ function toDecision(record: DecisionRecord) {
   });
 }
 
+function toDeclineDecision(record: DeclineRecord) {
+  return releaseDeclineDecisionSchema.parse({
+    id: record.id,
+    channelKey: record.channelKey,
+    action: 'declined',
+    releaseId: record.releaseId,
+    evaluationId: record.evaluationId,
+    rationale: record.rationale,
+    decidedBy: record.decidedBy,
+    decidedAt: record.decidedAt.toISOString(),
+  });
+}
+
 function requireHumanActor(): string {
   const context = currentRequestContext();
   if (context.actor.authentication === 'system') {
@@ -149,8 +168,8 @@ export class ReleaseGovernanceService {
     const record = await this.prisma.$transaction(
       async (transaction) => {
         await transaction.$queryRaw`SELECT "id" FROM "ReleaseBundle" WHERE "id" = ${parsed.releaseId}::uuid FOR UPDATE`;
-        const release = await transaction.releaseBundle.findUnique({
-          where: { id: parsed.releaseId },
+        const release = await transaction.releaseBundle.findFirst({
+          where: { id: parsed.releaseId, ...aggregateScopeWhere() },
           include: {
             resources: { include: { resourceVersion: { include: { family: true } } } },
           },
@@ -349,7 +368,9 @@ export class ReleaseGovernanceService {
   }
 
   async getEvaluation(evaluationId: string): Promise<ReleaseEvaluation> {
-    const record = await this.prisma.releaseEvaluation.findUnique({ where: { id: evaluationId } });
+    const record = await this.prisma.releaseEvaluation.findFirst({
+      where: { id: evaluationId, release: aggregateScopeWhere() },
+    });
     if (record === null) {
       throw new AppError(404, 'RELEASE_EVALUATION_NOT_FOUND', 'Release evaluation was not found');
     }
@@ -357,8 +378,8 @@ export class ReleaseGovernanceService {
   }
 
   async getChannel(channelKey: string): Promise<ProductionChannel> {
-    const channel = await this.prisma.productionChannel.findUnique({
-      where: { key: channelKey },
+    const channel = await this.prisma.productionChannel.findFirst({
+      where: { key: channelKey, ...aggregateScopeWhere() },
       include: { currentRelease: true },
     });
     if (channel === null) {
@@ -377,14 +398,112 @@ export class ReleaseGovernanceService {
     });
   }
 
+  async decline(channelKey: string, input: z.input<typeof declineReleaseRequestSchema>) {
+    const parsed = declineReleaseRequestSchema.parse(input);
+    const actor = requireHumanActor();
+    const result = await this.prisma.$transaction(
+      async (transaction) => {
+        const lockKey = `${aggregateScope().workspaceId}:${channelKey}:release-decision`;
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        const evidence = await transaction.releaseEvaluation.findFirst({
+          where: { id: parsed.evaluationId, release: aggregateScopeWhere() },
+          include: {
+            release: true,
+            promotionDecisions: { select: { id: true } },
+            declineDecisions: true,
+          },
+        });
+        if (evidence === null) {
+          throw new AppError(
+            404,
+            'RELEASE_EVALUATION_NOT_FOUND',
+            'Release evaluation was not found',
+          );
+        }
+        if (
+          evidence.releaseId !== parsed.releaseId ||
+          evidence.verdict !== ReleaseEvaluationVerdict.PASSED
+        ) {
+          throw new AppError(
+            422,
+            'PASSING_RELEASE_EVIDENCE_REQUIRED',
+            'Decline requires passing evidence for this exact release',
+          );
+        }
+        if (expectedChannelKey(evidence.release.projectId) !== channelKey) {
+          throw new AppError(
+            422,
+            'PRODUCTION_CHANNEL_MISMATCH',
+            'The release project does not match the production channel',
+          );
+        }
+        const priorDecline = evidence.declineDecisions[0];
+        if (priorDecline !== undefined) {
+          if (priorDecline.rationale !== parsed.rationale) {
+            throw new AppError(
+              409,
+              'RELEASE_EVIDENCE_ALREADY_DECIDED',
+              'This evidence already has an immutable decline decision',
+            );
+          }
+          const channel = await transaction.productionChannel.findFirst({
+            where: { key: channelKey, ...aggregateScopeWhere() },
+            include: { currentRelease: true },
+          });
+          return { channel, decision: priorDecline };
+        }
+        if (evidence.promotionDecisions.length > 0) {
+          throw new AppError(
+            409,
+            'RELEASE_EVIDENCE_ALREADY_DECIDED',
+            'This evidence already has an immutable promotion decision',
+          );
+        }
+        const decision = await transaction.releaseDeclineDecision.create({
+          data: {
+            ...aggregateScope(),
+            channelKey,
+            releaseId: parsed.releaseId,
+            evaluationId: parsed.evaluationId,
+            rationale: parsed.rationale,
+            decidedBy: actor,
+          },
+        });
+        await appendPlatformEvent(transaction, {
+          kind: 'release.declined',
+          entityType: 'ReleaseEvaluation',
+          entityId: evidence.id,
+          summary: { releaseId: evidence.releaseId, channelKey },
+        });
+        await appendAuditEvent(transaction, {
+          action: 'release.declined',
+          entityType: 'ReleaseEvaluation',
+          entityId: evidence.id,
+          details: { decisionId: decision.id, releaseId: evidence.releaseId, channelKey },
+        });
+        const channel = await transaction.productionChannel.findFirst({
+          where: { key: channelKey, ...aggregateScopeWhere() },
+          include: { currentRelease: true },
+        });
+        return { channel, decision };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+    return releaseDeclineResponseSchema.parse({
+      channel: result.channel === null ? null : toChannel(result.channel),
+      decision: toDeclineDecision(result.decision),
+    });
+  }
+
   async rollback(channelKey: string, input: z.input<typeof rollbackReleaseRequestSchema>) {
     const parsed = rollbackReleaseRequestSchema.parse(input);
     const actor = requireHumanActor();
     const result = await this.prisma.$transaction(
       async (transaction) => {
-        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${channelKey}))`;
-        const channel = await transaction.productionChannel.findUnique({
-          where: { key: channelKey },
+        const lockKey = `${aggregateScope().workspaceId}:${channelKey}:release-decision`;
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        const channel = await transaction.productionChannel.findFirst({
+          where: { key: channelKey, ...aggregateScopeWhere() },
           include: { currentRelease: true },
         });
         if (channel === null || channel.currentReleaseId === null) {
@@ -441,9 +560,10 @@ export class ReleaseGovernanceService {
     const actor = requireHumanActor();
     const result = await this.prisma.$transaction(
       async (transaction) => {
-        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${channelKey}))`;
-        const release = await transaction.releaseBundle.findUnique({
-          where: { id: input.releaseId },
+        const lockKey = `${aggregateScope().workspaceId}:${channelKey}:release-decision`;
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        const release = await transaction.releaseBundle.findFirst({
+          where: { id: input.releaseId, ...aggregateScopeWhere() },
           include: { resources: { include: { resourceVersion: true } } },
         });
         if (release === null) throw new AppError(404, 'RELEASE_NOT_FOUND', 'Release was not found');
@@ -454,8 +574,9 @@ export class ReleaseGovernanceService {
             'The release project does not match the production channel',
           );
         }
-        const evidence = await transaction.releaseEvaluation.findUnique({
-          where: { id: input.evaluationId },
+        const evidence = await transaction.releaseEvaluation.findFirst({
+          where: { id: input.evaluationId, release: aggregateScopeWhere() },
+          include: { declineDecisions: { select: { id: true } } },
         });
         if (
           evidence === null ||
@@ -467,6 +588,13 @@ export class ReleaseGovernanceService {
             422,
             'PASSING_RELEASE_EVIDENCE_REQUIRED',
             'Promotion requires passing evidence for this exact release digest',
+          );
+        }
+        if (evidence.declineDecisions.length > 0) {
+          throw new AppError(
+            409,
+            'RELEASE_EVIDENCE_ALREADY_DECIDED',
+            'This evidence already has an immutable decline decision',
           );
         }
         if (
@@ -491,12 +619,17 @@ export class ReleaseGovernanceService {
             'Production promotion requires repository-verified source provenance',
           );
         }
-        let channel = await transaction.productionChannel.findUnique({
-          where: { key: channelKey },
+        let channel = await transaction.productionChannel.findFirst({
+          where: { key: channelKey, ...aggregateScopeWhere() },
           include: { currentRelease: true },
         });
         channel ??= await transaction.productionChannel.create({
-          data: { key: channelKey, projectId: release.projectId },
+          data: {
+            workspaceId: release.workspaceId,
+            departmentId: release.departmentId,
+            key: channelKey,
+            projectId: release.projectId,
+          },
           include: { currentRelease: true },
         });
         if (channel.currentReleaseId === release.id) {
@@ -559,6 +692,15 @@ export class ReleaseGovernanceService {
         previousReleaseId: channel.currentReleaseId,
         evaluationId: input.evaluationId,
       },
+    });
+    await appendPlatformEvent(transaction, {
+      kind:
+        input.action === ReleasePromotionAction.PROMOTED
+          ? 'release.promoted'
+          : 'release.rolled_back',
+      entityType: 'ReleaseBundle',
+      entityId: input.releaseId,
+      summary: { channelKey: channel.key, previousReleaseId: channel.currentReleaseId },
     });
     return { channel: toChannel(updated), decision: toDecision(decision) };
   }

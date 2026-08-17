@@ -1,0 +1,149 @@
+[
+  {
+    "screen": "attention",
+    "introduction": [
+      "Review the few items that need you.",
+      "Everything else waits for your next briefing."
+    ],
+    "actions": [
+      {
+        "label": "Why am I seeing this?",
+        "consequence": "Opens provenance and exact evidence without changing anything.",
+        "undo": "Close the review to leave the decision unchanged."
+      }
+    ]
+  },
+  {
+    "screen": "all-quiet",
+    "introduction": [
+      "Nothing needs a decision.",
+      "Paul OS shows the last successful briefing time below."
+    ],
+    "actions": []
+  },
+  {
+    "screen": "run-approval",
+    "introduction": [
+      "A run asks to work within exact limits.",
+      "Review its sources, limits, and budget before granting authority."
+    ],
+    "actions": [
+      {
+        "label": "Approve authority",
+        "consequence": "Allows matching runs until this exact grant expires.",
+        "undo": "Revoke the grant anytime to stop later runs."
+      },
+      {
+        "label": "Reject request",
+        "consequence": "Cancels this run and records your reason.",
+        "undo": "Create a new request if the limits change."
+      }
+    ],
+    "body": ["The exact granted scopes and limits appear below."]
+  },
+  {
+    "screen": "promotion",
+    "introduction": [
+      "This release passed every required evidence check.",
+      "Promote it to use this version for new production runs."
+    ],
+    "actions": [
+      {
+        "label": "Promote release",
+        "consequence": "Moves the production pointer to this exact release digest.",
+        "undo": "Restore the previous certified release with one governed rollback."
+      },
+      {
+        "label": "Decline release",
+        "consequence": "Keeps production unchanged and records your reason permanently.",
+        "undo": "Evaluate a successor release before making another promotion decision."
+      }
+    ]
+  },
+  {
+    "screen": "memory-review",
+    "introduction": [
+      "A run proposed a durable memory.",
+      "Review the exact value and its source before storing it."
+    ],
+    "actions": [
+      {
+        "label": "Accept memory",
+        "consequence": "Stores this reviewed value with its source and provenance.",
+        "undo": "A later reviewed memory can replace the accepted value."
+      },
+      {
+        "label": "Reject memory",
+        "consequence": "Discards this proposal and leaves existing memory unchanged.",
+        "undo": "Stage a new candidate from a later run."
+      }
+    ]
+  },
+  {
+    "screen": "improvement-review",
+    "introduction": [
+      "A repeated signal became a candidate improvement.",
+      "Choose whether to explore it without changing the repository."
+    ],
+    "actions": [
+      {
+        "label": "Move to incubator",
+        "consequence": "Starts governed exploration without applying or committing a patch.",
+        "undo": "Reject the candidate before any repository import."
+      },
+      {
+        "label": "Reject candidate",
+        "consequence": "Closes this proposal while retaining its observation as evidence.",
+        "undo": "Create a new candidate from the retained observation."
+      }
+    ]
+  },
+  {
+    "screen": "failed-run",
+    "introduction": [
+      "A run stopped before producing an outcome.",
+      "Review its recorder before acknowledging the terminal failure."
+    ],
+    "actions": [
+      {
+        "label": "Review flight recorder",
+        "consequence": "Shows phases, timing, cost, and the final recorded error.",
+        "undo": "Opening the recorder is read-only and changes nothing."
+      },
+      {
+        "label": "Acknowledge failure",
+        "consequence": "Removes this terminal item from Attention after review.",
+        "undo": "The acknowledgement remains permanently in the audit ledger."
+      }
+    ]
+  },
+  {
+    "screen": "flight-recorder",
+    "introduction": [
+      "This timeline shows what the run did.",
+      "Review each phase, its duration, and its recorded cost."
+    ],
+    "actions": [
+      {
+        "label": "Close detail",
+        "consequence": "Returns to Attention without changing the run.",
+        "undo": "Open the same item to review the timeline again."
+      }
+    ]
+  },
+  {
+    "screen": "waiting-for-user",
+    "introduction": [
+      "This run needs a tool on your approved workstation.",
+      "Sign in before expiry or Paul OS cancels the run."
+    ],
+    "actions": [
+      {
+        "label": "Review requirement",
+        "consequence": "Shows the required device, user, plugin, and expiry.",
+        "undo": "Close the review to keep the run waiting."
+      }
+    ],
+    "body": ["The platform never moves local work to the control plane silently."]
+  }
+]

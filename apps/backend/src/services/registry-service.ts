@@ -24,6 +24,7 @@ import { appendAuditEvent } from '../audit.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScope, aggregateScopeWhere, isInPrincipalScope } from '../scope.js';
 
 const kindToDatabase = {
   CorePolicy: DatabaseResourceKind.CORE_POLICY,
@@ -180,10 +181,15 @@ export class RegistryService {
       );
     }
     const actor = currentActorId();
+    const scope = aggregateScope();
+    const visibleScope = aggregateScopeWhere();
     const result = await this.prisma.$transaction(async (transaction) => {
       if (parsed.improvementCandidateId !== null) {
-        const candidate = await transaction.improvementCandidate.findUnique({
-          where: { id: parsed.improvementCandidateId },
+        const candidate = await transaction.improvementCandidate.findFirst({
+          where: {
+            id: parsed.improvementCandidateId,
+            observation: visibleScope,
+          },
           select: { state: true, proposedTarget: true },
         });
         if (candidate === null) {
@@ -210,6 +216,9 @@ export class RegistryService {
       const family = await transaction.resourceFamily.findUnique({
         where: { id: manifest.metadata.id },
       });
+      if (family !== null && !isInPrincipalScope(family)) {
+        throw new AppError(404, 'RESOURCE_FAMILY_NOT_FOUND', 'Resource family was not found');
+      }
       if (
         family !== null &&
         (family.kind !== kindToDatabase[manifest.kind] || family.slug !== manifest.metadata.slug)
@@ -223,6 +232,7 @@ export class RegistryService {
       if (family === null) {
         await transaction.resourceFamily.create({
           data: {
+            ...scope,
             id: manifest.metadata.id,
             kind: kindToDatabase[manifest.kind],
             slug: manifest.metadata.slug,
@@ -234,9 +244,11 @@ export class RegistryService {
       }
 
       for (const dependency of manifest.dependencies) {
-        const found = await transaction.resourceVersion.findUnique({
+        const found = await transaction.resourceVersion.findFirst({
           where: {
-            familyId_version: { familyId: dependency.familyId, version: dependency.version },
+            familyId: dependency.familyId,
+            version: dependency.version,
+            family: visibleScope,
           },
         });
         if (found === null) {
@@ -252,6 +264,7 @@ export class RegistryService {
         }
       }
       const dependencyGraph = await transaction.resourceVersion.findMany({
+        where: { family: visibleScope },
         select: { familyId: true, version: true, dependencyPins: true },
       });
       assertAcyclicExactPins(dependencyGraph, {
@@ -269,6 +282,9 @@ export class RegistryService {
         },
         include: { family: true },
       });
+      if (existing !== null && !isInPrincipalScope(existing.family)) {
+        throw new AppError(404, 'RESOURCE_VERSION_NOT_FOUND', 'Resource version was not found');
+      }
       let resource: ResourceRecord;
       let idempotent = false;
       if (existing === null) {
@@ -435,7 +451,10 @@ export class RegistryService {
   }): Promise<z.infer<typeof resourceListResponseSchema>> {
     const records = await this.prisma.resourceVersion.findMany({
       where: {
-        ...(query.kind === undefined ? {} : { family: { kind: kindToDatabase[query.kind] } }),
+        family: {
+          ...aggregateScopeWhere(),
+          ...(query.kind === undefined ? {} : { kind: kindToDatabase[query.kind] }),
+        },
         ...(query.lifecycle === undefined
           ? {}
           : { lifecycle: lifecycleToDatabase[query.lifecycle] }),
@@ -463,7 +482,7 @@ export class RegistryService {
       throw new AppError(400, 'VALIDATION_ERROR', 'A resource version may appear only once');
     }
     const versions = await this.prisma.resourceVersion.findMany({
-      where: { id: { in: uniqueIds } },
+      where: { id: { in: uniqueIds }, family: aggregateScopeWhere() },
       include: { family: true },
     });
     if (versions.length !== uniqueIds.length) {
@@ -527,14 +546,16 @@ export class RegistryService {
       }),
     );
     const actor = currentActorId();
+    const scope = aggregateScope();
     const record = await this.prisma.$transaction(async (transaction) => {
-      const existing = await transaction.releaseBundle.findUnique({
-        where: { digest },
+      const existing = await transaction.releaseBundle.findFirst({
+        where: { digest, ...aggregateScopeWhere() },
         include: { resources: true },
       });
       if (existing !== null) return existing;
       const created = await transaction.releaseBundle.create({
         data: {
+          ...scope,
           digest,
           projectId: parsed.projectId,
           createdBy: actor,
@@ -561,8 +582,8 @@ export class RegistryService {
   }
 
   async getRelease(releaseId: string): Promise<ReleaseBundle> {
-    const record = await this.prisma.releaseBundle.findUnique({
-      where: { id: releaseId },
+    const record = await this.prisma.releaseBundle.findFirst({
+      where: { id: releaseId, ...aggregateScopeWhere() },
       include: { resources: true },
     });
     if (record === null) throw new AppError(404, 'RELEASE_NOT_FOUND', 'Release was not found');

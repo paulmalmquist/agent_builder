@@ -925,6 +925,1196 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
         ],
         "type": "object",
       },
+      "AttentionItemDetail": {
+        "properties": {
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+          },
+          "item": {
+            "properties": {
+              "cost": {
+                "nullable": true,
+                "properties": {
+                  "budgetUsd": {
+                    "minimum": 0,
+                    "nullable": true,
+                    "type": "number",
+                  },
+                  "period": {
+                    "enum": [
+                      "run",
+                      "day",
+                      "week",
+                      "month",
+                    ],
+                    "type": "string",
+                  },
+                  "usd": {
+                    "minimum": 0,
+                    "type": "number",
+                  },
+                },
+                "required": [
+                  "period",
+                  "usd",
+                  "budgetUsd",
+                ],
+                "type": "object",
+              },
+              "delta": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "headline": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string",
+              },
+              "id": {
+                "maxLength": 320,
+                "minLength": 3,
+                "type": "string",
+              },
+              "kind": {
+                "enum": [
+                  "execution_approval",
+                  "release_promotion",
+                  "memory_review",
+                  "improvement_review",
+                  "plugin_health",
+                  "stalled_run",
+                  "budget_stop",
+                  "waiting_for_user",
+                  "safety_stop",
+                ],
+                "type": "string",
+              },
+              "occurredAt": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "payload": {
+                "properties": {
+                  "candidateId": {
+                    "format": "uuid",
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "channelKey": {
+                    "maxLength": 160,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "detailPath": {
+                    "maxLength": 500,
+                    "type": "string",
+                  },
+                  "evaluationId": {
+                    "format": "uuid",
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "expiresAt": {
+                    "format": "date-time",
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "metadata": {
+                    "additionalProperties": true,
+                    "type": "object",
+                  },
+                  "releaseId": {
+                    "format": "uuid",
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "reviewFacts": {
+                    "items": {
+                      "properties": {
+                        "label": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "value": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "label",
+                        "value",
+                      ],
+                      "type": "object",
+                    },
+                    "maxItems": 12,
+                    "type": "array",
+                  },
+                  "runId": {
+                    "format": "uuid",
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "scopes": {
+                    "items": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "maxItems": 100,
+                    "type": "array",
+                  },
+                  "sourceId": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "sourceType": {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "sourceType",
+                  "sourceId",
+                  "detailPath",
+                  "scopes",
+                  "runId",
+                  "candidateId",
+                  "channelKey",
+                  "releaseId",
+                  "evaluationId",
+                  "expiresAt",
+                  "reviewFacts",
+                  "metadata",
+                ],
+                "type": "object",
+              },
+              "primaryAction": {
+                "nullable": true,
+                "properties": {
+                  "consequence": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "kind": {
+                    "enum": [
+                      "approve_run",
+                      "reject_run",
+                      "promote_release",
+                      "decline_release",
+                      "accept_memory",
+                      "reject_memory",
+                      "incubate_candidate",
+                      "reject_candidate",
+                      "open_details",
+                      "sign_in",
+                      "cancel_run",
+                      "resolve_item",
+                    ],
+                    "type": "string",
+                  },
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "requiresRationale": {
+                    "type": "boolean",
+                  },
+                  "resourceId": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "undo": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "kind",
+                  "label",
+                  "consequence",
+                  "undo",
+                  "resourceId",
+                  "requiresRationale",
+                ],
+                "type": "object",
+              },
+              "provenance": {
+                "properties": {
+                  "actorId": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "explanation": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "requestId": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "sourceId": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "sourceType": {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "sourceType",
+                  "sourceId",
+                  "actorId",
+                  "requestId",
+                  "explanation",
+                ],
+                "type": "object",
+              },
+              "reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string",
+              },
+              "secondaryAction": {
+                "nullable": true,
+                "properties": {
+                  "consequence": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "kind": {
+                    "enum": [
+                      "approve_run",
+                      "reject_run",
+                      "promote_release",
+                      "decline_release",
+                      "accept_memory",
+                      "reject_memory",
+                      "incubate_candidate",
+                      "reject_candidate",
+                      "open_details",
+                      "sign_in",
+                      "cancel_run",
+                      "resolve_item",
+                    ],
+                    "type": "string",
+                  },
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "requiresRationale": {
+                    "type": "boolean",
+                  },
+                  "resourceId": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "undo": {
+                    "maxLength": 240,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "kind",
+                  "label",
+                  "consequence",
+                  "undo",
+                  "resourceId",
+                  "requiresRationale",
+                ],
+                "type": "object",
+              },
+              "shelf": {
+                "enum": [
+                  "decide",
+                  "degraded",
+                ],
+                "type": "string",
+              },
+              "status": {
+                "enum": [
+                  "decide",
+                  "degraded",
+                  "safety_stop",
+                  "nominal",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "headline",
+              "delta",
+              "status",
+              "primaryAction",
+              "secondaryAction",
+              "cost",
+              "reason",
+              "provenance",
+              "occurredAt",
+              "payload",
+              "id",
+              "kind",
+              "shelf",
+            ],
+            "type": "object",
+          },
+          "timeline": {
+            "items": {
+              "properties": {
+                "costUsd": {
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "number",
+                },
+                "durationMs": {
+                  "minimum": 0,
+                  "nullable": true,
+                  "type": "integer",
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string",
+                },
+                "message": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "occurredAt": {
+                  "format": "date-time",
+                  "type": "string",
+                },
+                "phase": {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "state": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "phase",
+                "state",
+                "message",
+                "durationMs",
+                "costUsd",
+                "occurredAt",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "item",
+          "timeline",
+          "details",
+        ],
+        "type": "object",
+      },
+      "AttentionResponse": {
+        "properties": {
+          "decide": {
+            "items": {
+              "properties": {
+                "cost": {
+                  "nullable": true,
+                  "properties": {
+                    "budgetUsd": {
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "number",
+                    },
+                    "period": {
+                      "enum": [
+                        "run",
+                        "day",
+                        "week",
+                        "month",
+                      ],
+                      "type": "string",
+                    },
+                    "usd": {
+                      "minimum": 0,
+                      "type": "number",
+                    },
+                  },
+                  "required": [
+                    "period",
+                    "usd",
+                    "budgetUsd",
+                  ],
+                  "type": "object",
+                },
+                "delta": {
+                  "maxLength": 300,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "headline": {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "id": {
+                  "maxLength": 320,
+                  "minLength": 3,
+                  "type": "string",
+                },
+                "kind": {
+                  "enum": [
+                    "execution_approval",
+                    "release_promotion",
+                    "memory_review",
+                    "improvement_review",
+                    "plugin_health",
+                    "stalled_run",
+                    "budget_stop",
+                    "waiting_for_user",
+                    "safety_stop",
+                  ],
+                  "type": "string",
+                },
+                "occurredAt": {
+                  "format": "date-time",
+                  "type": "string",
+                },
+                "payload": {
+                  "properties": {
+                    "candidateId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "channelKey": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "detailPath": {
+                      "maxLength": 500,
+                      "type": "string",
+                    },
+                    "evaluationId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "metadata": {
+                      "additionalProperties": true,
+                      "type": "object",
+                    },
+                    "releaseId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "reviewFacts": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "maxLength": 80,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "label",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "maxItems": 12,
+                      "type": "array",
+                    },
+                    "runId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "scopes": {
+                      "items": {
+                        "maxLength": 240,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "maxItems": 100,
+                      "type": "array",
+                    },
+                    "sourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "sourceType": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "sourceType",
+                    "sourceId",
+                    "detailPath",
+                    "scopes",
+                    "runId",
+                    "candidateId",
+                    "channelKey",
+                    "releaseId",
+                    "evaluationId",
+                    "expiresAt",
+                    "reviewFacts",
+                    "metadata",
+                  ],
+                  "type": "object",
+                },
+                "primaryAction": {
+                  "nullable": true,
+                  "properties": {
+                    "consequence": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "approve_run",
+                        "reject_run",
+                        "promote_release",
+                        "decline_release",
+                        "accept_memory",
+                        "reject_memory",
+                        "incubate_candidate",
+                        "reject_candidate",
+                        "open_details",
+                        "sign_in",
+                        "cancel_run",
+                        "resolve_item",
+                      ],
+                      "type": "string",
+                    },
+                    "label": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "requiresRationale": {
+                      "type": "boolean",
+                    },
+                    "resourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "undo": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "label",
+                    "consequence",
+                    "undo",
+                    "resourceId",
+                    "requiresRationale",
+                  ],
+                  "type": "object",
+                },
+                "provenance": {
+                  "properties": {
+                    "actorId": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "explanation": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "requestId": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "sourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "sourceType": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "sourceType",
+                    "sourceId",
+                    "actorId",
+                    "requestId",
+                    "explanation",
+                  ],
+                  "type": "object",
+                },
+                "reason": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "secondaryAction": {
+                  "nullable": true,
+                  "properties": {
+                    "consequence": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "approve_run",
+                        "reject_run",
+                        "promote_release",
+                        "decline_release",
+                        "accept_memory",
+                        "reject_memory",
+                        "incubate_candidate",
+                        "reject_candidate",
+                        "open_details",
+                        "sign_in",
+                        "cancel_run",
+                        "resolve_item",
+                      ],
+                      "type": "string",
+                    },
+                    "label": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "requiresRationale": {
+                      "type": "boolean",
+                    },
+                    "resourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "undo": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "label",
+                    "consequence",
+                    "undo",
+                    "resourceId",
+                    "requiresRationale",
+                  ],
+                  "type": "object",
+                },
+                "shelf": {
+                  "enum": [
+                    "decide",
+                    "degraded",
+                  ],
+                  "type": "string",
+                },
+                "status": {
+                  "enum": [
+                    "decide",
+                    "degraded",
+                    "safety_stop",
+                    "nominal",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "headline",
+                "delta",
+                "status",
+                "primaryAction",
+                "secondaryAction",
+                "cost",
+                "reason",
+                "provenance",
+                "occurredAt",
+                "payload",
+                "id",
+                "kind",
+                "shelf",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "decideBadgeCount": {
+            "minimum": 0,
+            "type": "integer",
+          },
+          "degraded": {
+            "items": {
+              "properties": {
+                "cost": {
+                  "nullable": true,
+                  "properties": {
+                    "budgetUsd": {
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "number",
+                    },
+                    "period": {
+                      "enum": [
+                        "run",
+                        "day",
+                        "week",
+                        "month",
+                      ],
+                      "type": "string",
+                    },
+                    "usd": {
+                      "minimum": 0,
+                      "type": "number",
+                    },
+                  },
+                  "required": [
+                    "period",
+                    "usd",
+                    "budgetUsd",
+                  ],
+                  "type": "object",
+                },
+                "delta": {
+                  "maxLength": 300,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "headline": {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "id": {
+                  "maxLength": 320,
+                  "minLength": 3,
+                  "type": "string",
+                },
+                "kind": {
+                  "enum": [
+                    "execution_approval",
+                    "release_promotion",
+                    "memory_review",
+                    "improvement_review",
+                    "plugin_health",
+                    "stalled_run",
+                    "budget_stop",
+                    "waiting_for_user",
+                    "safety_stop",
+                  ],
+                  "type": "string",
+                },
+                "occurredAt": {
+                  "format": "date-time",
+                  "type": "string",
+                },
+                "payload": {
+                  "properties": {
+                    "candidateId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "channelKey": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "detailPath": {
+                      "maxLength": 500,
+                      "type": "string",
+                    },
+                    "evaluationId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "metadata": {
+                      "additionalProperties": true,
+                      "type": "object",
+                    },
+                    "releaseId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "reviewFacts": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "maxLength": 80,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "label",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "maxItems": 12,
+                      "type": "array",
+                    },
+                    "runId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "scopes": {
+                      "items": {
+                        "maxLength": 240,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "maxItems": 100,
+                      "type": "array",
+                    },
+                    "sourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "sourceType": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "sourceType",
+                    "sourceId",
+                    "detailPath",
+                    "scopes",
+                    "runId",
+                    "candidateId",
+                    "channelKey",
+                    "releaseId",
+                    "evaluationId",
+                    "expiresAt",
+                    "reviewFacts",
+                    "metadata",
+                  ],
+                  "type": "object",
+                },
+                "primaryAction": {
+                  "nullable": true,
+                  "properties": {
+                    "consequence": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "approve_run",
+                        "reject_run",
+                        "promote_release",
+                        "decline_release",
+                        "accept_memory",
+                        "reject_memory",
+                        "incubate_candidate",
+                        "reject_candidate",
+                        "open_details",
+                        "sign_in",
+                        "cancel_run",
+                        "resolve_item",
+                      ],
+                      "type": "string",
+                    },
+                    "label": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "requiresRationale": {
+                      "type": "boolean",
+                    },
+                    "resourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "undo": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "label",
+                    "consequence",
+                    "undo",
+                    "resourceId",
+                    "requiresRationale",
+                  ],
+                  "type": "object",
+                },
+                "provenance": {
+                  "properties": {
+                    "actorId": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "explanation": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "requestId": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "sourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "sourceType": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "sourceType",
+                    "sourceId",
+                    "actorId",
+                    "requestId",
+                    "explanation",
+                  ],
+                  "type": "object",
+                },
+                "reason": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "secondaryAction": {
+                  "nullable": true,
+                  "properties": {
+                    "consequence": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "approve_run",
+                        "reject_run",
+                        "promote_release",
+                        "decline_release",
+                        "accept_memory",
+                        "reject_memory",
+                        "incubate_candidate",
+                        "reject_candidate",
+                        "open_details",
+                        "sign_in",
+                        "cancel_run",
+                        "resolve_item",
+                      ],
+                      "type": "string",
+                    },
+                    "label": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "requiresRationale": {
+                      "type": "boolean",
+                    },
+                    "resourceId": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "undo": {
+                      "maxLength": 240,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "label",
+                    "consequence",
+                    "undo",
+                    "resourceId",
+                    "requiresRationale",
+                  ],
+                  "type": "object",
+                },
+                "shelf": {
+                  "enum": [
+                    "decide",
+                    "degraded",
+                  ],
+                  "type": "string",
+                },
+                "status": {
+                  "enum": [
+                    "decide",
+                    "degraded",
+                    "safety_stop",
+                    "nominal",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "headline",
+                "delta",
+                "status",
+                "primaryAction",
+                "secondaryAction",
+                "cost",
+                "reason",
+                "provenance",
+                "occurredAt",
+                "payload",
+                "id",
+                "kind",
+                "shelf",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "digest": {
+            "properties": {
+              "headline": {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string",
+              },
+              "observationCount": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "promotionCount": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "runCount": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "totalCostUsd": {
+                "minimum": 0,
+                "type": "number",
+              },
+              "windowEndedAt": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "windowStartedAt": {
+                "format": "date-time",
+                "nullable": true,
+                "type": "string",
+              },
+            },
+            "required": [
+              "headline",
+              "runCount",
+              "totalCostUsd",
+              "promotionCount",
+              "observationCount",
+              "windowStartedAt",
+              "windowEndedAt",
+            ],
+            "type": "object",
+          },
+          "generatedAt": {
+            "format": "date-time",
+            "type": "string",
+          },
+          "lastDeliveredBriefingAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string",
+          },
+        },
+        "required": [
+          "generatedAt",
+          "decide",
+          "degraded",
+          "digest",
+          "decideBadgeCount",
+          "lastDeliveredBriefingAt",
+        ],
+        "type": "object",
+      },
       "AuthorityGrant": {
         "properties": {
           "actorId": {
@@ -1102,6 +2292,10 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
           "id": {
             "format": "uuid",
             "type": "string",
+          },
+          "includePlatformDigest": {
+            "default": false,
+            "type": "boolean",
           },
           "inputConstraints": {
             "additionalProperties": true,
@@ -2143,6 +3337,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
           },
           "developmentDraft": {
             "type": "boolean",
+          },
+          "digestSnapshotId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string",
           },
           "error": {
             "additionalProperties": true,
@@ -14964,6 +16163,1481 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
         },
       },
     },
+    "/v1/attention": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "decide": {
+                      "items": {
+                        "properties": {
+                          "cost": {
+                            "nullable": true,
+                            "properties": {
+                              "budgetUsd": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "number",
+                              },
+                              "period": {
+                                "enum": [
+                                  "run",
+                                  "day",
+                                  "week",
+                                  "month",
+                                ],
+                                "type": "string",
+                              },
+                              "usd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "period",
+                              "usd",
+                              "budgetUsd",
+                            ],
+                            "type": "object",
+                          },
+                          "delta": {
+                            "maxLength": 300,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "headline": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "id": {
+                            "maxLength": 320,
+                            "minLength": 3,
+                            "type": "string",
+                          },
+                          "kind": {
+                            "enum": [
+                              "execution_approval",
+                              "release_promotion",
+                              "memory_review",
+                              "improvement_review",
+                              "plugin_health",
+                              "stalled_run",
+                              "budget_stop",
+                              "waiting_for_user",
+                              "safety_stop",
+                            ],
+                            "type": "string",
+                          },
+                          "occurredAt": {
+                            "format": "date-time",
+                            "type": "string",
+                          },
+                          "payload": {
+                            "properties": {
+                              "candidateId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "channelKey": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "detailPath": {
+                                "maxLength": 500,
+                                "type": "string",
+                              },
+                              "evaluationId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "expiresAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "metadata": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "releaseId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "reviewFacts": {
+                                "items": {
+                                  "properties": {
+                                    "label": {
+                                      "maxLength": 80,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "value": {
+                                      "maxLength": 500,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "label",
+                                    "value",
+                                  ],
+                                  "type": "object",
+                                },
+                                "maxItems": 12,
+                                "type": "array",
+                              },
+                              "runId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "scopes": {
+                                "items": {
+                                  "maxLength": 240,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "maxItems": 100,
+                                "type": "array",
+                              },
+                              "sourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "sourceType": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "sourceType",
+                              "sourceId",
+                              "detailPath",
+                              "scopes",
+                              "runId",
+                              "candidateId",
+                              "channelKey",
+                              "releaseId",
+                              "evaluationId",
+                              "expiresAt",
+                              "reviewFacts",
+                              "metadata",
+                            ],
+                            "type": "object",
+                          },
+                          "primaryAction": {
+                            "nullable": true,
+                            "properties": {
+                              "consequence": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "approve_run",
+                                  "reject_run",
+                                  "promote_release",
+                                  "decline_release",
+                                  "accept_memory",
+                                  "reject_memory",
+                                  "incubate_candidate",
+                                  "reject_candidate",
+                                  "open_details",
+                                  "sign_in",
+                                  "cancel_run",
+                                  "resolve_item",
+                                ],
+                                "type": "string",
+                              },
+                              "label": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "requiresRationale": {
+                                "type": "boolean",
+                              },
+                              "resourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "undo": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "kind",
+                              "label",
+                              "consequence",
+                              "undo",
+                              "resourceId",
+                              "requiresRationale",
+                            ],
+                            "type": "object",
+                          },
+                          "provenance": {
+                            "properties": {
+                              "actorId": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "explanation": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "requestId": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "sourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "sourceType": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "sourceType",
+                              "sourceId",
+                              "actorId",
+                              "requestId",
+                              "explanation",
+                            ],
+                            "type": "object",
+                          },
+                          "reason": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "secondaryAction": {
+                            "nullable": true,
+                            "properties": {
+                              "consequence": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "approve_run",
+                                  "reject_run",
+                                  "promote_release",
+                                  "decline_release",
+                                  "accept_memory",
+                                  "reject_memory",
+                                  "incubate_candidate",
+                                  "reject_candidate",
+                                  "open_details",
+                                  "sign_in",
+                                  "cancel_run",
+                                  "resolve_item",
+                                ],
+                                "type": "string",
+                              },
+                              "label": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "requiresRationale": {
+                                "type": "boolean",
+                              },
+                              "resourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "undo": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "kind",
+                              "label",
+                              "consequence",
+                              "undo",
+                              "resourceId",
+                              "requiresRationale",
+                            ],
+                            "type": "object",
+                          },
+                          "shelf": {
+                            "enum": [
+                              "decide",
+                              "degraded",
+                            ],
+                            "type": "string",
+                          },
+                          "status": {
+                            "enum": [
+                              "decide",
+                              "degraded",
+                              "safety_stop",
+                              "nominal",
+                            ],
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "headline",
+                          "delta",
+                          "status",
+                          "primaryAction",
+                          "secondaryAction",
+                          "cost",
+                          "reason",
+                          "provenance",
+                          "occurredAt",
+                          "payload",
+                          "id",
+                          "kind",
+                          "shelf",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "decideBadgeCount": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "degraded": {
+                      "items": {
+                        "properties": {
+                          "cost": {
+                            "nullable": true,
+                            "properties": {
+                              "budgetUsd": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "number",
+                              },
+                              "period": {
+                                "enum": [
+                                  "run",
+                                  "day",
+                                  "week",
+                                  "month",
+                                ],
+                                "type": "string",
+                              },
+                              "usd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                            },
+                            "required": [
+                              "period",
+                              "usd",
+                              "budgetUsd",
+                            ],
+                            "type": "object",
+                          },
+                          "delta": {
+                            "maxLength": 300,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "headline": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "id": {
+                            "maxLength": 320,
+                            "minLength": 3,
+                            "type": "string",
+                          },
+                          "kind": {
+                            "enum": [
+                              "execution_approval",
+                              "release_promotion",
+                              "memory_review",
+                              "improvement_review",
+                              "plugin_health",
+                              "stalled_run",
+                              "budget_stop",
+                              "waiting_for_user",
+                              "safety_stop",
+                            ],
+                            "type": "string",
+                          },
+                          "occurredAt": {
+                            "format": "date-time",
+                            "type": "string",
+                          },
+                          "payload": {
+                            "properties": {
+                              "candidateId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "channelKey": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "detailPath": {
+                                "maxLength": 500,
+                                "type": "string",
+                              },
+                              "evaluationId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "expiresAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "metadata": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "releaseId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "reviewFacts": {
+                                "items": {
+                                  "properties": {
+                                    "label": {
+                                      "maxLength": 80,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "value": {
+                                      "maxLength": 500,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "label",
+                                    "value",
+                                  ],
+                                  "type": "object",
+                                },
+                                "maxItems": 12,
+                                "type": "array",
+                              },
+                              "runId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "scopes": {
+                                "items": {
+                                  "maxLength": 240,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "maxItems": 100,
+                                "type": "array",
+                              },
+                              "sourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "sourceType": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "sourceType",
+                              "sourceId",
+                              "detailPath",
+                              "scopes",
+                              "runId",
+                              "candidateId",
+                              "channelKey",
+                              "releaseId",
+                              "evaluationId",
+                              "expiresAt",
+                              "reviewFacts",
+                              "metadata",
+                            ],
+                            "type": "object",
+                          },
+                          "primaryAction": {
+                            "nullable": true,
+                            "properties": {
+                              "consequence": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "approve_run",
+                                  "reject_run",
+                                  "promote_release",
+                                  "decline_release",
+                                  "accept_memory",
+                                  "reject_memory",
+                                  "incubate_candidate",
+                                  "reject_candidate",
+                                  "open_details",
+                                  "sign_in",
+                                  "cancel_run",
+                                  "resolve_item",
+                                ],
+                                "type": "string",
+                              },
+                              "label": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "requiresRationale": {
+                                "type": "boolean",
+                              },
+                              "resourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "undo": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "kind",
+                              "label",
+                              "consequence",
+                              "undo",
+                              "resourceId",
+                              "requiresRationale",
+                            ],
+                            "type": "object",
+                          },
+                          "provenance": {
+                            "properties": {
+                              "actorId": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "explanation": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "requestId": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "sourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "sourceType": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "sourceType",
+                              "sourceId",
+                              "actorId",
+                              "requestId",
+                              "explanation",
+                            ],
+                            "type": "object",
+                          },
+                          "reason": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "secondaryAction": {
+                            "nullable": true,
+                            "properties": {
+                              "consequence": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "approve_run",
+                                  "reject_run",
+                                  "promote_release",
+                                  "decline_release",
+                                  "accept_memory",
+                                  "reject_memory",
+                                  "incubate_candidate",
+                                  "reject_candidate",
+                                  "open_details",
+                                  "sign_in",
+                                  "cancel_run",
+                                  "resolve_item",
+                                ],
+                                "type": "string",
+                              },
+                              "label": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "requiresRationale": {
+                                "type": "boolean",
+                              },
+                              "resourceId": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "undo": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "kind",
+                              "label",
+                              "consequence",
+                              "undo",
+                              "resourceId",
+                              "requiresRationale",
+                            ],
+                            "type": "object",
+                          },
+                          "shelf": {
+                            "enum": [
+                              "decide",
+                              "degraded",
+                            ],
+                            "type": "string",
+                          },
+                          "status": {
+                            "enum": [
+                              "decide",
+                              "degraded",
+                              "safety_stop",
+                              "nominal",
+                            ],
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "headline",
+                          "delta",
+                          "status",
+                          "primaryAction",
+                          "secondaryAction",
+                          "cost",
+                          "reason",
+                          "provenance",
+                          "occurredAt",
+                          "payload",
+                          "id",
+                          "kind",
+                          "shelf",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "digest": {
+                      "properties": {
+                        "headline": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "observationCount": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "promotionCount": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "runCount": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "totalCostUsd": {
+                          "minimum": 0,
+                          "type": "number",
+                        },
+                        "windowEndedAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "windowStartedAt": {
+                          "format": "date-time",
+                          "nullable": true,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "headline",
+                        "runCount",
+                        "totalCostUsd",
+                        "promotionCount",
+                        "observationCount",
+                        "windowStartedAt",
+                        "windowEndedAt",
+                      ],
+                      "type": "object",
+                    },
+                    "generatedAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "lastDeliveredBriefingAt": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "generatedAt",
+                    "decide",
+                    "degraded",
+                    "digest",
+                    "decideBadgeCount",
+                    "lastDeliveredBriefingAt",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Decision-grade Attention queue",
+          },
+        },
+      },
+    },
+    "/v1/attention-items/{itemId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "maxLength": 320,
+              "minLength": 3,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "details": {
+                      "additionalProperties": true,
+                      "type": "object",
+                    },
+                    "item": {
+                      "properties": {
+                        "cost": {
+                          "nullable": true,
+                          "properties": {
+                            "budgetUsd": {
+                              "minimum": 0,
+                              "nullable": true,
+                              "type": "number",
+                            },
+                            "period": {
+                              "enum": [
+                                "run",
+                                "day",
+                                "week",
+                                "month",
+                              ],
+                              "type": "string",
+                            },
+                            "usd": {
+                              "minimum": 0,
+                              "type": "number",
+                            },
+                          },
+                          "required": [
+                            "period",
+                            "usd",
+                            "budgetUsd",
+                          ],
+                          "type": "object",
+                        },
+                        "delta": {
+                          "maxLength": 300,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "headline": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "id": {
+                          "maxLength": 320,
+                          "minLength": 3,
+                          "type": "string",
+                        },
+                        "kind": {
+                          "enum": [
+                            "execution_approval",
+                            "release_promotion",
+                            "memory_review",
+                            "improvement_review",
+                            "plugin_health",
+                            "stalled_run",
+                            "budget_stop",
+                            "waiting_for_user",
+                            "safety_stop",
+                          ],
+                          "type": "string",
+                        },
+                        "occurredAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "payload": {
+                          "properties": {
+                            "candidateId": {
+                              "format": "uuid",
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "channelKey": {
+                              "maxLength": 160,
+                              "minLength": 1,
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "detailPath": {
+                              "maxLength": 500,
+                              "type": "string",
+                            },
+                            "evaluationId": {
+                              "format": "uuid",
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "expiresAt": {
+                              "format": "date-time",
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "metadata": {
+                              "additionalProperties": true,
+                              "type": "object",
+                            },
+                            "releaseId": {
+                              "format": "uuid",
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "reviewFacts": {
+                              "items": {
+                                "properties": {
+                                  "label": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "value": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "label",
+                                  "value",
+                                ],
+                                "type": "object",
+                              },
+                              "maxItems": 12,
+                              "type": "array",
+                            },
+                            "runId": {
+                              "format": "uuid",
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "scopes": {
+                              "items": {
+                                "maxLength": 240,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "maxItems": 100,
+                              "type": "array",
+                            },
+                            "sourceId": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "sourceType": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "sourceType",
+                            "sourceId",
+                            "detailPath",
+                            "scopes",
+                            "runId",
+                            "candidateId",
+                            "channelKey",
+                            "releaseId",
+                            "evaluationId",
+                            "expiresAt",
+                            "reviewFacts",
+                            "metadata",
+                          ],
+                          "type": "object",
+                        },
+                        "primaryAction": {
+                          "nullable": true,
+                          "properties": {
+                            "consequence": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "kind": {
+                              "enum": [
+                                "approve_run",
+                                "reject_run",
+                                "promote_release",
+                                "decline_release",
+                                "accept_memory",
+                                "reject_memory",
+                                "incubate_candidate",
+                                "reject_candidate",
+                                "open_details",
+                                "sign_in",
+                                "cancel_run",
+                                "resolve_item",
+                              ],
+                              "type": "string",
+                            },
+                            "label": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "requiresRationale": {
+                              "type": "boolean",
+                            },
+                            "resourceId": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "undo": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "kind",
+                            "label",
+                            "consequence",
+                            "undo",
+                            "resourceId",
+                            "requiresRationale",
+                          ],
+                          "type": "object",
+                        },
+                        "provenance": {
+                          "properties": {
+                            "actorId": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "explanation": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "requestId": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "nullable": true,
+                              "type": "string",
+                            },
+                            "sourceId": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "sourceType": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "sourceType",
+                            "sourceId",
+                            "actorId",
+                            "requestId",
+                            "explanation",
+                          ],
+                          "type": "object",
+                        },
+                        "reason": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "secondaryAction": {
+                          "nullable": true,
+                          "properties": {
+                            "consequence": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "kind": {
+                              "enum": [
+                                "approve_run",
+                                "reject_run",
+                                "promote_release",
+                                "decline_release",
+                                "accept_memory",
+                                "reject_memory",
+                                "incubate_candidate",
+                                "reject_candidate",
+                                "open_details",
+                                "sign_in",
+                                "cancel_run",
+                                "resolve_item",
+                              ],
+                              "type": "string",
+                            },
+                            "label": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "requiresRationale": {
+                              "type": "boolean",
+                            },
+                            "resourceId": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "undo": {
+                              "maxLength": 240,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "kind",
+                            "label",
+                            "consequence",
+                            "undo",
+                            "resourceId",
+                            "requiresRationale",
+                          ],
+                          "type": "object",
+                        },
+                        "shelf": {
+                          "enum": [
+                            "decide",
+                            "degraded",
+                          ],
+                          "type": "string",
+                        },
+                        "status": {
+                          "enum": [
+                            "decide",
+                            "degraded",
+                            "safety_stop",
+                            "nominal",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "headline",
+                        "delta",
+                        "status",
+                        "primaryAction",
+                        "secondaryAction",
+                        "cost",
+                        "reason",
+                        "provenance",
+                        "occurredAt",
+                        "payload",
+                        "id",
+                        "kind",
+                        "shelf",
+                      ],
+                      "type": "object",
+                    },
+                    "timeline": {
+                      "items": {
+                        "properties": {
+                          "costUsd": {
+                            "minimum": 0,
+                            "nullable": true,
+                            "type": "number",
+                          },
+                          "durationMs": {
+                            "minimum": 0,
+                            "nullable": true,
+                            "type": "integer",
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string",
+                          },
+                          "message": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "occurredAt": {
+                            "format": "date-time",
+                            "type": "string",
+                          },
+                          "phase": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "state": {
+                            "maxLength": 80,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "phase",
+                          "state",
+                          "message",
+                          "durationMs",
+                          "costUsd",
+                          "occurredAt",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                  },
+                  "required": [
+                    "item",
+                    "timeline",
+                    "details",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Attention item with provenance and flight-recorder detail",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
+    "/v1/attention-items/{itemId}/resolve": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "maxLength": 320,
+              "minLength": 3,
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "rationale": {
+                    "maxLength": 2000,
+                    "minLength": 10,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "rationale",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "itemId": {
+                      "maxLength": 320,
+                      "minLength": 3,
+                      "type": "string",
+                    },
+                    "rationale": {
+                      "maxLength": 2000,
+                      "minLength": 10,
+                      "type": "string",
+                    },
+                    "resolvedAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "resolvedBy": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "itemId",
+                    "rationale",
+                    "resolvedBy",
+                    "resolvedAt",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Immutable human acknowledgement of a terminal degraded item",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
     "/v1/authority-grants": {
       "get": {
         "parameters": [
@@ -15772,6 +18446,10 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "format": "uuid",
                             "type": "string",
                           },
+                          "includePlatformDigest": {
+                            "default": false,
+                            "type": "boolean",
+                          },
                           "inputConstraints": {
                             "additionalProperties": true,
                             "type": "object",
@@ -15956,6 +18634,10 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "minimum": 0,
                     "type": "integer",
                   },
+                  "includePlatformDigest": {
+                    "default": false,
+                    "type": "boolean",
+                  },
                   "inputConstraints": {
                     "additionalProperties": true,
                     "type": "object",
@@ -16103,6 +18785,10 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "id": {
                       "format": "uuid",
                       "type": "string",
+                    },
+                    "includePlatformDigest": {
+                      "default": false,
+                      "type": "boolean",
                     },
                     "inputConstraints": {
                       "additionalProperties": true,
@@ -16509,6 +19195,10 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "format": "uuid",
                       "type": "string",
                     },
+                    "includePlatformDigest": {
+                      "default": false,
+                      "type": "boolean",
+                    },
                     "inputConstraints": {
                       "additionalProperties": true,
                       "type": "object",
@@ -16778,6 +19468,10 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "id": {
                       "format": "uuid",
                       "type": "string",
+                    },
+                    "includePlatformDigest": {
+                      "default": false,
+                      "type": "boolean",
                     },
                     "inputConstraints": {
                       "additionalProperties": true,
@@ -17147,6 +19841,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "developmentDraft": {
                             "type": "boolean",
                           },
+                          "digestSnapshotId": {
+                            "format": "uuid",
+                            "nullable": true,
+                            "type": "string",
+                          },
                           "error": {
                             "additionalProperties": true,
                             "type": "object",
@@ -17443,6 +20142,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     },
                     "developmentDraft": {
                       "type": "boolean",
+                    },
+                    "digestSnapshotId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
                     },
                     "error": {
                       "additionalProperties": true,
@@ -17815,6 +20519,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     },
                     "developmentDraft": {
                       "type": "boolean",
+                    },
+                    "digestSnapshotId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
                     },
                     "error": {
                       "additionalProperties": true,
@@ -18282,6 +20991,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "developmentDraft": {
                           "type": "boolean",
                         },
+                        "digestSnapshotId": {
+                          "format": "uuid",
+                          "nullable": true,
+                          "type": "string",
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -18661,6 +21375,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "developmentDraft": {
                       "type": "boolean",
                     },
+                    "digestSnapshotId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
                     "error": {
                       "additionalProperties": true,
                       "type": "object",
@@ -18803,6 +21522,402 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               },
             },
             "description": "Cancelled run or cancellation request",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
+    "/v1/execution-runs/{runId}/reject": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "rationale": {
+                    "maxLength": 2000,
+                    "minLength": 10,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "rationale",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "actualCostUsd": {
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "number",
+                    },
+                    "approvalReasons": {
+                      "items": {
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
+                    "attempts": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "authorityGrantId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "contextClassification": {
+                      "enum": [
+                        "public",
+                        "internal",
+                        "private",
+                        "restricted",
+                      ],
+                      "type": "string",
+                    },
+                    "contextDigest": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string",
+                    },
+                    "contextEstimatedTokens": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "contextProvenance": {
+                      "items": {
+                        "properties": {
+                          "classification": {
+                            "enum": [
+                              "public",
+                              "internal",
+                              "private",
+                              "restricted",
+                            ],
+                            "type": "string",
+                          },
+                          "source": {
+                            "enum": [
+                              "core",
+                              "private_profile",
+                              "business_domain",
+                              "project",
+                              "agent",
+                              "request",
+                            ],
+                            "type": "string",
+                          },
+                          "tokenContribution": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                        },
+                        "required": [
+                          "source",
+                          "classification",
+                          "tokenContribution",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "createdAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "developmentDraft": {
+                      "type": "boolean",
+                    },
+                    "digestSnapshotId": {
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "error": {
+                      "additionalProperties": true,
+                      "type": "object",
+                    },
+                    "estimatedUpperCostUsd": {
+                      "minimum": 0,
+                      "type": "number",
+                    },
+                    "finishedAt": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "input": {
+                      "additionalProperties": true,
+                      "type": "object",
+                    },
+                    "maxEstimatedCostUsd": {
+                      "minimum": 0,
+                      "type": "number",
+                    },
+                    "maxInputTokens": {
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "maxOutputTokens": {
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "message": {
+                      "type": "string",
+                    },
+                    "model": {
+                      "type": "string",
+                    },
+                    "pricingVersion": {
+                      "type": "string",
+                    },
+                    "progress": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "providerKind": {
+                      "enum": [
+                        "deterministic",
+                        "anthropic",
+                        "gateway",
+                      ],
+                      "type": "string",
+                    },
+                    "providerVersion": {
+                      "type": "string",
+                    },
+                    "releaseDigest": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string",
+                    },
+                    "releaseId": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "requestedBy": {
+                      "type": "string",
+                    },
+                    "requiredToolScopes": {
+                      "items": {
+                        "type": "string",
+                      },
+                      "type": "array",
+                    },
+                    "startedAt": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "state": {
+                      "enum": [
+                        "awaiting_approval",
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed",
+                        "cancelled",
+                        "paused_budget",
+                      ],
+                      "type": "string",
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "releaseId",
+                    "releaseDigest",
+                    "contextDigest",
+                    "contextProvenance",
+                    "contextClassification",
+                    "contextEstimatedTokens",
+                    "projectId",
+                    "requiredToolScopes",
+                    "authorityGrantId",
+                    "state",
+                    "input",
+                    "providerKind",
+                    "developmentDraft",
+                    "providerVersion",
+                    "model",
+                    "maxInputTokens",
+                    "maxOutputTokens",
+                    "maxEstimatedCostUsd",
+                    "estimatedUpperCostUsd",
+                    "actualCostUsd",
+                    "pricingVersion",
+                    "approvalReasons",
+                    "progress",
+                    "message",
+                    "attempts",
+                    "error",
+                    "requestedBy",
+                    "startedAt",
+                    "finishedAt",
+                    "createdAt",
+                    "updatedAt",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Human rejection of a pending execution request",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
           },
           "409": {
             "content": {
@@ -20556,6 +23671,341 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "description": "Current production release pointer",
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
+    "/v1/production-channels/{channelKey}/decline": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channelKey",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:[-_.][a-z0-9]+)*$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "evaluationId": {
+                    "format": "uuid",
+                    "type": "string",
+                  },
+                  "rationale": {
+                    "maxLength": 2000,
+                    "minLength": 10,
+                    "type": "string",
+                  },
+                  "releaseId": {
+                    "format": "uuid",
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "releaseId",
+                  "evaluationId",
+                  "rationale",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "channel": {
+                      "nullable": true,
+                      "properties": {
+                        "currentReleaseDigest": {
+                          "nullable": true,
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string",
+                        },
+                        "currentReleaseId": {
+                          "format": "uuid",
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "key": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "pattern": "^[a-z0-9]+(?:[-_.][a-z0-9]+)*$",
+                          "type": "string",
+                        },
+                        "priorReleaseId": {
+                          "format": "uuid",
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "projectId": {
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "promotedAt": {
+                          "format": "date-time",
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "promotedBy": {
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "updatedAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "key",
+                        "projectId",
+                        "currentReleaseId",
+                        "currentReleaseDigest",
+                        "priorReleaseId",
+                        "promotedBy",
+                        "promotedAt",
+                        "updatedAt",
+                      ],
+                      "type": "object",
+                    },
+                    "decision": {
+                      "properties": {
+                        "action": {
+                          "enum": [
+                            "declined",
+                          ],
+                          "type": "string",
+                        },
+                        "channelKey": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "pattern": "^[a-z0-9]+(?:[-_.][a-z0-9]+)*$",
+                          "type": "string",
+                        },
+                        "decidedAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "decidedBy": {
+                          "type": "string",
+                        },
+                        "evaluationId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "rationale": {
+                          "type": "string",
+                        },
+                        "releaseId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "channelKey",
+                        "action",
+                        "releaseId",
+                        "evaluationId",
+                        "rationale",
+                        "decidedBy",
+                        "decidedAt",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "channel",
+                    "decision",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Immutable human decline with no production-pointer mutation",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "422": {
             "content": {
               "application/json": {
                 "schema": {
