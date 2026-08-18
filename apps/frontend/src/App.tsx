@@ -645,7 +645,7 @@ export function App() {
           {actionError ? <Notice tone="error">{getErrorMessage(actionError)}</Notice> : null}
           {referredChoices.data?.referredChoices[0] ? (
             <div className="similarity-note">
-              <Icon name="sparkles" size={18} />
+              <Icon name="draft" size={18} />
               Closest certified match:{' '}
               {Math.round(referredChoices.data.referredChoices[0].match.score)}%{' · '}
               {referredChoices.data.referredChoices[0].match.label}
@@ -723,7 +723,7 @@ export function App() {
             ))}
             {canReview ? (
               <button className="review-button" onClick={() => setDialog('review')} type="button">
-                <Icon name="sparkles" />
+                <Icon name="draft" />
                 <span>
                   <strong>Review & Generate</strong>
                   All four sections are valid for revision {spec.revision}.

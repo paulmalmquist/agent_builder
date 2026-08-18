@@ -661,6 +661,7 @@ describe('RegistryService release and import guard branches', () => {
     const listAndGetPrisma = {
       resourceVersion: {
         findMany: jest.fn().mockResolvedValue([first]),
+        findFirst: jest.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(null),
         groupBy: jest.fn().mockResolvedValue([
           { lifecycle: ResourceLifecycle.CANDIDATE, _count: { _all: 11 } },
           { lifecycle: ResourceLifecycle.PRODUCTION, _count: { _all: 4 } },
@@ -689,6 +690,14 @@ describe('RegistryService release and import guard branches', () => {
       by: ['lifecycle'],
       where: { family: VISIBLE_SCOPE },
       _count: { _all: true },
+    });
+    expect((await queryService.getResource(first.id)).id).toBe(first.id);
+    expect(listAndGetPrisma.resourceVersion.findFirst).toHaveBeenCalledWith({
+      where: { id: first.id, family: VISIBLE_SCOPE },
+      include: { family: true },
+    });
+    await expect(queryService.getResource(SECOND_VERSION_ID)).rejects.toMatchObject({
+      code: 'RESOURCE_NOT_FOUND',
     });
     expect((await queryService.getRelease(RELEASE_ID)).id).toBe(RELEASE_ID);
     await expect(queryService.getRelease(SECOND_RELEASE_ID)).rejects.toMatchObject({

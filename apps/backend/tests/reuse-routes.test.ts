@@ -105,6 +105,18 @@ function authenticated(app: ReturnType<typeof appFor>['app']) {
 }
 
 describe('Builder reuse routes', () => {
+  it('keeps publication query values in their wire form for service-boundary validation', async () => {
+    const { app, reuse } = appFor();
+
+    await authenticated(app)
+      .get('/v1/catalog/publications?includeRetired=false&limit=100')
+      .expect(200);
+
+    expect(reuse.listPublications).toHaveBeenCalledWith(
+      expect.objectContaining({ includeRetired: 'false', limit: '100' }),
+    );
+  });
+
   it('creates a confirmed intake before any specification exists and returns referred choices', async () => {
     const { app, reuse } = appFor();
     const api = authenticated(app);

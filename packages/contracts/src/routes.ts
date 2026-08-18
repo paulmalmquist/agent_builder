@@ -32,6 +32,7 @@ export const platformApiRoutes = {
   resolveAttentionItem: (itemId: string) =>
     `/v1/attention-items/${encodeURIComponent(itemId)}/resolve`,
   resources: '/v1/resources',
+  resource: (resourceVersionId: string) => `/v1/resources/${encodeURIComponent(resourceVersionId)}`,
   repositoryImports: '/v1/repository-imports',
   releases: '/v1/releases',
   release: (releaseId: string) => `/v1/releases/${releaseId}`,
@@ -62,6 +63,8 @@ export const platformApiRoutes = {
   reviewMemoryCandidate: (candidateId: string) => `/v1/memory-candidates/${candidateId}/review`,
   plugins: '/v1/plugins',
   plugin: (pluginVersionId: string) => `/v1/plugins/${pluginVersionId}`,
+  pluginMark: (pluginVersionId: string, assetDigest: string) =>
+    `/v1/plugins/${encodeURIComponent(pluginVersionId)}/mark/${encodeURIComponent(assetDigest)}.svg`,
   pluginInstallations: '/v1/plugin-installations',
   pluginInstallation: (installationId: string) => `/v1/plugin-installations/${installationId}`,
   configurePluginInstallation: (installationId: string) =>

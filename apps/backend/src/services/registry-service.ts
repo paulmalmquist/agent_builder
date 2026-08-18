@@ -627,6 +627,22 @@ export class RegistryService {
     });
   }
 
+  async getResource(resourceVersionId: string): Promise<ResourceVersion> {
+    const record = await this.prisma.resourceVersion.findFirst({
+      where: {
+        id: resourceVersionId,
+        family: aggregateScopeWhere(),
+      },
+      include: { family: true },
+    });
+    if (record === null) {
+      throw new AppError(404, 'RESOURCE_NOT_FOUND', 'Resource version was not found', {
+        resourceVersionId,
+      });
+    }
+    return toResource(record);
+  }
+
   async createRelease(input: z.input<typeof createReleaseRequestSchema>): Promise<ReleaseBundle> {
     const parsed = createReleaseRequestSchema.parse(input);
     const uniqueIds = [...new Set(parsed.resourceVersionIds)];

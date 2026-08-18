@@ -7,13 +7,13 @@ type IconName =
   | 'close'
   | 'code'
   | 'database'
+  | 'draft'
   | 'help'
   | 'library'
   | 'plus'
   | 'search'
   | 'scope'
   | 'shield'
-  | 'sparkles'
   | 'success';
 
 interface IconProps {
@@ -48,6 +48,13 @@ const paths: Record<IconName, ReactNode> = {
       <ellipse cx="12" cy="5" rx="8" ry="3" />
       <path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
       <path d="M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7" />
+    </>
+  ),
+  draft: (
+    <>
+      <path d="M7 5h10v14H7z" />
+      <path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
+      <path d="M10 9h4M10 12h4M10 15h2" />
     </>
   ),
   help: (
@@ -86,13 +93,6 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="M12 3 4.5 6v5.5c0 4.7 3 7.8 7.5 9.5 4.5-1.7 7.5-4.8 7.5-9.5V6L12 3Z" />
       <path d="m9 12 2 2 4-5" />
-    </>
-  ),
-  sparkles: (
-    <>
-      <path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3Z" />
-      <path d="m5 14 .8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z" />
-      <path d="m19 13 .6 1.4L21 15l-1.4.6L19 17l-.6-1.4L17 15l1.4-.6L19 13Z" />
     </>
   ),
   success: (

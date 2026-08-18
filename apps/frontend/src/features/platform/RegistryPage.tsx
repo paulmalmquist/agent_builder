@@ -1,11 +1,11 @@
 import type { ResourceVersion } from '@agent-builder/contracts';
 import { Link, useSearchParams } from 'react-router-dom';
-import { usePlatformResources, usePlugins } from '../../api/hooks';
+import { usePlatformResources } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Notice } from '../../components/Notice';
+import { SectionTabs } from '../../components/SectionTabs';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
-import { PluginRegistry } from './PluginRegistry';
 import { featureFlags } from '../../config/feature-flags';
 
 const resourceKinds: Array<ResourceVersion['kind']> = [
@@ -54,11 +54,8 @@ export function RegistryPage() {
     ...(debouncedQuery.trim() ? { query: debouncedQuery.trim() } : {}),
     limit: 100,
   });
-  const plugins = usePlugins({ includeDisabled: true, limit: 100 });
   const items = resources.isError ? [] : (resources.data?.items ?? []);
-  const pluginItems = plugins.isError ? [] : (plugins.data?.items ?? []);
   const resourceReadingsAvailable = resources.data !== undefined && !resources.isError;
-  const pluginReadingsAvailable = plugins.data !== undefined && !plugins.isError;
   const readings = [
     {
       label: 'VERSIONED RESOURCES',
@@ -69,17 +66,12 @@ export function RegistryPage() {
       value: resourceReadingsAvailable ? resources.data.countsByLifecycle.production : '—',
     },
     {
-      label: 'PLUGINS READY SHOWN',
-      value: pluginReadingsAvailable
-        ? pluginItems.filter((plugin) => plugin.healthStatus === 'healthy').length
-        : '—',
+      label: 'CANDIDATE',
+      value: resourceReadingsAvailable ? resources.data.countsByLifecycle.candidate : '—',
     },
     {
-      label: 'REVIEW · ALL RESOURCES / SHOWN PLUGINS',
-      value:
-        resourceReadingsAvailable && pluginReadingsAvailable
-          ? `${resources.data.countsByLifecycle.candidate} / ${pluginItems.filter((plugin) => plugin.healthStatus === 'degraded').length}`
-          : '—',
+      label: 'DEPRECATED',
+      value: resourceReadingsAvailable ? resources.data.countsByLifecycle.deprecated : '—',
     },
   ];
 
@@ -99,6 +91,14 @@ export function RegistryPage() {
         kicker="VERSIONED DEFINITION REGISTRY"
         title="Registry"
       />
+      <SectionTabs
+        label="Catalog views"
+        tabs={[
+          { label: 'AGENTS', path: '/catalog' },
+          { label: 'LEGACY LIBRARY', path: '/library' },
+          { label: 'DEFINITIONS', path: '/registry' },
+        ]}
+      />
       <InstrumentStrip readings={readings} />
       {featureFlags.aimEnabled ? (
         <section className="aim-entry-card">
@@ -115,31 +115,6 @@ export function RegistryPage() {
           </Link>
         </section>
       ) : null}
-      <section aria-busy={plugins.isLoading} className="plugin-registry-section">
-        <header className="os-panel-heading">
-          <div>
-            <h2>Governed connections</h2>
-            <p>
-              Every transport becomes the same typed tool surface. Healthy connections stay quiet;
-              degraded connections rise first.
-            </p>
-          </div>
-          <small>MCP · HTTP · CLI · DATABASE</small>
-        </header>
-        {plugins.isError ? <Notice tone="error">{getErrorMessage(plugins.error)}</Notice> : null}
-        {plugins.isLoading ? (
-          <div className="os-empty-state" role="status">
-            Reading governed Plugins…
-          </div>
-        ) : null}
-        {!plugins.isLoading && !plugins.isError && pluginItems.length === 0 ? (
-          <div className="os-empty-state">
-            <strong>No Plugin definitions are available.</strong>
-            <span>Import a certified Plugin manifest to expose its typed tools here.</span>
-          </div>
-        ) : null}
-        {pluginItems.length > 0 ? <PluginRegistry plugins={pluginItems} /> : null}
-      </section>
       <div className="os-toolbar">
         <div className="os-toolbar-group">
           <label className="os-filter">

@@ -16,7 +16,7 @@ export function GovernanceBar({ onExplain }: GovernanceBarProps) {
       </div>
       <div aria-hidden="true" className="governance-divider" />
       <div className="help-copy">
-        <Icon name="sparkles" />
+        <Icon name="draft" />
         <span>Not sure where to start?</span>
       </div>
       <button className="explain-button" onClick={onExplain} type="button">

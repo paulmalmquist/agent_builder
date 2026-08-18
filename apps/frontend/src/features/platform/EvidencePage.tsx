@@ -1,14 +1,21 @@
 import { Link, useSearchParams } from 'react-router-dom';
-import type { ReleaseEvaluationGateResult } from '@agent-builder/contracts';
+import { useState } from 'react';
+import {
+  consoleActionCopy,
+  consoleCriticalCopy,
+  type ReleaseEvaluationGateResult,
+} from '@agent-builder/contracts';
 import {
   useMetrics,
   useOutcomes,
   useProductionChannel,
   useReleaseEvaluation,
+  useRollbackRelease,
 } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Notice } from '../../components/Notice';
 import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
+import { GovernedActionDialog } from './GovernedActionDialog';
 
 function formatMetric(value: number, unit: string) {
   if (unit === 'usd') return `$${value.toFixed(value < 1 ? 4 : 2)}`;
@@ -49,8 +56,11 @@ export function EvidencePage() {
   const releaseEvaluation = useReleaseEvaluation(evaluationId);
   const outcomes = useOutcomes();
   const metrics = useMetrics();
+  const rollback = useRollbackRelease(channelKey);
+  const [rollbackOpen, setRollbackOpen] = useState(false);
   const outcomeItems = outcomes.isError ? [] : (outcomes.data?.items ?? []);
   const metricItems = metrics.isError ? [] : (metrics.data?.items ?? []);
+  const rollbackReleaseId = productionChannel.data?.priorReleaseId ?? null;
 
   return (
     <main className="os-surface">
@@ -145,6 +155,15 @@ export function EvidencePage() {
                     : new Date(productionChannel.data.promotedAt).toLocaleString()}
                 </span>
               </div>
+              {productionChannel.data.priorReleaseId ? (
+                <button
+                  className="secondary-button run-action"
+                  onClick={() => setRollbackOpen(true)}
+                  type="button"
+                >
+                  REVIEW ROLLBACK
+                </button>
+              ) : null}
             </article>
           </div>
         ) : null}
@@ -366,6 +385,25 @@ export function EvidencePage() {
         not measure semantic model quality. Semantic execution remains a separately stamped evidence
         mode.
       </p>
+      {rollbackOpen && rollbackReleaseId ? (
+        <GovernedActionDialog
+          action={consoleActionCopy.rollbackRelease}
+          defaultRationale="Restore the prior certified release after reviewing current production evidence."
+          error={rollback.isError ? getErrorMessage(rollback.error) : null}
+          introduction={consoleCriticalCopy.releaseRollback.introduction}
+          isPending={rollback.isPending}
+          kicker="PRODUCTION ROLLBACK"
+          onClose={() => setRollbackOpen(false)}
+          onConfirm={(rationale) =>
+            rollback.mutate(
+              { targetReleaseId: rollbackReleaseId, rationale },
+              { onSuccess: () => setRollbackOpen(false) },
+            )
+          }
+          rationaleRequired
+          title={`Roll back ${channelKey}`}
+        />
+      ) : null}
     </main>
   );
 }

@@ -138,6 +138,29 @@ describe('Plugin resource contracts', () => {
     expect(() => compileResourceYaml(JSON.stringify(candidate))).toThrow(/destructive effect/);
   });
 
+  it.each([
+    ['remote URL', 'https://assets.example.invalid/mark.svg'],
+    ['protocol-relative URL', '//assets.example.invalid/mark.svg'],
+    ['absolute path', '/assets/mark.svg'],
+    ['Windows path', 'C:\\assets\\mark.svg'],
+    ['parent traversal', '../mark.svg'],
+    ['non-SVG asset', './mark.png'],
+  ])('rejects a %s for a Plugin mark', async (_label, mark) => {
+    const candidate = await validPlugin();
+    const spec = candidate['spec'] as Record<string, unknown>;
+    spec['brand'] = { monogram: 'SP', accent: '#B9AAFF', mark };
+    expect(() => compileResourceYaml(JSON.stringify(candidate))).toThrow();
+  });
+
+  it('accepts a local SVG mark only with its monogram and accent fallback', async () => {
+    const candidate = await validPlugin();
+    const spec = candidate['spec'] as Record<string, unknown>;
+    spec['brand'] = { monogram: 'SP', accent: '#B9AAFF', mark: './mark.svg' };
+    expect(() => compileResourceYaml(JSON.stringify(candidate))).not.toThrow();
+    spec['brand'] = { mark: './mark.svg' };
+    expect(() => compileResourceYaml(JSON.stringify(candidate))).toThrow();
+  });
+
   it('rejects path templates that the HTTP runtime cannot interpolate', async () => {
     const candidate = await validPlugin();
     const spec = candidate['spec'] as { capabilities: Array<Record<string, unknown>> };
@@ -186,6 +209,7 @@ describe('Plugin resource contracts', () => {
       expect.arrayContaining([
         'listPlugins',
         'getPlugin',
+        'getPluginMark',
         'listPluginInstallations',
         'installPlugin',
         'getPluginInstallation',
@@ -210,6 +234,7 @@ describe('Plugin resource contracts', () => {
       transport: 'http',
       executionPlacement: 'control_plane',
       classification: 'public',
+      brand: { monogram: 'SP', accent: '#B9AAFF' },
       capabilities: [],
       secretSlots: [
         {
@@ -225,7 +250,14 @@ describe('Plugin resource contracts', () => {
       healthStatus: 'unknown',
       lastUsedAt: null,
     };
-    expect(pluginCatalogItemSchema.safeParse(catalogItem).success).toBe(true);
+    const parsed = pluginCatalogItemSchema.parse(catalogItem);
+    expect(parsed.brand).toEqual({ monogram: 'SP', accent: '#B9AAFF', assetSrc: null });
+    expect(
+      pluginCatalogItemSchema.safeParse({
+        ...catalogItem,
+        brand: { ...catalogItem.brand, mark: './private/repository/path.svg' },
+      }).success,
+    ).toBe(false);
     expect(
       pluginCatalogItemSchema.safeParse({
         ...catalogItem,

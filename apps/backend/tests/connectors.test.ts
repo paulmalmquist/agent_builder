@@ -38,6 +38,7 @@ const liveConfig = {
   port: 3000,
   logLevel: 'silent',
   generatorCliPath: '/fixed/generator.js',
+  repositoryRoot: process.cwd(),
   generatorVersion: '0.2.0',
   generatorConcurrency: 2,
   certificationConcurrency: 2,

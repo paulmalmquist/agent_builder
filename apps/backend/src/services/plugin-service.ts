@@ -21,6 +21,7 @@ import {
   pluginAuthorityScopeSchema,
   pluginResourceSpecSchema,
   pluginStateChangeRequestSchema,
+  platformApiRoutes,
   pluginUsedByResponseSchema,
   resourceManifestSchema,
   uninstallPluginRequestSchema,
@@ -44,6 +45,7 @@ import { currentActorId, currentRequestContext } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { requireHumanActor } from './actors.js';
 import { appendExecutionRunEvent } from './attention-service.js';
+import { loadPluginMarkAsset, type PluginMarkAsset } from '../plugins/mark-asset.js';
 
 const installationStateWire = {
   [PluginInstallationState.INSTALLED]: 'installed',
@@ -82,6 +84,19 @@ const healthMap = {
   degraded: PluginHealthStatus.DEGRADED,
   unavailable: PluginHealthStatus.UNAVAILABLE,
 } as const;
+
+function defaultPluginBrand(slug: string) {
+  const words = slug.split(/[._-]+/u).filter(Boolean);
+  const monogram =
+    words.length > 1
+      ? words
+          .slice(0, 3)
+          .map((word) => word[0])
+          .join('')
+          .toUpperCase()
+      : (words[0] ?? 'PL').slice(0, 2).toUpperCase();
+  return { monogram, accent: '#B9AAFF' } as const;
+}
 
 type PluginVersionRecord = Prisma.ResourceVersionGetPayload<{ include: { family: true } }>;
 type InstallationRecord = Prisma.PluginInstallationGetPayload<{
@@ -167,6 +182,7 @@ export class PluginService {
     private readonly prisma: PrismaClient,
     private readonly config: Pick<AppConfig, 'environment'> & {
       model?: Pick<AppConfig['model'], 'providerPolicy'>;
+      repositoryRoot?: string;
     },
     private readonly healthProbe: PluginHealthProbe,
   ) {}
@@ -282,6 +298,46 @@ export class PluginService {
     return record;
   }
 
+  private async markAsset(
+    version: PluginVersionRecord,
+    spec: PluginResourceSpec,
+  ): Promise<PluginMarkAsset> {
+    if (spec.brand?.mark === undefined) {
+      throw new AppError(404, 'PLUGIN_MARK_NOT_FOUND', 'The Plugin mark was not found');
+    }
+    const repositoryImport = await this.prisma.repositoryImport.findFirst({
+      where: {
+        resourceVersionId: version.id,
+        digest: version.digest,
+        sourcePath: { not: null },
+      },
+      orderBy: { importedAt: 'desc' },
+      select: { sourceCommit: true, sourcePath: true },
+    });
+    if (
+      repositoryImport?.sourcePath === null ||
+      repositoryImport === null ||
+      repositoryImport.sourceCommit !== version.sourceCommit
+    ) {
+      throw new AppError(404, 'PLUGIN_MARK_NOT_FOUND', 'The Plugin mark was not found');
+    }
+    return loadPluginMarkAsset({
+      expectedManifestDigest: version.digest,
+      markPath: spec.brand.mark,
+      repositoryRoot: this.config.repositoryRoot ?? process.cwd(),
+      sourcePath: repositoryImport.sourcePath,
+    });
+  }
+
+  async getMarkAsset(pluginVersionId: string, assetDigest: string): Promise<PluginMarkAsset> {
+    const version = await this.version(pluginVersionId);
+    const asset = await this.markAsset(version, pluginSpec(version));
+    if (asset.digest !== assetDigest) {
+      throw new AppError(404, 'PLUGIN_MARK_NOT_FOUND', 'The Plugin mark was not found');
+    }
+    return asset;
+  }
+
   private async installation(
     installationId: string,
     transaction: Prisma.TransactionClient | PrismaClient = this.prisma,
@@ -357,7 +413,7 @@ export class PluginService {
         (weeklyCosts.get(invocation.installationId) ?? 0) + Number(invocation.costUsd ?? 0),
       );
     }
-    const items = versions.flatMap((version) => {
+    const candidates = versions.flatMap((version) => {
       const spec = pluginSpec(version);
       if (!this.classificationAllowed(spec.classification)) return [];
       const installation = version.pluginInstallations[0] ?? null;
@@ -375,7 +431,30 @@ export class PluginService {
         return [];
       if (!query.includeDisabled && installationState === 'disabled') return [];
       return [
-        pluginCatalogItemSchema.parse({
+        {
+          version,
+          spec,
+          installation,
+          installationState,
+          healthStatus,
+        },
+      ];
+    });
+    const items = await Promise.all(
+      candidates.map(async ({ version, spec, installation, installationState, healthStatus }) => {
+        const declaredBrand = spec.brand ?? defaultPluginBrand(version.family.slug);
+        let assetSrc: string | null = null;
+        if (spec.brand?.mark !== undefined) {
+          try {
+            const asset = await this.markAsset(version, spec);
+            assetSrc = platformApiRoutes.pluginMark(version.id, asset.digest);
+          } catch {
+            // A mark is optional presentation. Any source drift or unsafe SVG fails closed to the
+            // governed monogram without taking down the operational Plugin catalog.
+            assetSrc = null;
+          }
+        }
+        return pluginCatalogItemSchema.parse({
           pluginVersionId: version.id,
           familyId: version.familyId,
           slug: version.family.slug,
@@ -385,6 +464,11 @@ export class PluginService {
           transport: spec.transport,
           executionPlacement: spec.executionPlacement,
           classification: spec.classification,
+          brand: {
+            monogram: declaredBrand.monogram,
+            accent: declaredBrand.accent,
+            assetSrc,
+          },
           capabilities: spec.capabilities.map((capability) => ({
             tool: capability.tool,
             description: capability.description,
@@ -406,9 +490,9 @@ export class PluginService {
             ...(installation === null ? [] : (activeDescriptions.get(installation.id) ?? [])),
           ],
           costThisWeekUsd: installation === null ? 0 : (weeklyCosts.get(installation.id) ?? 0),
-        }),
-      ];
-    });
+        });
+      }),
+    );
     return pluginCatalogResponseSchema.parse({ items: items.slice(0, query.limit) });
   }
 

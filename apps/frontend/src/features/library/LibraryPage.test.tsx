@@ -107,4 +107,42 @@ describe('agent library', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Supplier Risk Analyst/i })).toBeInTheDocument();
   });
+
+  it('hides cached agents and the empty state when the legacy catalog fails', async () => {
+    const rendered = renderWithClient(
+      <Routes>
+        <Route element={<PlatformShell />} path="/">
+          <Route element={<LibraryPage />} path="library" />
+        </Route>
+      </Routes>,
+      ['/library'],
+    );
+
+    expect(
+      await screen.findByRole('button', { name: /Supplier Risk Analyst/i }),
+    ).toBeInTheDocument();
+    server.use(
+      http.get('http://localhost/agents', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'DEPENDENCY_UNAVAILABLE',
+              message: 'The legacy catalog is unavailable.',
+              requestId: 'library-error',
+            },
+          },
+          { status: 503 },
+        ),
+      ),
+    );
+    await rendered.client.invalidateQueries({ queryKey: ['agent-catalog'] });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The legacy catalog is unavailable.',
+    );
+    expect(
+      screen.queryByRole('button', { name: /Supplier Risk Analyst/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('No governed agents match these filters.')).not.toBeInTheDocument();
+  });
 });

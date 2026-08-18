@@ -5118,6 +5118,26 @@
             "type": "string",
             "enum": ["public", "internal", "restricted"]
           },
+          "brand": {
+            "type": "object",
+            "properties": {
+              "mark": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "monogram": {
+                "type": "string",
+                "pattern": "^[A-Z0-9]{1,3}$"
+              },
+              "accent": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              }
+            },
+            "required": ["monogram", "accent"],
+            "additionalProperties": false
+          },
           "capabilities": {
             "type": "array",
             "items": {
@@ -5256,6 +5276,7 @@
           "transport",
           "executionPlacement",
           "classification",
+          "brand",
           "capabilities",
           "secretSlots",
           "activeScopeDescriptions",

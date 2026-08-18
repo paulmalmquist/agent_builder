@@ -548,6 +548,7 @@ function pluginCatalog() {
       transport: 'mcp' as const,
       executionPlacement: 'control_plane' as const,
       classification: 'internal' as const,
+      brand: { monogram: 'TM', accent: '#B9AAFF' },
       capabilities: [pluginCapability('search_messages', 'Read matching team messages only')],
       secretSlots: [],
       activeScopeDescriptions: ['Read matching team messages only'],
@@ -567,6 +568,7 @@ function pluginCatalog() {
       transport: 'http' as const,
       executionPlacement: 'control_plane' as const,
       classification: 'internal' as const,
+      brand: { monogram: 'CA', accent: '#7F9CF5' },
       capabilities: [
         pluginCapability('list_events', 'Read calendar events in the requested window'),
       ],
@@ -595,6 +597,7 @@ function pluginCatalog() {
       transport: 'db' as const,
       executionPlacement: 'control_plane' as const,
       classification: 'restricted' as const,
+      brand: { monogram: 'AP', accent: '#69D59A' },
       capabilities: [pluginCapability('table_preview', 'Preview up to 100 governed records')],
       secretSlots: [],
       activeScopeDescriptions: [],
@@ -614,6 +617,7 @@ function pluginCatalog() {
       transport: 'cli' as const,
       executionPlacement: 'workstation' as const,
       classification: 'internal' as const,
+      brand: { monogram: 'LF', accent: '#B9AAFF' },
       capabilities: [pluginCapability('list_files', 'Read filenames under the selected folder')],
       secretSlots: [],
       activeScopeDescriptions: [],
@@ -1053,6 +1057,30 @@ export const handlers = [
     });
   }),
 
+  http.get('http://localhost/v1/session', () =>
+    HttpResponse.json({
+      principal: {
+        principalId: '41414141-4141-4141-8141-414141414141',
+        actorId: 'test-operator',
+        workspaceId: '42424242-4242-4242-8242-424242424242',
+        departmentId: '43434343-4343-4343-8343-434343434343',
+        authentication: 'local',
+        roles: ['admin'],
+        requestId: 'test-request',
+      },
+      effectiveRoles: ['consumer', 'builder', 'owner', 'admin'],
+      permissions: [
+        'catalog:read',
+        'runs:execute',
+        'builder:author',
+        'evidence:review',
+        'release:govern',
+        'platform:administer',
+      ],
+      authorizationModel: 'workspace-role-v1',
+    }),
+  ),
+
   http.get('http://localhost/v1/resources', () =>
     HttpResponse.json({
       items: [platformResource],
@@ -1068,6 +1096,23 @@ export const handlers = [
       },
     }),
   ),
+
+  http.get('http://localhost/v1/resources/:resourceVersionId', ({ params }) =>
+    params.resourceVersionId === platformResource.id
+      ? HttpResponse.json(platformResource)
+      : HttpResponse.json(
+          {
+            error: {
+              code: 'RESOURCE_NOT_FOUND',
+              message: 'Resource version was not found.',
+              requestId: 'test-request',
+            },
+          },
+          { status: 404 },
+        ),
+  ),
+
+  http.get('http://localhost/v1/catalog/publications', () => HttpResponse.json({ items: [] })),
 
   http.get('http://localhost/v1/plugins', () => HttpResponse.json({ items: pluginCatalog() })),
 

@@ -140,7 +140,7 @@ export function ReferredChoicesPanel({
     <section aria-busy={isLoading} aria-labelledby="referred-choices" className="suggestions-panel">
       <div className="panel-title">
         <span id="referred-choices">REFERRED CHOICES</span>
-        <Icon name="sparkles" size={18} />
+        <Icon name="draft" size={18} />
       </div>
       <div className="agent-list reuse-choice-list">
         {!intakeId ? (

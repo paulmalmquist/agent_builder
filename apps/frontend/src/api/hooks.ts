@@ -30,6 +30,7 @@ import {
   type ReviewMemoryInput,
   type DeclineReleaseInput,
   type PromoteReleaseInput,
+  type RollbackReleaseInput,
   type ConfigurePluginInput,
   type InstallPluginInput,
   type PluginCatalogFilters,
@@ -53,6 +54,8 @@ export const queryKeys = {
   certificationRun: (runId: string | null) => ['certification-run', runId] as const,
   certificationRuns: (agentId: string | null) => ['certification-runs', agentId] as const,
   platformResources: (filters: ResourceFilters) => ['platform-resources', filters] as const,
+  platformResource: (resourceVersionId: string | null) =>
+    ['platform-resource', resourceVersionId] as const,
   attention: ['attention'] as const,
   attentionItem: (itemId: string | null) => ['attention-item', itemId] as const,
   executionRuns: (filters: RunFilters) => ['execution-runs', filters] as const,
@@ -70,6 +73,8 @@ export const queryKeys = {
   pluginInstallations: ['plugin-installations'] as const,
   pluginUsedBy: (installationId: string | null) => ['plugin-used-by', installationId] as const,
   builderChoices: (intakeId: string | null) => ['builder-referred-choices', intakeId] as const,
+  session: ['session'] as const,
+  catalogPublications: ['catalog-publications'] as const,
 };
 
 export function useCreateBuilderIntake() {
@@ -108,7 +113,8 @@ export function useAttention() {
   return useQuery({
     queryKey: queryKeys.attention,
     queryFn: () => platformApi.getAttention(),
-    refetchInterval: 10_000,
+    retry: false,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 10_000),
   });
 }
 
@@ -142,10 +148,33 @@ export function useAgentSearch(query: string, enabled = true, retainPreviousData
   });
 }
 
-export function usePlatformResources(filters: ResourceFilters) {
+export function usePlatformResources(filters: ResourceFilters, enabled = true) {
   return useQuery({
     queryKey: queryKeys.platformResources(filters),
     queryFn: () => platformApi.listResources(filters),
+    enabled,
+  });
+}
+
+export function usePlatformResource(resourceVersionId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.platformResource(resourceVersionId),
+    queryFn: () => platformApi.getResource(resourceVersionId ?? ''),
+    enabled: resourceVersionId !== null,
+  });
+}
+
+export function useSession() {
+  return useQuery({
+    queryKey: queryKeys.session,
+    queryFn: () => platformApi.getSession(),
+  });
+}
+
+export function useCatalogPublications() {
+  return useQuery({
+    queryKey: queryKeys.catalogPublications,
+    queryFn: () => platformApi.listCatalogPublications(),
   });
 }
 
@@ -310,6 +339,18 @@ export function useProductionChannel(channelKey: string) {
   return useQuery({
     queryKey: queryKeys.productionChannel(channelKey),
     queryFn: () => platformApi.getProductionChannel(channelKey),
+  });
+}
+
+export function useRollbackRelease(channelKey: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (value: RollbackReleaseInput) => platformApi.rollbackRelease(channelKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.productionChannel(channelKey) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
   });
 }
 

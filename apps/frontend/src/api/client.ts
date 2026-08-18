@@ -47,10 +47,13 @@ import {
   builderDecisionSchema,
   builderIntakeResultsSchema,
   builderIntakeSchema,
+  catalogPublicationListResponseSchema,
   REUSE_V1_ROUTES,
   releaseDeclineResponseSchema,
   releaseEvaluationSchema,
   resourceListResponseSchema,
+  resourceVersionSchema,
+  sessionResponseSchema,
   type AgentCatalogQuery,
   type DerivationMode,
   type GuardrailsSection,
@@ -81,6 +84,13 @@ type Parser<T> = {
   parse(value: unknown): T;
 };
 
+type RequestOptions = RequestInit & {
+  timeoutMessage?: string;
+  timeoutMs?: number;
+};
+
+const ATTENTION_REQUEST_TIMEOUT_MS = 8_000;
+
 export type AgentSearchResponse = ReturnType<typeof agentSearchResponseSchema.parse>;
 export type AgentSearchItem = AgentSearchResponse['items'][number];
 export type AgentFamilyVersionsResponse = ReturnType<
@@ -91,6 +101,8 @@ export type SourceListResponse = ReturnType<typeof sourceListResponseSchema.pars
 export type GenerationAccepted = ReturnType<typeof generationAcceptedSchema.parse>;
 export type EvaluationResponse = ReturnType<typeof evaluationResponseSchema.parse>;
 export type PlatformResourceList = ReturnType<typeof resourceListResponseSchema.parse>;
+export type PlatformSession = ReturnType<typeof sessionResponseSchema.parse>;
+export type CatalogPublicationList = ReturnType<typeof catalogPublicationListResponseSchema.parse>;
 export type PlatformRunList = ReturnType<typeof executionRunListResponseSchema.parse>;
 export type AuthorityGrantList = ReturnType<typeof authorityGrantListResponseSchema.parse>;
 export type OutcomeList = ReturnType<typeof outcomeListResponseSchema.parse>;
@@ -188,6 +200,10 @@ export type DeclineReleaseInput = {
 };
 
 export type PromoteReleaseInput = DeclineReleaseInput;
+export type RollbackReleaseInput = {
+  targetReleaseId: string;
+  rationale: string;
+};
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const apiBaseUrl = configuredBaseUrl?.replace(/\/+$/, '') ?? '';
@@ -225,15 +241,54 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-async function request<T>(path: string, schema: Parser<T>, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, schema: Parser<T>, init?: RequestOptions): Promise<T> {
+  const {
+    timeoutMessage = 'The server took too long to respond.',
+    timeoutMs,
+    ...fetchOptions
+  } = init ?? {};
   const headers = new Headers(init?.headers);
   headers.set('Accept', 'application/json');
   if (init?.body) headers.set('Content-Type', 'application/json');
   const url = new URL(`${apiBaseUrl}${path}`, window.location.origin);
-  const response = await fetch(url, {
-    ...init,
+  // Jest's jsdom AbortSignal belongs to a different realm than undici's fetch implementation.
+  // The Promise deadline remains authoritative in tests; real browser requests are also aborted.
+  const timeoutController =
+    timeoutMs === undefined || import.meta.env.MODE === 'test' ? null : new AbortController();
+  const externalSignal = fetchOptions.signal;
+  const forwardExternalAbort = () => timeoutController?.abort(externalSignal?.reason);
+  externalSignal?.addEventListener('abort', forwardExternalAbort, { once: true });
+  const requestSignal = timeoutController?.signal ?? externalSignal;
+  const responsePromise = fetch(url, {
+    ...fetchOptions,
     headers,
+    ...(requestSignal ? { signal: requestSignal } : {}),
   });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let response: Response;
+  try {
+    response = await Promise.race([
+      responsePromise,
+      ...(timeoutMs === undefined
+        ? []
+        : [
+            new Promise<never>((_resolve, reject) => {
+              timeout = setTimeout(() => {
+                timeoutController?.abort('attention-request-timeout');
+                reject(
+                  new ApiError(timeoutMessage, {
+                    code: 'REQUEST_TIMEOUT',
+                    status: 408,
+                  }),
+                );
+              }, timeoutMs);
+            }),
+          ]),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    externalSignal?.removeEventListener('abort', forwardExternalAbort);
+  }
   const payload = await readJson(response);
 
   if (!response.ok) {
@@ -634,8 +689,22 @@ export const builderApi = {
 };
 
 export const platformApi = {
+  getSession() {
+    return request('/v1/session', sessionResponseSchema);
+  },
+
+  listCatalogPublications() {
+    return request(
+      `${REUSE_V1_ROUTES.catalogPublications}?includeRetired=false&limit=100`,
+      catalogPublicationListResponseSchema,
+    );
+  },
+
   getAttention() {
-    return request(platformApiRoutes.attention, attentionResponseSchema);
+    return request(platformApiRoutes.attention, attentionResponseSchema, {
+      timeoutMessage: 'The review queue took too long to respond.',
+      timeoutMs: ATTENTION_REQUEST_TIMEOUT_MS,
+    });
   },
 
   getAttentionItem(itemId: string) {
@@ -660,6 +729,10 @@ export const platformApi = {
       }),
       resourceListResponseSchema,
     );
+  },
+
+  getResource(resourceVersionId: string) {
+    return request(platformApiRoutes.resource(resourceVersionId), resourceVersionSchema);
   },
 
   listPlugins(filters: PluginCatalogFilters = {}) {
@@ -829,6 +902,14 @@ export const platformApi = {
     return request(
       platformApiRoutes.declineRelease(channelKey),
       releaseDeclineResponseSchema,
+      jsonBody(value),
+    );
+  },
+
+  rollbackRelease(channelKey: string, value: RollbackReleaseInput) {
+    return request(
+      platformApiRoutes.rollbackRelease(channelKey),
+      productionChannelMutationResponseSchema,
       jsonBody(value),
     );
   },

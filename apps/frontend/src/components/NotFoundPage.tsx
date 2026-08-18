@@ -10,8 +10,8 @@ export function NotFoundPage() {
         <Link className="primary-button" to="/">
           Return home
         </Link>
-        <Link className="secondary-button" to="/library">
-          Browse library
+        <Link className="secondary-button" to="/catalog">
+          Browse catalog
         </Link>
       </div>
     </main>

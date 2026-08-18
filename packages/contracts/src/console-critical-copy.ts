@@ -74,6 +74,16 @@ export const consoleActionCopy = {
     consequence: 'Removes this terminal item from Attention after review.',
     undo: 'The acknowledgement remains permanently in the audit ledger.',
   },
+  revokeGrant: {
+    label: 'Revoke authority',
+    consequence: 'Stops future runs from using this exact grant.',
+    undo: 'A later run must request a new grant; this revocation is permanent.',
+  },
+  rollbackRelease: {
+    label: 'Roll back release',
+    consequence: 'Moves this channel back to its prior certified release.',
+    undo: 'Promote a reviewed successor release when it is ready.',
+  },
 } as const satisfies Record<string, ConsoleCopyAction>;
 
 /**
@@ -87,8 +97,8 @@ export const consoleCriticalCopy = {
   home: {
     screen: 'home',
     introduction: [
-      'Paul OS is the control room for governed agent work.',
-      'Build, run, prove, and improve reusable capabilities without losing authority or provenance.',
+      'Today combines available run, schedule, review, and briefing records on one time axis.',
+      'Sources that are not connected remain explicit.',
     ],
     actions: [
       {
@@ -96,40 +106,10 @@ export const consoleCriticalCopy = {
         consequence: 'Opens the governed queue for decisions and degraded work.',
         undo: 'Return home without changing any item.',
       },
-      {
-        label: 'Build or reuse',
-        consequence: 'Checks certified matches before starting a new agent draft.',
-        undo: 'Leave before saving to keep the platform unchanged.',
-      },
-      {
-        label: 'Open registry',
-        consequence: 'Shows versioned resources, Plugins, and current operational health.',
-        undo: 'Browsing the registry changes nothing.',
-      },
-      {
-        label: 'Review runs',
-        consequence: 'Shows approvals, authority grants, schedules, and run recorders.',
-        undo: 'Reviewing operational history changes nothing.',
-      },
-      {
-        label: 'Review evidence',
-        consequence: 'Shows outcomes, metrics, citations, and release comparisons.',
-        undo: 'Reviewing evidence changes nothing.',
-      },
-      {
-        label: 'Open incubator',
-        consequence: 'Shows observations, proposed improvements, and staged memories.',
-        undo: 'Nothing changes until you make a governed decision.',
-      },
-      {
-        label: 'Open capability map',
-        consequence: 'Opens the offline synthetic manufacturing capability map.',
-        undo: 'Close the map without changing governed data.',
-      },
     ],
     body: [
-      'Attention is the only place that interrupts you.',
-      'Daily Briefing carries informational activity without a badge.',
+      'Meetings and project deadlines are not connected on this machine.',
+      'Paul OS draws no chart because Attention exposes no historical arrived-versus-cleared series.',
     ],
   },
   attention: {
@@ -194,6 +174,22 @@ export const consoleCriticalCopy = {
       'Review its recorder before acknowledging the terminal failure.',
     ],
     actions: [consoleActionCopy.reviewFlightRecorder, consoleActionCopy.acknowledgeFailure],
+  },
+  authorityRevocation: {
+    screen: 'authority-revocation',
+    introduction: [
+      'This grant allows matching future runs.',
+      'Review its exact identity before revoking authority permanently.',
+    ],
+    actions: [consoleActionCopy.revokeGrant],
+  },
+  releaseRollback: {
+    screen: 'release-rollback',
+    introduction: [
+      'This channel has a prior certified release.',
+      'Record why production should return to that exact version.',
+    ],
+    actions: [consoleActionCopy.rollbackRelease],
   },
   flightRecorder: {
     screen: 'flight-recorder',

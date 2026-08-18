@@ -403,7 +403,7 @@ export function CertificationPage() {
           onClick={startCertification}
           type="button"
         >
-          <Icon name="sparkles" size={17} />
+          <Icon name="draft" size={17} />
           {startRun.isPending
             ? 'Queueing…'
             : history.data?.items.length

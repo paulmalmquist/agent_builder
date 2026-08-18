@@ -52,7 +52,7 @@ export function SingleShotPanel({
     <section className="single-shot-panel">
       <div className="single-shot-heading">
         <span className="single-shot-glyph">
-          <Icon name="sparkles" size={19} />
+          <Icon name="draft" size={19} />
         </span>
         <div>
           <strong>Describe the complete operating brief.</strong>

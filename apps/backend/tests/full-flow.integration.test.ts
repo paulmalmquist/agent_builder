@@ -151,6 +151,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     port: 3000,
     logLevel: 'silent',
     generatorCliPath,
+    repositoryRoot: workspaceRoot,
     generatorVersion: '0.2.0',
     generatorConcurrency: 2,
     certificationConcurrency: 2,

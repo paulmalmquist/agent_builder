@@ -288,6 +288,8 @@ export type AppConfig = {
     leaseMs: number;
     dispatchMode: 'in_process' | 'external';
   };
+  /** Absolute root of the checked-out governed content tree. */
+  repositoryRoot: string;
   repositorySourceCommit: string;
   repositorySourceVerified: boolean;
   bigQuery: {
@@ -391,6 +393,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       leaseMs: parsed.EXECUTION_LEASE_MS,
       dispatchMode: parsed.EXECUTION_DISPATCH_MODE,
     },
+    repositoryRoot,
     repositorySourceCommit: parsed.ALLOW_UNVERIFIED_REPOSITORY_IMPORTS
       ? 'local-unverified'
       : (parsed.REPOSITORY_SOURCE_COMMIT as string),

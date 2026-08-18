@@ -10,8 +10,8 @@ export function SurfaceHeader({
   kicker,
   title,
   description,
-  stateLabel = 'CONTROL PLANE ONLINE',
-  stateDetail = 'POSTGRES LEDGER · ZOD CONTRACTS',
+  stateLabel = 'GOVERNED VIEW',
+  stateDetail = 'SERVER-OWNED DATA · STRICT CONTRACTS',
 }: SurfaceHeaderProps) {
   return (
     <header className="os-surface-header">

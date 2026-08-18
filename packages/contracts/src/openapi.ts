@@ -124,6 +124,7 @@ import {
   pluginInstallationListQuerySchema,
   pluginInstallationListResponseSchema,
   pluginInstallationSchema,
+  pluginMarkAssetFileSchema,
   pluginStateChangeRequestSchema,
   pluginUsedByResponseSchema,
   uninstallPluginRequestSchema,
@@ -539,9 +540,20 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/v1/resources',
+  operationId: 'listResources',
   request: { query: resourceListQuerySchema },
   responses: {
     200: { description: 'Versioned registry resources', content: json(resourceListResponseSchema) },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/resources/{resourceVersionId}',
+  operationId: 'getResource',
+  request: { params: platformIdParam('resourceVersionId') },
+  responses: {
+    200: { description: 'Exact scoped resource version', content: json(resourceVersionSchema) },
+    404: errorResponse,
   },
 });
 registry.registerPath({
@@ -575,6 +587,21 @@ registry.registerPath({
   request: { params: platformIdParam('pluginVersionId') },
   responses: {
     200: { description: 'Sanitized Plugin catalog item', content: json(pluginCatalogItemSchema) },
+    404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/plugins/{pluginVersionId}/mark/{assetFile}',
+  operationId: 'getPluginMark',
+  request: {
+    params: z.object({ pluginVersionId: uuidSchema, assetFile: pluginMarkAssetFileSchema }),
+  },
+  responses: {
+    200: {
+      description: 'Content-addressed passive Plugin SVG mark',
+      content: { 'image/svg+xml': { schema: { type: 'string', format: 'binary' } } },
+    },
     404: errorResponse,
   },
 });

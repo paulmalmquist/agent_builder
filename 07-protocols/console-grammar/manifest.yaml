@@ -3,7 +3,7 @@ kind: Protocol
 metadata:
   id: 70000000-0000-4000-8000-000000000002
   slug: console-grammar
-  version: 1.0.0
+  version: 1.1.0
   owner: local-platform-owner
   purpose: Enforce decision-grade attention, plain language, provenance, and accessible review.
   lifecycle: candidate
@@ -36,3 +36,10 @@ spec:
     - critical_copy_passes_cold_read_evaluation
     - keyboard_shortcuts_never_mutate_directly
     - motion_honors_reduced_motion
+    - numbered_navigation_precedes_generic_app_icons
+    - navigation_uses_no_sparkle_wand_or_robot_glyphs
+    - today_is_read_only_and_attention_remains_the_only_decision_action_surface
+    - timeline_facts_name_their_source_and_missing_sources_stay_explicitly_unavailable
+    - connector_marks_use_one_standard_chassis
+    - connector_marks_use_local_assets_with_monogram_and_accent_fallbacks
+    - connector_effect_and_authority_are_never_conveyed_by_color_alone

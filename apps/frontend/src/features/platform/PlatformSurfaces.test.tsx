@@ -32,107 +32,28 @@ describe('Paul OS console surfaces', () => {
     expect(within(resourceHeading.closest('article')!).getByText('Skill')).toBeInTheDocument();
     expect(screen.getByText(/VERSIONED RESOURCES/i).parentElement).toHaveTextContent('137');
     expect(screen.getByText('PRODUCTION').parentElement).toHaveTextContent('23');
-    expect(screen.getByText('PLUGINS READY SHOWN').parentElement).toHaveTextContent('1');
-    expect(
-      screen.getByText('REVIEW · ALL RESOURCES / SHOWN PLUGINS').parentElement,
-    ).toHaveTextContent('12 / 1');
+    expect(screen.getByText('CANDIDATE').parentElement).toHaveTextContent('12');
+    expect(screen.getByText('DEPRECATED').parentElement).toHaveTextContent('2');
   });
 
   it('hides cached Registry data and nominal readings when its dependencies fail', async () => {
     const { client } = renderWithClient(<RegistryPage />, ['/registry']);
     expect(await screen.findByRole('heading', { name: 'Daily Brief' })).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Calendar API' })).toBeInTheDocument();
 
     server.use(
       http.get('http://localhost/v1/resources', () => unavailable('Registry is unavailable.')),
-      http.get('http://localhost/v1/plugins', () => unavailable('Plugins are unavailable.')),
     );
 
-    await Promise.all([
-      client.invalidateQueries({ queryKey: ['platform-resources'] }),
-      client.invalidateQueries({ queryKey: ['plugins'] }),
-    ]);
+    await client.invalidateQueries({ queryKey: ['platform-resources'] });
 
     const alerts = await screen.findAllByRole('alert');
-    expect(alerts).toHaveLength(2);
-    expect(alerts.map((alert) => alert.textContent)).toEqual(
-      expect.arrayContaining(['Registry is unavailable.', 'Plugins are unavailable.']),
-    );
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent('Registry is unavailable.');
     expect(screen.queryByRole('heading', { name: 'Daily Brief' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Calendar API' })).not.toBeInTheDocument();
-    expect(screen.queryByText('No Plugin definitions are available.')).not.toBeInTheDocument();
     expect(screen.queryByText('No imported definitions match.')).not.toBeInTheDocument();
-    for (const label of [
-      'VERSIONED RESOURCES',
-      'PRODUCTION',
-      'PLUGINS READY SHOWN',
-      'REVIEW · ALL RESOURCES / SHOWN PLUGINS',
-    ]) {
+    for (const label of ['VERSIONED RESOURCES', 'PRODUCTION', 'CANDIDATE', 'DEPRECATED']) {
       expect(screen.getByText(label).parentElement).toHaveTextContent('—');
     }
-  });
-
-  it('renders every Plugin transport through one quiet, residency-aware card pattern', async () => {
-    const user = userEvent.setup();
-    renderWithClient(<RegistryPage />, ['/registry']);
-
-    const pluginHeadings = await screen.findAllByRole('heading', {
-      name: /Team messages|Calendar API|Analytics preview|Local files/,
-    });
-    expect(pluginHeadings).toHaveLength(4);
-    const pluginCards = document.querySelectorAll('.plugin-card');
-    expect(pluginCards).toHaveLength(4);
-    expect(pluginCards[0]).toHaveTextContent('Team messages');
-    expect(pluginCards[0]).toHaveAttribute('data-health', 'degraded');
-    expect(screen.getByText('mcp')).toBeInTheDocument();
-    expect(screen.getByText('http')).toBeInTheDocument();
-    expect(screen.getByText('db')).toBeInTheDocument();
-    expect(screen.getByText('cli')).toBeInTheDocument();
-
-    const localCard = screen.getByRole('heading', { name: 'Local files' }).closest('article')!;
-    expect(
-      within(localCard).getByRole('button', { name: 'WORKSTATION UNAVAILABLE' }),
-    ).toBeDisabled();
-
-    const analyticsCard = screen
-      .getByRole('heading', { name: 'Analytics preview' })
-      .closest('article')!;
-    await user.click(within(analyticsCard).getByRole('button', { name: 'INSTALL PLUGIN' }));
-    const installDialog = screen.getByRole('dialog', { name: 'Analytics preview' });
-    await user.click(within(installDialog).getByRole('button', { name: 'INSTALL EXACT VERSION' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Analytics preview' })).not.toBeInTheDocument(),
-    );
-    expect(
-      await within(analyticsCard).findByRole('button', { name: 'MANAGE PLUGIN' }),
-    ).toBeInTheDocument();
-  });
-
-  it('uses replace-only opaque secret references and protects certified Plugin dependents', async () => {
-    const user = userEvent.setup();
-    renderWithClient(<RegistryPage />, ['/registry']);
-
-    const calendarCard = (await screen.findByRole('heading', { name: 'Calendar API' })).closest(
-      'article',
-    )!;
-    await user.click(within(calendarCard).getByRole('button', { name: 'MANAGE PLUGIN' }));
-    const dialog = screen.getByRole('dialog', { name: 'Calendar API' });
-    expect(within(dialog).getByText(/Saving replaces every secret binding/i)).toBeInTheDocument();
-    expect(
-      within(dialog).getByText(/stored values are intentionally never returned/i),
-    ).toBeInTheDocument();
-    expect(
-      await within(dialog).findByText(/Daily Brief · resource · production/i),
-    ).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'UNINSTALL' })).toBeDisabled();
-    expect(within(dialog).getByRole('button', { name: 'TRIGGER KILL SWITCH' })).toBeEnabled();
-    const secretReference = within(dialog).getByRole('textbox', { name: /access-token/i });
-    expect(secretReference).toHaveValue('');
-    await user.type(secretReference, 'env://CALENDAR_TOKEN');
-    await user.click(within(dialog).getByRole('button', { name: 'SAVE SECRET REFERENCES' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Calendar API' })).not.toBeInTheDocument(),
-    );
   });
 
   it('only submits selected server-derived Plugin scopes at equal or lower ceilings', async () => {

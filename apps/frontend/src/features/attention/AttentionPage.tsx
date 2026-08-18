@@ -168,14 +168,33 @@ export function AttentionPage() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [pending, setPending] = useState<PendingDecision | null>(null);
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
+  const [queueFailedClosed, setQueueFailedClosed] = useState(false);
   const cardReferences = useRef(new Map<string, HTMLElement>());
   const selectedRun = useExecutionRun(
     pending?.action.kind === 'approve_run' ? pending.item.payload.runId : null,
   );
-  const decide = attention.data?.decide ?? EMPTY_ATTENTION_ITEMS;
-  const degraded = attention.data?.degraded ?? EMPTY_ATTENTION_ITEMS;
+  const queueUnavailable = attention.error !== null || queueFailedClosed;
+  const decide = queueUnavailable
+    ? EMPTY_ATTENTION_ITEMS
+    : (attention.data?.decide ?? EMPTY_ATTENTION_ITEMS);
+  const degraded = queueUnavailable
+    ? EMPTY_ATTENTION_ITEMS
+    : (attention.data?.degraded ?? EMPTY_ATTENTION_ITEMS);
   const items = useMemo(() => [...decide, ...degraded], [decide, degraded]);
   const activeIndex = items.length === 0 ? 0 : Math.min(focusIndex, items.length - 1);
+
+  useEffect(() => {
+    if (attention.error) {
+      setQueueFailedClosed(true);
+      setPending(null);
+      setDetailItemId(null);
+      cardReferences.current.clear();
+      return;
+    }
+    if (queueFailedClosed && attention.isSuccess && !attention.isFetching) {
+      setQueueFailedClosed(false);
+    }
+  }, [attention.error, attention.isFetching, attention.isSuccess, queueFailedClosed]);
 
   const focusCard = useCallback(
     (index: number) => {
@@ -354,9 +373,21 @@ export function AttentionPage() {
           </span>
         </div>
       </header>
-      {attention.error ? <Notice tone="error">{getErrorMessage(attention.error)}</Notice> : null}
+      {attention.error ? (
+        <Notice tone="error">
+          <span>{getErrorMessage(attention.error)}</span>
+          <button
+            className="secondary-button"
+            disabled={attention.isFetching}
+            onClick={() => void attention.refetch()}
+            type="button"
+          >
+            {attention.isFetching ? 'Retrying…' : 'Retry loading'}
+          </button>
+        </Notice>
+      ) : null}
       {attention.isLoading ? <div className="attention-empty">Loading review queue…</div> : null}
-      {!attention.isLoading && !attention.error && items.length === 0 ? (
+      {!attention.isLoading && !queueUnavailable && items.length === 0 ? (
         <section className="attention-all-quiet">
           <span aria-hidden="true" className="quiet-orbit" />
           <div>
@@ -419,14 +450,14 @@ export function AttentionPage() {
           </div>
         </section>
       ) : null}
-      {attention.data && items.length > 0 ? (
+      {!queueUnavailable && attention.data && items.length > 0 ? (
         <section aria-label="Next briefing digest" className="attention-digest">
           <span>DIGEST</span>
           <p>{attention.data.digest.headline}</p>
           <small>Full detail arrives in the next successful Daily Briefing.</small>
         </section>
       ) : null}
-      {pending?.action.kind === 'approve_run' ? (
+      {!queueUnavailable && pending?.action.kind === 'approve_run' ? (
         selectedRun.data ? (
           <ApprovalDialog
             error={approve.error ? getErrorMessage(approve.error) : null}
@@ -454,7 +485,7 @@ export function AttentionPage() {
           </Modal>
         )
       ) : null}
-      {pending && pending.action.kind !== 'approve_run' ? (
+      {!queueUnavailable && pending && pending.action.kind !== 'approve_run' ? (
         <DecisionDialog
           {...decisionCopy(pending)}
           error={decisionError ? getErrorMessage(decisionError) : null}
@@ -463,7 +494,7 @@ export function AttentionPage() {
           onConfirm={confirmDecision}
         />
       ) : null}
-      {detailItemId ? (
+      {!queueUnavailable && detailItemId ? (
         <AttentionDetailDialog itemId={detailItemId} onClose={() => setDetailItemId(null)} />
       ) : null}
     </main>

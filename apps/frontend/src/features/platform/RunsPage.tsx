@@ -1,5 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import type { AutomationSchedule, ExecutionRun } from '@agent-builder/contracts';
+import {
+  consoleActionCopy,
+  consoleCriticalCopy,
+  type AutomationSchedule,
+  type ExecutionRun,
+} from '@agent-builder/contracts';
+import { Link } from 'react-router-dom';
 import {
   useApproveExecutionRun,
   useAutomationSchedules,
@@ -13,6 +19,7 @@ import { getErrorMessage } from '../../api/client';
 import { Notice } from '../../components/Notice';
 import { ApprovalDialog } from './ApprovalDialog';
 import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
+import { GovernedActionDialog } from './GovernedActionDialog';
 
 function money(value: number | null) {
   return value === null ? '—' : `$${value.toFixed(value < 1 ? 4 : 2)}`;
@@ -113,6 +120,49 @@ function RunFlightRecorder({ run }: { run: ExecutionRun }) {
   );
 }
 
+function RunContextInspector({ run }: { run: ExecutionRun }) {
+  return (
+    <details className="run-flight-recorder run-context-inspector">
+      <summary>
+        <span>CONTEXT INSPECTOR</span>
+        <span>{run.contextEstimatedTokens.toLocaleString()} EST. TOKENS</span>
+      </summary>
+      <div className="run-context-summary">
+        <dl>
+          <div>
+            <dt>CLASSIFICATION</dt>
+            <dd>{run.contextClassification}</dd>
+          </div>
+          <div>
+            <dt>INPUT KEYS</dt>
+            <dd>{Object.keys(run.input).length}</dd>
+          </div>
+          <div>
+            <dt>PROVENANCE SOURCES</dt>
+            <dd>{run.contextProvenance.length}</dd>
+          </div>
+        </dl>
+        <ul aria-label="Context provenance summary">
+          {run.contextProvenance.map((source, index) => (
+            <li key={`${source.source}:${source.classification}:${index}`}>
+              <strong>{source.source.replaceAll('_', ' ')}</strong>
+              <span>
+                {source.classification} · {source.tokenContribution.toLocaleString()} tokens
+              </span>
+            </li>
+          ))}
+        </ul>
+        <h3>Recorded run input</h3>
+        <pre>{JSON.stringify(run.input, null, 2)}</pre>
+        <p>
+          This is the durable input and provenance summary. The assembled provider prompt is not
+          exposed by the current API, so Paul OS does not claim this is the complete model context.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 function ScheduleStateControl({
   schedule,
   isPending,
@@ -162,6 +212,7 @@ export function RunsPage() {
   const revoke = useRevokeAuthorityGrant();
   const updateSchedule = useUpdateAutomationScheduleState();
   const [approvalRun, setApprovalRun] = useState<ExecutionRun | null>(null);
+  const [revocationGrantId, setRevocationGrantId] = useState<string | null>(null);
   const runItems = runs.isError ? [] : (runs.data?.items ?? []);
   const grantItems = grants.isError ? [] : (grants.data?.items ?? []);
   const scheduleItems = schedules.isError ? [] : (schedules.data?.items ?? []);
@@ -170,11 +221,17 @@ export function RunsPage() {
   return (
     <main className="os-surface">
       <SurfaceHeader
-        description="Observe durable execution, approve digest-bound authority, and revoke unattended access without changing the underlying release."
-        kicker="EXECUTION CONTROL & HUMAN AUTHORITY"
+        description="Move between what is allowed, what is scheduled, and what happened without losing the exact release, grant, or context boundary."
+        kicker="RUNS · AUTHORITY · AUTOMATION"
         stateDetail="LEASED RUNS · FAIL-CLOSED GRANTS"
-        title="Runs & Approvals"
+        title="Operate"
       />
+      <nav aria-label="Operate views" className="section-tabs">
+        <a href="#operate-runs">RUNS</a>
+        <a href="#operate-authority">AUTHORITY</a>
+        <a href="#operate-schedules">SCHEDULES</a>
+        <Link to="/attention">APPROVALS ↗</Link>
+      </nav>
       <InstrumentStrip
         readings={[
           {
@@ -204,7 +261,7 @@ export function RunsPage() {
       />
       {mutationError ? <Notice tone="error">{getErrorMessage(mutationError)}</Notice> : null}
       <div className="runs-layout">
-        <section aria-busy={runs.isLoading} className="os-panel">
+        <section aria-busy={runs.isLoading} className="os-panel" id="operate-runs">
           <header className="os-panel-heading">
             <h2>Execution ledger</h2>
             <small>NEWEST FIRST · AUTO REFRESH</small>
@@ -245,6 +302,7 @@ export function RunsPage() {
                 </div>
                 <PluginScopeSummary scopes={run.requiredPluginScopes} />
                 <RunFlightRecorder run={run} />
+                <RunContextInspector run={run} />
                 {run.state === 'awaiting_approval' ? (
                   <button
                     className="primary-button run-action"
@@ -270,7 +328,7 @@ export function RunsPage() {
             ))}
           </div>
         </section>
-        <section aria-busy={grants.isLoading} className="os-panel">
+        <section aria-busy={grants.isLoading} className="os-panel" id="operate-authority">
           <header className="os-panel-heading">
             <h2>Authority envelopes</h2>
             <small>EXACT RELEASE DIGESTS</small>
@@ -331,7 +389,7 @@ export function RunsPage() {
                   <button
                     className="secondary-button run-action"
                     disabled={revoke.isPending}
-                    onClick={() => revoke.mutate(grant.id)}
+                    onClick={() => setRevocationGrantId(grant.id)}
                     type="button"
                   >
                     REVOKE AUTHORITY
@@ -342,7 +400,11 @@ export function RunsPage() {
           </div>
         </section>
       </div>
-      <section aria-busy={schedules.isLoading} className="os-panel schedule-panel">
+      <section
+        aria-busy={schedules.isLoading}
+        className="os-panel schedule-panel"
+        id="operate-schedules"
+      >
         <header className="os-panel-heading">
           <h2>Durable schedules</h2>
           <small>PRODUCTION POINTER · DEDUPLICATED DISPATCH</small>
@@ -408,6 +470,20 @@ export function RunsPage() {
           }
           onClose={() => setApprovalRun(null)}
           run={approvalRun}
+        />
+      ) : null}
+      {revocationGrantId ? (
+        <GovernedActionDialog
+          action={consoleActionCopy.revokeGrant}
+          error={revoke.isError ? getErrorMessage(revoke.error) : null}
+          introduction={consoleCriticalCopy.authorityRevocation.introduction}
+          isPending={revoke.isPending}
+          kicker="AUTHORITY REVOCATION"
+          onClose={() => setRevocationGrantId(null)}
+          onConfirm={() =>
+            revoke.mutate(revocationGrantId, { onSuccess: () => setRevocationGrantId(null) })
+          }
+          title={`Revoke grant ${revocationGrantId.slice(0, 8)}`}
         />
       ) : null}
     </main>

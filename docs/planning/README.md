@@ -15,6 +15,11 @@ by source, generated OpenAPI, migrations, tests, and accepted architecture decis
   platform capabilities; claims require fresh verification before use.
 - `operational-agent-proving-catalog.md` — accepted follow-on validation scope defining 16
   substantial data and synthetic-manufacturing agents across five authority rungs.
+- `paul-os-console-pass-2.md` — sanitized direction for the time-oriented Today surface, numbered
+  rail, entity palette, and transfer-ready Knowledge graph.
+- `paul-os-mark-system.md` — local-only connector identity and exact agent capability schematic.
+- `paul-os-unsurfaced-facets.md` — inventory of the control-plane surfaces exposed by the expanded
+  console and the list contracts that remain explicit activation work.
 - `phase-2-quiet-console-plan.md` — the initial quiet-console, Plugin, reuse, and managed-workstation
   proposal that informed the recovery-first implementation plan.
 - `attention-console-mockup.html` — static, dependency-free Attention surface concept.

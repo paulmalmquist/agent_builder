@@ -32,6 +32,74 @@ const headerNameSchema = z
   .trim()
   .regex(/^[A-Za-z][A-Za-z0-9-]{0,99}$/);
 
+const localPluginMarkPathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .superRefine((value, context) => {
+    if (
+      /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(value) ||
+      value.startsWith('/') ||
+      value.startsWith('\\') ||
+      value.includes('\\')
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Plugin marks must use a local, POSIX-style relative path',
+      });
+      return;
+    }
+    if (!/^(?:\.\/)?[A-Za-z0-9][A-Za-z0-9._/-]*$/u.test(value)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Plugin mark paths contain unsupported characters',
+      });
+      return;
+    }
+    const segments = value.replace(/^\.\//u, '').split('/');
+    if (
+      segments.length === 0 ||
+      segments.some((segment) => segment === '' || segment === '.' || segment === '..')
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Plugin mark paths cannot contain empty, current, or parent segments',
+      });
+    }
+    if (!value.toLowerCase().endsWith('.svg')) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Plugin marks must be local SVG files',
+      });
+    }
+  });
+
+export const pluginBrandSchema = z
+  .object({
+    mark: localPluginMarkPathSchema.optional(),
+    monogram: z
+      .string()
+      .trim()
+      .regex(/^[A-Z0-9]{1,3}$/u),
+    accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/u),
+  })
+  .strict();
+
+const pluginMarkAssetSourceSchema = z
+  .string()
+  .regex(
+    /^\/v1\/plugins\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/mark\/[a-f0-9]{64}\.svg$/u,
+  );
+
+/** Browser-safe projection of a Plugin brand. Repository paths never leave the backend. */
+export const pluginCatalogBrandSchema = pluginBrandSchema
+  .omit({ mark: true })
+  .extend({ assetSrc: pluginMarkAssetSourceSchema.nullable().default(null) })
+  .strict();
+
+export const pluginMarkAssetFileSchema = z.string().regex(/^[a-f0-9]{64}\.svg$/u);
+
 export const pluginTransportSchema = z.enum(['mcp', 'http', 'cli', 'db']);
 export const pluginExecutionPlacementSchema = z.enum(['control_plane', 'workstation']);
 export const pluginEffectSchema = z.enum(['read', 'write', 'destructive']);
@@ -280,6 +348,7 @@ export const dbPluginCapabilitySchema = withEffectGuard(
 const commonPluginShape = {
   executionPlacement: pluginExecutionPlacementSchema,
   classification: pluginClassificationSchema,
+  brand: pluginBrandSchema.optional(),
   secretSlots: z.array(pluginSecretSlotSchema).max(50),
 };
 
@@ -571,6 +640,7 @@ export const pluginCatalogItemSchema = z.object({
   transport: pluginTransportSchema,
   executionPlacement: pluginExecutionPlacementSchema,
   classification: pluginClassificationSchema,
+  brand: pluginCatalogBrandSchema,
   capabilities: z.array(pluginCapabilitySummarySchema),
   secretSlots: z.array(pluginDeclaredSecretSlotSchema),
   activeScopeDescriptions: z.array(z.string().trim().min(10).max(500)).max(100),

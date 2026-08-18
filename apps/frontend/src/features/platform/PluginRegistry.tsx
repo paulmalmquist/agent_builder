@@ -10,6 +10,7 @@ import {
 } from '../../api/hooks';
 import { Modal } from '../../components/Modal';
 import { Notice } from '../../components/Notice';
+import { ConnectorMark } from '../../components/connector-marks/ConnectorMark';
 import { getErrorMessage } from '../../api/client';
 
 function money(value: number) {
@@ -31,10 +32,12 @@ function pluginState(
 function PluginCard({ plugin, onManage }: { plugin: PluginCatalogItem; onManage: () => void }) {
   const state = pluginState(plugin);
   const installed = plugin.installationId !== null;
+  const active = plugin.installationState === 'enabled' && state === 'healthy';
   return (
     <article className="plugin-card" data-health={state}>
       <header>
         <div className="plugin-card-title">
+          <ConnectorMark active={active} definition={plugin.brand} label={plugin.name} />
           <span className="plugin-health-dot" aria-hidden="true" />
           <div>
             <h3>{plugin.name}</h3>
@@ -187,6 +190,11 @@ function PluginManagementDialog({
   return (
     <Modal kicker="GOVERNED CONNECTION" onClose={onClose} title={plugin.name}>
       <div className="plugin-dialog-summary">
+        <ConnectorMark
+          active={plugin.installationState === 'enabled' && pluginState(plugin) === 'healthy'}
+          definition={plugin.brand}
+          label={plugin.name}
+        />
         <span className="resource-kind">{plugin.transport}</span>
         <span className="os-status-chip" data-state={pluginState(plugin)}>
           {pluginState(plugin).replaceAll('_', ' ')}

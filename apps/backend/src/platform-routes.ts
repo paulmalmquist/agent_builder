@@ -41,6 +41,7 @@ import {
   pluginInstallationListQuerySchema,
   pluginInstallationListResponseSchema,
   pluginInstallationSchema,
+  pluginMarkAssetFileSchema,
   pluginStateChangeRequestSchema,
   pluginUsedByResponseSchema,
   uninstallPluginRequestSchema,
@@ -63,6 +64,7 @@ import {
   repositoryImportResponseSchema,
   resourceListQuerySchema,
   resourceListResponseSchema,
+  resourceVersionSchema,
   reviewImprovementCandidateRequestSchema,
   reviewMemoryCandidateRequestSchema,
   scheduleDueAutomationsRequestSchema,
@@ -122,6 +124,15 @@ const uuidParam =
     next();
   };
 
+const pluginMarkAssetParam: RequestHandler = (request, _response, next) => {
+  const value = request.params['assetFile'];
+  if (typeof value !== 'string' || !pluginMarkAssetFileSchema.safeParse(value).success) {
+    next('route');
+    return;
+  }
+  next();
+};
+
 function send<TSchema extends z.ZodTypeAny>(
   response: Response,
   status: number,
@@ -135,12 +146,12 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.get(
     '/v1/catalog/publications',
     asyncRoute(async (request, response) => {
-      const query = catalogPublicationListQuerySchema.parse(request.query);
+      catalogPublicationListQuerySchema.parse(request.query);
       send(
         response,
         200,
         catalogPublicationListResponseSchema,
-        await services.reuse.listPublications(query),
+        await services.reuse.listPublications(request.query),
       );
     }),
   );
@@ -299,6 +310,32 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
     }),
   );
   router.get(
+    '/v1/plugins/:pluginVersionId/mark/:assetFile',
+    uuidParam('pluginVersionId'),
+    pluginMarkAssetParam,
+    asyncRoute(async (request, response) => {
+      const assetFile = pluginMarkAssetFileSchema.parse(request.params['assetFile']);
+      const asset = await services.plugins.getMarkAsset(
+        request.params['pluginVersionId'] as string,
+        assetFile.slice(0, -'.svg'.length),
+      );
+      response.set({
+        'Cache-Control': 'private, max-age=31536000, immutable',
+        'Content-Disposition': 'inline; filename="connector-mark.svg"',
+        'Content-Length': String(asset.bytes.byteLength),
+        'Content-Security-Policy':
+          "default-src 'none'; style-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox",
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        ETag: `"sha256-${asset.digest}"`,
+        'Referrer-Policy': 'no-referrer',
+        Vary: 'Authorization',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      response.status(200).end(asset.bytes);
+    }),
+  );
+  router.get(
     '/v1/plugin-installations',
     asyncRoute(async (request, response) => {
       const query = pluginInstallationListQuerySchema.parse(request.query);
@@ -425,6 +462,18 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
     asyncRoute(async (request, response) => {
       const query = resourceListQuerySchema.parse(request.query);
       send(response, 200, resourceListResponseSchema, await services.registry.listResources(query));
+    }),
+  );
+  router.get(
+    '/v1/resources/:resourceVersionId',
+    uuidParam('resourceVersionId'),
+    asyncRoute(async (request, response) => {
+      send(
+        response,
+        200,
+        resourceVersionSchema,
+        await services.registry.getResource(request.params['resourceVersionId'] as string),
+      );
     }),
   );
   router.post(

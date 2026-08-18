@@ -24,6 +24,7 @@ const catalogItem = pluginCatalogItemSchema.parse({
   transport: 'http',
   executionPlacement: 'control_plane',
   classification: 'internal',
+  brand: { monogram: 'SP', accent: '#B9AAFF' },
   capabilities: [
     {
       tool: 'record_lookup',
@@ -73,6 +74,12 @@ function appFor() {
   const plugins = {
     listCatalog: jest.fn().mockResolvedValue({ items: [catalogItem] }),
     getCatalogItem: jest.fn().mockResolvedValue(catalogItem),
+    getMarkAsset: jest.fn().mockResolvedValue({
+      bytes: Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>',
+      ),
+      digest: 'b'.repeat(64),
+    }),
     listInstallations: jest.fn().mockResolvedValue({ items: [installation] }),
     install: jest.fn().mockResolvedValue(installation),
     getInstallation: jest.fn().mockResolvedValue(installation),
@@ -144,6 +151,27 @@ describe('Plugin operational routes', () => {
       expect(JSON.stringify(body)).not.toContain('env://');
       expect(JSON.stringify(body)).not.toContain('PRIVATE_TOKEN');
     }
+  });
+
+  it('serves a content-addressed Plugin mark with restrictive immutable response headers', async () => {
+    const { app, plugins } = appFor();
+    const response = await authenticated(app)
+      .get(`/v1/plugins/${pluginVersionId}/mark/${'b'.repeat(64)}.svg`)
+      .expect(200)
+      .expect('content-type', /image\/svg\+xml/u)
+      .expect('cache-control', 'private, max-age=31536000, immutable')
+      .expect('x-content-type-options', 'nosniff')
+      .expect('cross-origin-resource-policy', 'same-origin');
+
+    expect(response.headers['content-security-policy']).toContain("default-src 'none'");
+    expect(response.headers['content-security-policy']).toContain('sandbox');
+    expect(response.headers['etag']).toBe(`"sha256-${'b'.repeat(64)}"`);
+    expect(plugins.getMarkAsset).toHaveBeenCalledWith(pluginVersionId, 'b'.repeat(64));
+
+    await authenticated(app)
+      .get(`/v1/plugins/${pluginVersionId}/mark/not-a-digest.svg`)
+      .expect(404);
+    expect(plugins.getMarkAsset).toHaveBeenCalledTimes(1);
   });
 
   it('accepts opaque secret references but never reflects them in install responses', async () => {
