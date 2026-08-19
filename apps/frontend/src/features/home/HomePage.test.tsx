@@ -13,7 +13,7 @@ import {
 } from './home-model';
 import { HomePage } from './HomePage';
 
-const now = new Date(2026, 7, 18, 9);
+const now = new Date('2026-08-18T13:00:00.000Z');
 
 const emptyCounts = {
   awaiting_approval: 0,
@@ -635,7 +635,7 @@ describe('HomePage', () => {
   });
 
   it('surfaces active schedules due today as global live next moves', async () => {
-    const nextRunAt = new Date(2026, 7, 18, 13).toISOString();
+    const nextRunAt = '2026-08-18T17:00:00.000Z';
     useHomeResponses({
       schedules: {
         items: [automationSchedule(nextRunAt)],
@@ -648,7 +648,7 @@ describe('HomePage', () => {
     const task = (await screen.findByText('Daily Brief is scheduled today')).closest('li');
     expect(task).not.toBeNull();
     expect(task).toHaveTextContent('GLOBAL · SCHEDULE DUE TODAY');
-    expect(task).toHaveTextContent('1:00 PM');
+    expect(task).toHaveTextContent('1:00 PM EDT');
     expect(task).toHaveTextContent('LIVE · OPEN SCHEDULES');
     expect(within(task as HTMLElement).getByRole('link')).toHaveAttribute(
       'href',
