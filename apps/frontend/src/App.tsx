@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type {
   GuardrailsSection,
   InterpretationConfirmation,
@@ -11,6 +11,7 @@ import type {
   OutputsSection,
   CapabilityProfile,
 } from '@agent-builder/contracts';
+import { featureFlags } from './config/feature-flags';
 import {
   useAgentSpec,
   useBuilderReferredChoices,
@@ -53,25 +54,25 @@ const workflowSteps = [
     step: 1 as const,
     title: 'DEFINE SCOPE & PURPOSE',
     description: 'Describe the job to be done, inputs, users, and the desired outcome.',
-    icon: 'scope' as const,
+    mark: 'definition-sheet' as const,
   },
   {
     step: 2 as const,
     title: 'DEFINE KNOWLEDGE & ACCESS',
     description: 'Select and configure governed data sources, documents, and tools.',
-    icon: 'database' as const,
+    mark: 'source-table' as const,
   },
   {
     step: 3 as const,
     title: 'DEFINE ACTIONS & WORKFLOW',
     description: 'Choose the auditable workflow, approvals, and fail-closed behavior.',
-    icon: 'code' as const,
+    mark: 'control-flow' as const,
   },
   {
     step: 4 as const,
     title: 'DEFINE SUCCESS CRITERIA',
     description: 'Set evaluation criteria, quality thresholds, and acceptance tests.',
-    icon: 'success' as const,
+    mark: 'acceptance-gate' as const,
   },
 ];
 
@@ -616,16 +617,14 @@ export function App() {
       <div className="frame">
         <section className="left-column">
           <div className="hero-copy">
+            <p className="page-kicker">GOVERNED DEFINITION WORKBENCH</p>
             <h1>
-              <span className="hero-line">Build or extend the right agent.</span>
-              <br />
-              <span className="hero-line">Faster. Governed. Effective.</span>
+              <span className="hero-line">Build</span>
             </h1>
             <div aria-hidden="true" className="hairline" />
             <p>
-              Describe what you want to accomplish.
-              <br className="desktop-break" /> We’ll help you reuse what exists or guide
-              <br className="desktop-break" /> you to build the right agent step by step.
+              Define the work to be governed. Paul OS checks certified agents first, then opens a
+              new four-step definition only when reuse does not fit.
             </p>
           </div>
           {notice ? (
@@ -694,7 +693,7 @@ export function App() {
                 }
                 complete={completedSteps[step.step]}
                 description={step.description}
-                icon={step.icon}
+                mark={step.mark}
                 justCompleted={justCompletedSteps.has(step.step)}
                 justUnlocked={justUnlockedSteps.has(step.step)}
                 key={step.step}
@@ -732,21 +731,31 @@ export function App() {
               </button>
             ) : null}
             {jobId ? (
-              <GenerationPanel
-                error={generationError}
-                evaluation={evaluation.data}
-                isLoading={jobQuery.isLoading}
-                isRecovering={recover.isPending}
-                isShadowDeploying={shadowDeploy.isPending}
-                job={jobQuery.data}
-                onRecover={() => {
-                  if (jobQuery.data) recover.mutate(jobQuery.data.agentId);
-                }}
-                onShadowDeploy={() => {
-                  if (jobQuery.data) shadowDeploy.mutate(jobQuery.data.agentId);
-                }}
-                shadowDeployed={shadowDeployed}
-              />
+              <>
+                <GenerationPanel
+                  error={generationError}
+                  evaluation={evaluation.data}
+                  isLoading={jobQuery.isLoading}
+                  isRecovering={recover.isPending}
+                  isShadowDeploying={shadowDeploy.isPending}
+                  job={jobQuery.data}
+                  onRecover={() => {
+                    if (jobQuery.data) recover.mutate(jobQuery.data.agentId);
+                  }}
+                  onShadowDeploy={() => {
+                    if (jobQuery.data) shadowDeploy.mutate(jobQuery.data.agentId);
+                  }}
+                  shadowDeployed={shadowDeployed}
+                />
+                {featureFlags.visualSurfacesEnabled && jobQuery.data ? (
+                  <Link
+                    className="secondary-button builder-bench-link"
+                    to={`/bench/${jobQuery.data.agentId}`}
+                  >
+                    OPEN ASSEMBLY BENCH ↗
+                  </Link>
+                ) : null}
+              </>
             ) : null}
           </div>
         </section>

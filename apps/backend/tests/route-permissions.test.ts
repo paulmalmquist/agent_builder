@@ -11,6 +11,8 @@ const agentId = '20000000-0000-4000-8000-000000000002';
 const caseId = '30000000-0000-4000-8000-000000000003';
 const intakeId = '40000000-0000-4000-8000-000000000004';
 const publicationId = '50000000-0000-4000-8000-000000000005';
+const improvementId = '60000000-0000-4000-8000-000000000006';
+const memoryId = '70000000-0000-4000-8000-000000000007';
 
 type MutationMethod = 'post' | 'put';
 type MutationCase = readonly [label: string, method: MutationMethod, path: string];
@@ -47,6 +49,8 @@ const builderMutations: readonly MutationCase[] = [
 ];
 
 const ownerMutations: readonly MutationCase[] = [
+  ['review an improvement candidate', 'post', `/v1/improvement-candidates/${improvementId}/review`],
+  ['review a memory candidate', 'post', `/v1/memory-candidates/${memoryId}/review`],
   ['retire a catalog publication', 'post', `/v1/catalog/publications/${publicationId}/retirement`],
   ['promote a release', 'post', '/v1/production-channels/default/promote'],
   ['decline a release', 'post', '/v1/production-channels/default/decline'],

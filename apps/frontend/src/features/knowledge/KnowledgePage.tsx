@@ -16,6 +16,11 @@ import {
 } from '../../components/connector-marks/AgentCapabilitySchematic';
 import { SurfaceHeader } from '../platform/SurfaceHeader';
 import { featureFlags } from '../../config/feature-flags';
+import {
+  distinctResourceVersions,
+  humanizeOperationalSignal,
+  isQuarantinedResource,
+} from '../../lib/user-facing-index';
 import './knowledge.css';
 
 type KnowledgeType =
@@ -34,6 +39,44 @@ interface KnowledgeTypeDefinition {
   label: string;
   number: string;
   transferRequired?: boolean;
+}
+
+interface DefinitionRelationship {
+  declaredBy: Pick<ResourceVersion, 'name' | 'version'>;
+  predicate: 'DEPENDS ON' | 'USED BY';
+  source: ResourceVersion;
+  target: ResourceVersion;
+}
+
+function DefinitionEdge({ relationship }: { relationship: DefinitionRelationship }) {
+  const { declaredBy, predicate, source, target } = relationship;
+  return (
+    <li
+      aria-label={`${source.name} ${predicate} ${target.name}`}
+      className="knowledge-edge"
+      data-predicate={predicate.toLowerCase().replace(' ', '-')}
+    >
+      <div className="knowledge-edge-origin">
+        <span>{displayKind(source.kind)}</span>
+        <strong>{source.name}</strong>
+        <small>V{source.version}</small>
+      </div>
+      <div aria-label={predicate} className="knowledge-edge-direction">
+        <i aria-hidden="true" />
+        <b>{predicate}</b>
+        <i aria-hidden="true" />
+      </div>
+      <div className="knowledge-edge-target">
+        <span>{displayKind(target.kind)}</span>
+        <strong>{target.name}</strong>
+        <small>V{target.version}</small>
+      </div>
+      <p>
+        Declared by {declaredBy.name} V{declaredBy.version}. Exact version pin. No semantic
+        relationship is inferred.
+      </p>
+    </li>
+  );
 }
 
 const knowledgeTypes: Record<KnowledgeType, KnowledgeTypeDefinition> = {
@@ -135,9 +178,16 @@ export function KnowledgePage() {
   const observations = useObservations();
   const plugins = usePlugins({ includeDisabled: true, limit: 100 });
   const grants = useAuthorityGrants({ state: 'active', limit: 100 });
-  const items = resources.isError ? emptyResources : (resources.data?.items ?? emptyResources);
+  const items = useMemo(
+    () =>
+      resources.isError
+        ? emptyResources
+        : distinctResourceVersions(resources.data?.items ?? emptyResources),
+    [resources.data?.items, resources.isError],
+  );
   const graphItems = useMemo(() => {
     if (exactResource.isError || exactResource.data === undefined) return items;
+    if (isQuarantinedResource(exactResource.data)) return items;
     return items.some((item) => item.id === exactResource.data.id)
       ? items
       : [exactResource.data, ...items];
@@ -175,15 +225,33 @@ export function KnowledgePage() {
     [items, observations.data?.items.length, observations.isError, resources.isError],
   );
 
-  const relatedResources = useMemo(() => {
+  const relatedResources = useMemo<DefinitionRelationship[]>(() => {
     if (!selectedResource) return [];
     const selectedKey = resourcePinKey(selectedResource);
     const exactDependencies = new Set(selectedResource.dependencyPins.map(resourcePinKey));
-    return graphItems.filter(
-      (resource) =>
-        exactDependencies.has(resourcePinKey(resource)) ||
-        resource.dependencyPins.some((dependency) => resourcePinKey(dependency) === selectedKey),
-    );
+    const relationships: DefinitionRelationship[] = [];
+    for (const resource of graphItems) {
+      if (exactDependencies.has(resourcePinKey(resource))) {
+        relationships.push({
+          declaredBy: selectedResource,
+          predicate: 'DEPENDS ON',
+          source: selectedResource,
+          target: resource,
+        });
+        continue;
+      }
+      if (
+        resource.dependencyPins.some((dependency) => resourcePinKey(dependency) === selectedKey)
+      ) {
+        relationships.push({
+          declaredBy: resource,
+          predicate: 'USED BY',
+          source: selectedResource,
+          target: resource,
+        });
+      }
+    }
+    return relationships;
   }, [graphItems, selectedResource]);
 
   const touchingAgents = useMemo(() => {
@@ -245,8 +313,8 @@ export function KnowledgePage() {
   return (
     <main className="os-surface knowledge-surface">
       <SurfaceHeader
-        description="Traverse governed definitions and the exact relationships already present in the repository. Private organizational knowledge remains disconnected until transfer."
-        kicker="TYPED KNOWLEDGE GRAPH · TRANSFER READY"
+        description="Traverse governed definitions and exact dependency edges already present in the repository. Semantic organizational knowledge remains disconnected until transfer."
+        kicker="TYPED DEFINITION GRAPH · TRANSFER BOUNDARY"
         stateDetail="VERSIONED SOURCES · EXACT DEPENDENCIES"
         title="Knowledge"
       />
@@ -258,6 +326,13 @@ export function KnowledgePage() {
       {selectedEntityId !== null && exactResource.isError ? (
         <Notice tone="error">
           Requested knowledge entity unavailable. {getErrorMessage(exactResource.error)}
+        </Notice>
+      ) : null}
+      {selectedEntityId !== null &&
+      exactResource.data !== undefined &&
+      isQuarantinedResource(exactResource.data) ? (
+        <Notice tone="info">
+          This audit-only fixture is excluded from the user-facing knowledge index.
         </Notice>
       ) : null}
       {indexIsPartial ? (
@@ -294,7 +369,7 @@ export function KnowledgePage() {
               <span>{selectedDefinition?.number} · ENTITY INDEX</span>
               <h2 id="knowledge-list-title">{selectedDefinition?.label}</h2>
             </div>
-            <button className="text-button" onClick={() => setSearchParams({})} type="button">
+            <button className="secondary-button" onClick={() => setSearchParams({})} type="button">
               CLOSE INDEX
             </button>
           </header>
@@ -315,7 +390,7 @@ export function KnowledgePage() {
               <div className="knowledge-entity-list">
                 {(observations.data?.items ?? []).map((observation) => (
                   <article key={observation.id}>
-                    <span>OBSERVATION · {observation.signalType}</span>
+                    <span>OBSERVATION · {humanizeOperationalSignal(observation.signalType)}</span>
                     <h3>{observation.summary}</h3>
                     <small>{new Date(observation.observedAt).toLocaleString()}</small>
                   </article>
@@ -351,6 +426,7 @@ export function KnowledgePage() {
                   >
                     <span>{displayKind(resource.kind)}</span>
                     <strong>{resource.name}</strong>
+                    <small>V{resource.version}</small>
                     <small>{resource.purpose}</small>
                   </button>
                 ))}
@@ -384,14 +460,14 @@ export function KnowledgePage() {
                         <dd>{touchingAgents.length}</dd>
                       </div>
                     </dl>
-                    <h4>Relationships in the loaded graph</h4>
+                    <h4>Version-pinned definition edges</h4>
                     {relatedResources.length > 0 ? (
-                      <ul>
-                        {relatedResources.map((resource) => (
-                          <li key={resource.id}>
-                            <span>{displayKind(resource.kind)}</span>
-                            <strong>{resource.name}</strong>
-                          </li>
+                      <ul className="knowledge-edge-list">
+                        {relatedResources.map((relationship) => (
+                          <DefinitionEdge
+                            key={`${relationship.predicate}:${relationship.source.id}:${relationship.target.id}`}
+                            relationship={relationship}
+                          />
                         ))}
                       </ul>
                     ) : (
@@ -441,16 +517,17 @@ export function KnowledgePage() {
         <section className="knowledge-orientation">
           <div>
             <span>PRIVATE KNOWLEDGE BOUNDARY</span>
-            <h2>The graph chassis is ready. Organization data is not here yet.</h2>
+            <h2>The definition graph is ready. Semantic organization data is not here yet.</h2>
             <p>
-              Transfer will seed people, governed systems, datasets, runbooks, incidents, and their
-              typed relationships. This public workstation exposes only synthetic, versioned facts.
+              Transfer will stage people, systems, datasets, runbooks, and incidents through
+              extraction and identity resolution before any typed relationship becomes canonical.
+              This public workstation exposes only synthetic, versioned definitions.
             </p>
           </div>
           {featureFlags.aimEnabled ? (
             <div>
               <span>SYNTHETIC PROGRAM VIEW</span>
-              <h2>AIM proves the same relationship model visually.</h2>
+              <h2>AIM demonstrates a separate synthetic capability map.</h2>
               <p>
                 Inspect the local capability manifest without live manufacturing data or external
                 requests.
@@ -463,7 +540,7 @@ export function KnowledgePage() {
             <div>
               <span>CAPABILITY VIEW DISABLED</span>
               <h2>AIM remains outside this build.</h2>
-              <p>Enable the local AIM build flag to include the synthetic capability vehicle.</p>
+              <p>Enable the local AIM build flag to include the synthetic capability map.</p>
             </div>
           )}
         </section>

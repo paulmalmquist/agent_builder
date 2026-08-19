@@ -6,6 +6,7 @@ import { AgentDetailDrawer } from '../features/library/AgentDetailDrawer';
 import { AgentDrawerContext, type AgentDrawerContextValue } from './agent-drawer-context';
 import { useAttention } from '../api/hooks';
 import { PlatformRail, type PlatformRailItem } from './PlatformRail';
+import { featureFlags } from '../config/feature-flags';
 
 const railStorageKey = 'paul-os:rail-collapsed:v1';
 const resumeStorageKey = 'paul-os:resume-route:v1';
@@ -108,12 +109,14 @@ export function PlatformShell() {
 
   const navigation: readonly PlatformRailItem[] = [
     {
+      group: 'daily',
       label: 'TODAY',
       number: '00',
       path: '/',
       active: location.pathname === '/',
     },
     {
+      group: 'daily',
       label: 'ATTENTION',
       number: '01',
       path: '/attention',
@@ -122,58 +125,86 @@ export function PlatformShell() {
       unavailable: attention.isError,
     },
     {
+      group: 'daily',
       label: 'KNOWLEDGE',
       number: '02',
       path: '/knowledge',
       active: location.pathname === '/knowledge',
     },
+    ...(featureFlags.aimEnabled
+      ? [
+          {
+            group: 'workspace' as const,
+            label: 'AIM',
+            number: '03',
+            path: '/aim',
+            active: location.pathname === '/aim',
+          },
+        ]
+      : []),
     {
+      group: 'workspace',
       label: 'BUILD',
-      number: '03',
+      number: '04',
       path: buildPath,
       active: location.pathname === '/build',
       badge: 0,
       unavailable: false,
     },
     {
+      group: 'workspace',
       label: 'CATALOG',
-      number: '04',
+      number: '05',
       path: '/catalog',
-      active: ['/catalog', '/registry', '/library', '/aim'].includes(location.pathname),
+      active: ['/catalog', '/registry', '/library'].includes(location.pathname),
       badge: 0,
       unavailable: false,
     },
     {
+      group: 'workspace',
       label: 'OPERATE',
-      number: '05',
+      number: '06',
       path: '/operate',
       active: location.pathname === '/operate' || location.pathname === '/runs',
       badge: 0,
       unavailable: false,
     },
     {
+      group: 'workspace',
       label: 'CONNECTIONS',
-      number: '06',
+      number: '07',
       path: '/connections',
       active: location.pathname === '/connections',
     },
     {
+      group: 'workspace',
       label: 'EVIDENCE',
-      number: '07',
+      number: '08',
       path: '/evidence',
       active: location.pathname === '/evidence' || location.pathname.startsWith('/certification/'),
       badge: 0,
       unavailable: false,
     },
     {
+      group: 'workspace',
       label: 'INCUBATOR',
-      number: '08',
+      number: '09',
       path: '/incubator',
       active: location.pathname === '/incubator',
       badge: 0,
       unavailable: false,
     },
     {
+      group: 'workspace',
+      label: 'ROADMAPS',
+      number: '10',
+      path: '/roadmaps',
+      active: location.pathname === '/roadmaps',
+      badge: 0,
+      unavailable: false,
+    },
+    {
+      group: 'settings',
       label: 'SETTINGS',
       number: '—',
       path: '/settings',

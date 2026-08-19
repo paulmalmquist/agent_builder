@@ -31,7 +31,7 @@ export const consoleActionCopy = {
   },
   rejectRun: {
     label: 'Reject request',
-    consequence: 'Cancels this run and records your reason.',
+    consequence: 'Cancels the matching pending runs and records your reason.',
     undo: 'Create a new request if the limits change.',
   },
   promoteRelease: {
@@ -97,8 +97,8 @@ export const consoleCriticalCopy = {
   home: {
     screen: 'home',
     introduction: [
-      'Today combines available run, schedule, review, and briefing records on one time axis.',
-      'Sources that are not connected remain explicit.',
+      'Check program health, see the build plan, and choose today’s work.',
+      'Select one vertical to scope the board without hiding governed decisions.',
     ],
     actions: [
       {
@@ -108,8 +108,25 @@ export const consoleCriticalCopy = {
       },
     ],
     body: [
-      'Meetings and project deadlines are not connected on this machine.',
-      'Paul OS draws no chart because Attention exposes no historical arrived-versus-cleared series.',
+      'Every metric says whether its value is live, synthetic, or awaiting transfer.',
+      'Awaiting transfer means this machine has no current measurement.',
+      'Synthetic values come from seeded examples, not production measurements.',
+      'Unavailable sources remain visible and never imply a nominal state.',
+      'Home previews decisions. Open Attention to approve or reject them.',
+    ],
+  },
+  aim: {
+    screen: 'aim-program-map',
+    introduction: [
+      'Choose a group to see the hardware it owns.',
+      'The Agent Integration Map shows manufacturing method and agent coverage from the validated local program.',
+    ],
+    actions: [],
+    body: [
+      'The map keeps hardware, ownership, manufacturing method, and agent coverage in one declared chain.',
+      'This synthetic seed contains no protected design data.',
+      'This manifest is not marked synthetic; handle its data under local policy.',
+      'Selecting hardware filters the modeled agents and evidence tied to that part.',
     ],
   },
   attention: {
@@ -137,11 +154,13 @@ export const consoleCriticalCopy = {
   runApproval: {
     screen: 'run-approval',
     introduction: [
-      'A run asks to work within exact limits.',
-      'Review its sources, limits, and budget before granting authority.',
+      'A named agent asks to work within exact limits.',
+      'Review what it can do, what approval changes, and what remains paused without approval.',
     ],
     actions: [consoleActionCopy.approveRun, consoleActionCopy.rejectRun],
-    body: ['The exact granted scopes and limits appear below.'],
+    body: [
+      'Identical pending requests share one decision; approval-required Plugin actions remain per-run.',
+    ],
   },
   promotion: {
     screen: 'promotion',
@@ -195,7 +214,7 @@ export const consoleCriticalCopy = {
     screen: 'flight-recorder',
     introduction: [
       'This timeline shows what the run did.',
-      'Review each phase, its duration, and its recorded cost.',
+      'Recorded duration and cost appear only when a phase emits that telemetry.',
     ],
     actions: [
       {
@@ -224,6 +243,7 @@ export const consoleCriticalCopy = {
 
 export const consoleCriticalCopyArtifacts: readonly ConsoleCopyArtifact[] = [
   consoleCriticalCopy.home,
+  consoleCriticalCopy.aim,
   consoleCriticalCopy.attention,
   consoleCriticalCopy.allQuiet,
   consoleCriticalCopy.runApproval,

@@ -46,7 +46,7 @@ async function fixture() {
   const suiteFamilyId = randomUUID();
   const principal: RequestPrincipal = {
     principalId: randomUUID(),
-    actorId: `human:reuse-${suffix}`,
+    actorId: `human:catalog-spec-${suffix}`,
     workspaceId,
     departmentId,
     authentication: 'local',

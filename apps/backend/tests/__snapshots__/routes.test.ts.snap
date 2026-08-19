@@ -997,6 +997,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               },
               "payload": {
                 "properties": {
+                  "approvalGroupKey": {
+                    "nullable": true,
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string",
+                  },
                   "candidateId": {
                     "format": "uuid",
                     "nullable": true,
@@ -1006,6 +1011,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "maxLength": 160,
                     "minLength": 1,
                     "nullable": true,
+                    "type": "string",
+                  },
+                  "decisionGroupKey": {
+                    "nullable": true,
+                    "pattern": "^[a-f0-9]{64}$",
                     "type": "string",
                   },
                   "detailPath": {
@@ -1030,6 +1040,12 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "format": "uuid",
                     "nullable": true,
                     "type": "string",
+                  },
+                  "requestCount": {
+                    "default": 1,
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "type": "integer",
                   },
                   "reviewFacts": {
                     "items": {
@@ -1077,6 +1093,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "maxLength": 120,
                     "minLength": 1,
                     "type": "string",
+                  },
+                  "subject": {
+                    "additionalProperties": false,
+                    "nullable": true,
+                    "properties": {
+                      "kind": {
+                        "maxLength": 80,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "name": {
+                        "maxLength": 160,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "version": {
+                        "maxLength": 80,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "name",
+                      "kind",
+                      "version",
+                    ],
+                    "type": "object",
                   },
                 },
                 "required": [
@@ -1281,6 +1324,119 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             ],
             "type": "object",
           },
+          "membership": {
+            "nullable": true,
+            "properties": {
+              "exactCount": {
+                "exclusiveMinimum": true,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "records": {
+                "items": {
+                  "properties": {
+                    "evidence": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "maxLength": 80,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "label",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "maxItems": 8,
+                      "minItems": 1,
+                      "type": "array",
+                    },
+                    "label": {
+                      "maxLength": 120,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "occurredAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "subject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
+                    },
+                    "technicalReferences": {
+                      "items": {
+                        "properties": {
+                          "label": {
+                            "maxLength": 80,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "value": {
+                            "format": "uuid",
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "label",
+                          "value",
+                        ],
+                        "type": "object",
+                      },
+                      "maxItems": 4,
+                      "minItems": 1,
+                      "type": "array",
+                    },
+                  },
+                  "required": [
+                    "label",
+                    "subject",
+                    "occurredAt",
+                    "evidence",
+                    "technicalReferences",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
+            },
+            "required": [
+              "exactCount",
+              "records",
+            ],
+            "type": "object",
+          },
           "timeline": {
             "items": {
               "properties": {
@@ -1408,6 +1564,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 },
                 "payload": {
                   "properties": {
+                    "approvalGroupKey": {
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string",
+                    },
                     "candidateId": {
                       "format": "uuid",
                       "nullable": true,
@@ -1417,6 +1578,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "maxLength": 160,
                       "minLength": 1,
                       "nullable": true,
+                      "type": "string",
+                    },
+                    "decisionGroupKey": {
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$",
                       "type": "string",
                     },
                     "detailPath": {
@@ -1441,6 +1607,12 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "format": "uuid",
                       "nullable": true,
                       "type": "string",
+                    },
+                    "requestCount": {
+                      "default": 1,
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "type": "integer",
                     },
                     "reviewFacts": {
                       "items": {
@@ -1488,6 +1660,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "maxLength": 120,
                       "minLength": 1,
                       "type": "string",
+                    },
+                    "subject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
                     },
                   },
                   "required": [
@@ -1765,6 +1964,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 },
                 "payload": {
                   "properties": {
+                    "approvalGroupKey": {
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string",
+                    },
                     "candidateId": {
                       "format": "uuid",
                       "nullable": true,
@@ -1774,6 +1978,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "maxLength": 160,
                       "minLength": 1,
                       "nullable": true,
+                      "type": "string",
+                    },
+                    "decisionGroupKey": {
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$",
                       "type": "string",
                     },
                     "detailPath": {
@@ -1798,6 +2007,12 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "format": "uuid",
                       "nullable": true,
                       "type": "string",
+                    },
+                    "requestCount": {
+                      "default": 1,
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "type": "integer",
                     },
                     "reviewFacts": {
                       "items": {
@@ -1845,6 +2060,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "maxLength": 120,
                       "minLength": 1,
                       "type": "string",
+                    },
+                    "subject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
                     },
                   },
                   "required": [
@@ -2132,6 +2374,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "format": "uuid",
             "type": "string",
           },
+          "entrySubject": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "kind": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string",
+              },
+              "name": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string",
+              },
+              "version": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+              "kind",
+              "version",
+            ],
+            "type": "object",
+          },
           "id": {
             "format": "uuid",
             "type": "string",
@@ -2387,6 +2656,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
           "entryResourceVersionId": {
             "format": "uuid",
             "type": "string",
+          },
+          "entrySubject": {
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "kind": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string",
+              },
+              "name": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string",
+              },
+              "version": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+              "kind",
+              "version",
+            ],
+            "type": "object",
           },
           "id": {
             "format": "uuid",
@@ -4466,6 +4762,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 "format": "uuid",
                 "type": "string",
               },
+              "entrySubject": {
+                "additionalProperties": false,
+                "nullable": true,
+                "properties": {
+                  "kind": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "name": {
+                    "maxLength": 160,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "version": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "name",
+                  "kind",
+                  "version",
+                ],
+                "type": "object",
+              },
               "error": {
                 "additionalProperties": true,
                 "type": "object",
@@ -4492,6 +4815,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                   false,
                 ],
                 "type": "boolean",
+              },
+              "maxAttempts": {
+                "exclusiveMinimum": true,
+                "minimum": 0,
+                "type": "integer",
               },
               "maxEstimatedCostUsd": {
                 "minimum": 0,
@@ -4658,6 +4986,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 "default": false,
                 "type": "boolean",
               },
+              "retryBackoff": {
+                "enum": [
+                  "fixed",
+                  "exponential",
+                ],
+                "type": "string",
+              },
               "startedAt": {
                 "format": "date-time",
                 "nullable": true,
@@ -4685,6 +5020,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               "id",
               "releaseId",
               "entryResourceVersionId",
+              "entrySubject",
               "legacyEntrypointUnresolved",
               "releaseDigest",
               "contextDigest",
@@ -4711,6 +5047,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               "progress",
               "message",
               "attempts",
+              "maxAttempts",
+              "retryBackoff",
               "error",
               "requestedBy",
               "startedAt",
@@ -4811,6 +5149,9 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               "entryResourceVersionId": {
                 "nullable": true,
               },
+              "entrySubject": {
+                "nullable": true,
+              },
               "error": {
                 "additionalProperties": true,
                 "type": "object",
@@ -4837,6 +5178,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                   true,
                 ],
                 "type": "boolean",
+              },
+              "maxAttempts": {
+                "exclusiveMinimum": true,
+                "minimum": 0,
+                "type": "integer",
               },
               "maxEstimatedCostUsd": {
                 "minimum": 0,
@@ -5003,6 +5349,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 "default": false,
                 "type": "boolean",
               },
+              "retryBackoff": {
+                "enum": [
+                  "fixed",
+                  "exponential",
+                ],
+                "type": "string",
+              },
               "startedAt": {
                 "format": "date-time",
                 "nullable": true,
@@ -5030,6 +5383,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               "id",
               "releaseId",
               "entryResourceVersionId",
+              "entrySubject",
               "legacyEntrypointUnresolved",
               "releaseDigest",
               "contextDigest",
@@ -5056,6 +5410,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               "progress",
               "message",
               "attempts",
+              "maxAttempts",
+              "retryBackoff",
               "error",
               "requestedBy",
               "startedAt",
@@ -18606,6 +18962,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           },
                           "payload": {
                             "properties": {
+                              "approvalGroupKey": {
+                                "nullable": true,
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
                               "candidateId": {
                                 "format": "uuid",
                                 "nullable": true,
@@ -18615,6 +18976,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "maxLength": 160,
                                 "minLength": 1,
                                 "nullable": true,
+                                "type": "string",
+                              },
+                              "decisionGroupKey": {
+                                "nullable": true,
+                                "pattern": "^[a-f0-9]{64}$",
                                 "type": "string",
                               },
                               "detailPath": {
@@ -18639,6 +19005,12 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "format": "uuid",
                                 "nullable": true,
                                 "type": "string",
+                              },
+                              "requestCount": {
+                                "default": 1,
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
                               },
                               "reviewFacts": {
                                 "items": {
@@ -18686,6 +19058,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "maxLength": 120,
                                 "minLength": 1,
                                 "type": "string",
+                              },
+                              "subject": {
+                                "additionalProperties": false,
+                                "nullable": true,
+                                "properties": {
+                                  "kind": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "name": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "version": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "version",
+                                ],
+                                "type": "object",
                               },
                             },
                             "required": [
@@ -18963,6 +19362,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           },
                           "payload": {
                             "properties": {
+                              "approvalGroupKey": {
+                                "nullable": true,
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
                               "candidateId": {
                                 "format": "uuid",
                                 "nullable": true,
@@ -18972,6 +19376,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "maxLength": 160,
                                 "minLength": 1,
                                 "nullable": true,
+                                "type": "string",
+                              },
+                              "decisionGroupKey": {
+                                "nullable": true,
+                                "pattern": "^[a-f0-9]{64}$",
                                 "type": "string",
                               },
                               "detailPath": {
@@ -18996,6 +19405,12 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "format": "uuid",
                                 "nullable": true,
                                 "type": "string",
+                              },
+                              "requestCount": {
+                                "default": 1,
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
                               },
                               "reviewFacts": {
                                 "items": {
@@ -19043,6 +19458,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "maxLength": 120,
                                 "minLength": 1,
                                 "type": "string",
+                              },
+                              "subject": {
+                                "additionalProperties": false,
+                                "nullable": true,
+                                "properties": {
+                                  "kind": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "name": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "version": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "version",
+                                ],
+                                "type": "object",
                               },
                             },
                             "required": [
@@ -19410,6 +19852,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         },
                         "payload": {
                           "properties": {
+                            "approvalGroupKey": {
+                              "nullable": true,
+                              "pattern": "^[a-f0-9]{64}$",
+                              "type": "string",
+                            },
                             "candidateId": {
                               "format": "uuid",
                               "nullable": true,
@@ -19419,6 +19866,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "maxLength": 160,
                               "minLength": 1,
                               "nullable": true,
+                              "type": "string",
+                            },
+                            "decisionGroupKey": {
+                              "nullable": true,
+                              "pattern": "^[a-f0-9]{64}$",
                               "type": "string",
                             },
                             "detailPath": {
@@ -19443,6 +19895,12 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "format": "uuid",
                               "nullable": true,
                               "type": "string",
+                            },
+                            "requestCount": {
+                              "default": 1,
+                              "exclusiveMinimum": true,
+                              "minimum": 0,
+                              "type": "integer",
                             },
                             "reviewFacts": {
                               "items": {
@@ -19490,6 +19948,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "maxLength": 120,
                               "minLength": 1,
                               "type": "string",
+                            },
+                            "subject": {
+                              "additionalProperties": false,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "maxLength": 80,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "name": {
+                                  "maxLength": 160,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "version": {
+                                  "maxLength": 80,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                              },
+                              "required": [
+                                "name",
+                                "kind",
+                                "version",
+                              ],
+                              "type": "object",
                             },
                           },
                           "required": [
@@ -19691,6 +20176,119 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "kind",
                         "shelf",
+                      ],
+                      "type": "object",
+                    },
+                    "membership": {
+                      "nullable": true,
+                      "properties": {
+                        "exactCount": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "records": {
+                          "items": {
+                            "properties": {
+                              "evidence": {
+                                "items": {
+                                  "properties": {
+                                    "label": {
+                                      "maxLength": 80,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "value": {
+                                      "maxLength": 500,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "label",
+                                    "value",
+                                  ],
+                                  "type": "object",
+                                },
+                                "maxItems": 8,
+                                "minItems": 1,
+                                "type": "array",
+                              },
+                              "label": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "occurredAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                              "subject": {
+                                "additionalProperties": false,
+                                "nullable": true,
+                                "properties": {
+                                  "kind": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "name": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "version": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "version",
+                                ],
+                                "type": "object",
+                              },
+                              "technicalReferences": {
+                                "items": {
+                                  "properties": {
+                                    "label": {
+                                      "maxLength": 80,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "value": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "label",
+                                    "value",
+                                  ],
+                                  "type": "object",
+                                },
+                                "maxItems": 4,
+                                "minItems": 1,
+                                "type": "array",
+                              },
+                            },
+                            "required": [
+                              "label",
+                              "subject",
+                              "occurredAt",
+                              "evidence",
+                              "technicalReferences",
+                            ],
+                            "type": "object",
+                          },
+                          "type": "array",
+                        },
+                      },
+                      "required": [
+                        "exactCount",
+                        "records",
                       ],
                       "type": "object",
                     },
@@ -20064,6 +20662,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "entryResourceVersionId": {
                             "format": "uuid",
                             "type": "string",
+                          },
+                          "entrySubject": {
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "kind": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "name": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "version": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "name",
+                              "kind",
+                              "version",
+                            ],
+                            "type": "object",
                           },
                           "id": {
                             "format": "uuid",
@@ -20448,6 +21073,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "format": "uuid",
                       "type": "string",
                     },
+                    "entrySubject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
+                    },
                     "id": {
                       "format": "uuid",
                       "type": "string",
@@ -20806,6 +21458,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "entryResourceVersionId": {
                       "format": "uuid",
                       "type": "string",
+                    },
+                    "entrySubject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
                     },
                     "id": {
                       "format": "uuid",
@@ -21194,6 +21873,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "format": "uuid",
                             "type": "string",
                           },
+                          "entrySubject": {
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "kind": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "name": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "version": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "name",
+                              "kind",
+                              "version",
+                            ],
+                            "type": "object",
+                          },
                           "id": {
                             "format": "uuid",
                             "type": "string",
@@ -21550,6 +22256,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "entryResourceVersionId": {
                       "format": "uuid",
                       "type": "string",
+                    },
+                    "entrySubject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
                     },
                     "id": {
                       "format": "uuid",
@@ -21965,6 +22698,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "format": "uuid",
                       "type": "string",
                     },
+                    "entrySubject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
+                    },
                     "id": {
                       "format": "uuid",
                       "type": "string",
@@ -22243,6 +23003,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "entryResourceVersionId": {
                       "format": "uuid",
                       "type": "string",
+                    },
+                    "entrySubject": {
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "name": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "version": {
+                          "maxLength": 80,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "name",
+                        "kind",
+                        "version",
+                      ],
+                      "type": "object",
                     },
                     "id": {
                       "format": "uuid",
@@ -32468,6 +33255,2288 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
         },
       },
     },
+    "/v1/execution-approval-groups/{groupKey}/approve": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "groupKey",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "entryResourceVersionId": {
+                    "format": "uuid",
+                    "type": "string",
+                  },
+                  "inputConstraints": {
+                    "additionalProperties": true,
+                    "type": "object",
+                  },
+                  "maxEstimatedCostPerRunUsd": {
+                    "maximum": 100000,
+                    "minimum": 0,
+                    "type": "number",
+                  },
+                  "maxRuns": {
+                    "maximum": 1000000,
+                    "minimum": 1,
+                    "type": "integer",
+                  },
+                  "pluginScopes": {
+                    "default": [],
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "installationId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "limits": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "maxEstimatedCostUsd": {
+                              "maximum": 100000,
+                              "minimum": 0,
+                              "type": "number",
+                            },
+                            "maxInvocationsPerRun": {
+                              "maximum": 10000,
+                              "minimum": 1,
+                              "type": "integer",
+                            },
+                            "maxRecords": {
+                              "maximum": 1000000,
+                              "minimum": 1,
+                              "type": "integer",
+                            },
+                            "maxResponseBytes": {
+                              "maximum": 50000000,
+                              "minimum": 1,
+                              "type": "integer",
+                            },
+                            "maximumBytesBilled": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer",
+                            },
+                            "timeoutMs": {
+                              "maximum": 300000,
+                              "minimum": 100,
+                              "type": "integer",
+                            },
+                          },
+                          "required": [
+                            "timeoutMs",
+                            "maxResponseBytes",
+                            "maxInvocationsPerRun",
+                          ],
+                          "type": "object",
+                        },
+                        "pluginVersionId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "tool": {
+                          "maxLength": 160,
+                          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "installationId",
+                        "pluginVersionId",
+                        "tool",
+                        "limits",
+                      ],
+                      "type": "object",
+                    },
+                    "maxItems": 100,
+                    "type": "array",
+                  },
+                  "projectId": {
+                    "maxLength": 160,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": "string",
+                  },
+                  "rationale": {
+                    "maxLength": 2000,
+                    "minLength": 10,
+                    "type": "string",
+                  },
+                  "toolScopes": {
+                    "default": [],
+                    "items": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "maxItems": 100,
+                    "type": "array",
+                  },
+                  "totalCostBudgetUsd": {
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "type": "number",
+                  },
+                  "validUntil": {
+                    "format": "date-time",
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "entryResourceVersionId",
+                  "validUntil",
+                  "maxRuns",
+                  "maxEstimatedCostPerRunUsd",
+                  "totalCostBudgetUsd",
+                  "rationale",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "grant": {
+                      "properties": {
+                        "actorId": {
+                          "type": "string",
+                        },
+                        "contextDigest": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string",
+                        },
+                        "createdAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "entryResourceVersionId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "entrySubject": {
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "name": {
+                              "maxLength": 160,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "version": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "kind",
+                            "version",
+                          ],
+                          "type": "object",
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "inputConstraints": {
+                          "additionalProperties": true,
+                          "type": "object",
+                        },
+                        "maxEstimatedCostPerRunUsd": {
+                          "minimum": 0,
+                          "type": "number",
+                        },
+                        "maxRuns": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "pluginScopes": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "effect": {
+                                "enum": [
+                                  "read",
+                                  "write",
+                                  "destructive",
+                                ],
+                                "type": "string",
+                              },
+                              "installationId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "limits": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "maxEstimatedCostUsd": {
+                                    "maximum": 100000,
+                                    "minimum": 0,
+                                    "type": "number",
+                                  },
+                                  "maxInvocationsPerRun": {
+                                    "maximum": 10000,
+                                    "minimum": 1,
+                                    "type": "integer",
+                                  },
+                                  "maxRecords": {
+                                    "maximum": 1000000,
+                                    "minimum": 1,
+                                    "type": "integer",
+                                  },
+                                  "maxResponseBytes": {
+                                    "maximum": 50000000,
+                                    "minimum": 1,
+                                    "type": "integer",
+                                  },
+                                  "maximumBytesBilled": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer",
+                                  },
+                                  "timeoutMs": {
+                                    "maximum": 300000,
+                                    "minimum": 100,
+                                    "type": "integer",
+                                  },
+                                },
+                                "required": [
+                                  "timeoutMs",
+                                  "maxResponseBytes",
+                                  "maxInvocationsPerRun",
+                                ],
+                                "type": "object",
+                              },
+                              "pluginDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "pluginVersionId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "scopeDescription": {
+                                "maxLength": 500,
+                                "minLength": 10,
+                                "type": "string",
+                              },
+                              "tool": {
+                                "maxLength": 160,
+                                "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "installationId",
+                              "pluginVersionId",
+                              "tool",
+                              "limits",
+                              "pluginDigest",
+                              "effect",
+                              "scopeDescription",
+                            ],
+                            "type": "object",
+                          },
+                          "type": "array",
+                        },
+                        "projectId": {
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "rationale": {
+                          "type": "string",
+                        },
+                        "releaseDigest": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string",
+                        },
+                        "releaseId": {
+                          "format": "uuid",
+                          "type": "string",
+                        },
+                        "reservedCostUsd": {
+                          "minimum": 0,
+                          "type": "number",
+                        },
+                        "revokedAt": {
+                          "format": "date-time",
+                          "nullable": true,
+                          "type": "string",
+                        },
+                        "spentCostUsd": {
+                          "minimum": 0,
+                          "type": "number",
+                        },
+                        "state": {
+                          "enum": [
+                            "active",
+                            "revoked",
+                            "exhausted",
+                            "expired",
+                          ],
+                          "type": "string",
+                        },
+                        "toolScopes": {
+                          "items": {
+                            "type": "string",
+                          },
+                          "type": "array",
+                        },
+                        "totalCostBudgetUsd": {
+                          "minimum": 0,
+                          "type": "number",
+                        },
+                        "usedRuns": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "validFrom": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "validUntil": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "id",
+                        "releaseId",
+                        "entryResourceVersionId",
+                        "releaseDigest",
+                        "contextDigest",
+                        "projectId",
+                        "inputConstraints",
+                        "toolScopes",
+                        "pluginScopes",
+                        "validFrom",
+                        "validUntil",
+                        "maxRuns",
+                        "usedRuns",
+                        "maxEstimatedCostPerRunUsd",
+                        "totalCostBudgetUsd",
+                        "spentCostUsd",
+                        "reservedCostUsd",
+                        "state",
+                        "actorId",
+                        "rationale",
+                        "revokedAt",
+                        "createdAt",
+                      ],
+                      "type": "object",
+                    },
+                    "groupKey": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string",
+                    },
+                    "runs": {
+                      "items": {
+                        "oneOf": [
+                          {
+                            "properties": {
+                              "actualCostUsd": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "number",
+                              },
+                              "approvalReasons": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "attempts": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "authorityGrantId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "contextClassification": {
+                                "enum": [
+                                  "public",
+                                  "internal",
+                                  "private",
+                                  "restricted",
+                                ],
+                                "type": "string",
+                              },
+                              "contextDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "contextEstimatedTokens": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "contextProvenance": {
+                                "items": {
+                                  "properties": {
+                                    "classification": {
+                                      "enum": [
+                                        "public",
+                                        "internal",
+                                        "private",
+                                        "restricted",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "source": {
+                                      "enum": [
+                                        "core",
+                                        "private_profile",
+                                        "business_domain",
+                                        "project",
+                                        "agent",
+                                        "request",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "tokenContribution": {
+                                      "minimum": 0,
+                                      "type": "integer",
+                                    },
+                                  },
+                                  "required": [
+                                    "source",
+                                    "classification",
+                                    "tokenContribution",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                              "developmentDraft": {
+                                "type": "boolean",
+                              },
+                              "digestSnapshotId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "entryResourceVersionId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "entrySubject": {
+                                "additionalProperties": false,
+                                "nullable": true,
+                                "properties": {
+                                  "kind": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "name": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "version": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "version",
+                                ],
+                                "type": "object",
+                              },
+                              "error": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "estimatedUpperCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "finishedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "input": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "legacyEntrypointUnresolved": {
+                                "enum": [
+                                  false,
+                                ],
+                                "type": "boolean",
+                              },
+                              "maxAttempts": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxEstimatedCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "maxInputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxOutputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "message": {
+                                "type": "string",
+                              },
+                              "model": {
+                                "type": "string",
+                              },
+                              "pricingVersion": {
+                                "type": "string",
+                              },
+                              "progress": {
+                                "maximum": 100,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "projectId": {
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "providerKind": {
+                                "enum": [
+                                  "deterministic",
+                                  "anthropic",
+                                  "gateway",
+                                ],
+                                "type": "string",
+                              },
+                              "providerVersion": {
+                                "type": "string",
+                              },
+                              "releaseDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "releaseId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "requestedBy": {
+                                "type": "string",
+                              },
+                              "requiredPluginScopes": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "approvalRequired": {
+                                      "type": "boolean",
+                                    },
+                                    "effect": {
+                                      "enum": [
+                                        "read",
+                                        "write",
+                                        "destructive",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "executionPlacement": {
+                                      "enum": [
+                                        "control_plane",
+                                        "workstation",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "installationId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "limits": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "maxEstimatedCostUsd": {
+                                          "maximum": 100000,
+                                          "minimum": 0,
+                                          "type": "number",
+                                        },
+                                        "maxInvocationsPerRun": {
+                                          "maximum": 10000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxRecords": {
+                                          "maximum": 1000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxResponseBytes": {
+                                          "maximum": 50000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maximumBytesBilled": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer",
+                                        },
+                                        "timeoutMs": {
+                                          "maximum": 300000,
+                                          "minimum": 100,
+                                          "type": "integer",
+                                        },
+                                      },
+                                      "required": [
+                                        "timeoutMs",
+                                        "maxResponseBytes",
+                                        "maxInvocationsPerRun",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    "pluginDigest": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string",
+                                    },
+                                    "pluginVersionId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "scopeDescription": {
+                                      "maxLength": 500,
+                                      "minLength": 10,
+                                      "type": "string",
+                                    },
+                                    "tool": {
+                                      "maxLength": 160,
+                                      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "installationId",
+                                    "pluginVersionId",
+                                    "tool",
+                                    "limits",
+                                    "pluginDigest",
+                                    "effect",
+                                    "scopeDescription",
+                                    "executionPlacement",
+                                    "approvalRequired",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "requiredToolScopes": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "requiresPluginApproval": {
+                                "default": false,
+                                "type": "boolean",
+                              },
+                              "retryBackoff": {
+                                "enum": [
+                                  "fixed",
+                                  "exponential",
+                                ],
+                                "type": "string",
+                              },
+                              "startedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "state": {
+                                "enum": [
+                                  "awaiting_approval",
+                                  "queued",
+                                  "running",
+                                  "succeeded",
+                                  "failed",
+                                  "cancelled",
+                                  "paused_budget",
+                                  "paused_plugin",
+                                ],
+                                "type": "string",
+                              },
+                              "updatedAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "id",
+                              "releaseId",
+                              "entryResourceVersionId",
+                              "entrySubject",
+                              "legacyEntrypointUnresolved",
+                              "releaseDigest",
+                              "contextDigest",
+                              "contextProvenance",
+                              "contextClassification",
+                              "contextEstimatedTokens",
+                              "projectId",
+                              "requiredToolScopes",
+                              "requiredPluginScopes",
+                              "authorityGrantId",
+                              "state",
+                              "input",
+                              "providerKind",
+                              "developmentDraft",
+                              "providerVersion",
+                              "model",
+                              "maxInputTokens",
+                              "maxOutputTokens",
+                              "maxEstimatedCostUsd",
+                              "estimatedUpperCostUsd",
+                              "actualCostUsd",
+                              "pricingVersion",
+                              "approvalReasons",
+                              "progress",
+                              "message",
+                              "attempts",
+                              "maxAttempts",
+                              "retryBackoff",
+                              "error",
+                              "requestedBy",
+                              "startedAt",
+                              "finishedAt",
+                              "createdAt",
+                              "updatedAt",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "actualCostUsd": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "number",
+                              },
+                              "approvalReasons": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "attempts": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "authorityGrantId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "contextClassification": {
+                                "enum": [
+                                  "public",
+                                  "internal",
+                                  "private",
+                                  "restricted",
+                                ],
+                                "type": "string",
+                              },
+                              "contextDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "contextEstimatedTokens": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "contextProvenance": {
+                                "items": {
+                                  "properties": {
+                                    "classification": {
+                                      "enum": [
+                                        "public",
+                                        "internal",
+                                        "private",
+                                        "restricted",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "source": {
+                                      "enum": [
+                                        "core",
+                                        "private_profile",
+                                        "business_domain",
+                                        "project",
+                                        "agent",
+                                        "request",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "tokenContribution": {
+                                      "minimum": 0,
+                                      "type": "integer",
+                                    },
+                                  },
+                                  "required": [
+                                    "source",
+                                    "classification",
+                                    "tokenContribution",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                              "developmentDraft": {
+                                "type": "boolean",
+                              },
+                              "digestSnapshotId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "entryResourceVersionId": {
+                                "nullable": true,
+                              },
+                              "entrySubject": {
+                                "nullable": true,
+                              },
+                              "error": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "estimatedUpperCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "finishedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "input": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "legacyEntrypointUnresolved": {
+                                "enum": [
+                                  true,
+                                ],
+                                "type": "boolean",
+                              },
+                              "maxAttempts": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxEstimatedCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "maxInputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxOutputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "message": {
+                                "type": "string",
+                              },
+                              "model": {
+                                "type": "string",
+                              },
+                              "pricingVersion": {
+                                "type": "string",
+                              },
+                              "progress": {
+                                "maximum": 100,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "projectId": {
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "providerKind": {
+                                "enum": [
+                                  "deterministic",
+                                  "anthropic",
+                                  "gateway",
+                                ],
+                                "type": "string",
+                              },
+                              "providerVersion": {
+                                "type": "string",
+                              },
+                              "releaseDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "releaseId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "requestedBy": {
+                                "type": "string",
+                              },
+                              "requiredPluginScopes": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "approvalRequired": {
+                                      "type": "boolean",
+                                    },
+                                    "effect": {
+                                      "enum": [
+                                        "read",
+                                        "write",
+                                        "destructive",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "executionPlacement": {
+                                      "enum": [
+                                        "control_plane",
+                                        "workstation",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "installationId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "limits": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "maxEstimatedCostUsd": {
+                                          "maximum": 100000,
+                                          "minimum": 0,
+                                          "type": "number",
+                                        },
+                                        "maxInvocationsPerRun": {
+                                          "maximum": 10000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxRecords": {
+                                          "maximum": 1000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxResponseBytes": {
+                                          "maximum": 50000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maximumBytesBilled": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer",
+                                        },
+                                        "timeoutMs": {
+                                          "maximum": 300000,
+                                          "minimum": 100,
+                                          "type": "integer",
+                                        },
+                                      },
+                                      "required": [
+                                        "timeoutMs",
+                                        "maxResponseBytes",
+                                        "maxInvocationsPerRun",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    "pluginDigest": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string",
+                                    },
+                                    "pluginVersionId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "scopeDescription": {
+                                      "maxLength": 500,
+                                      "minLength": 10,
+                                      "type": "string",
+                                    },
+                                    "tool": {
+                                      "maxLength": 160,
+                                      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "installationId",
+                                    "pluginVersionId",
+                                    "tool",
+                                    "limits",
+                                    "pluginDigest",
+                                    "effect",
+                                    "scopeDescription",
+                                    "executionPlacement",
+                                    "approvalRequired",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "requiredToolScopes": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "requiresPluginApproval": {
+                                "default": false,
+                                "type": "boolean",
+                              },
+                              "retryBackoff": {
+                                "enum": [
+                                  "fixed",
+                                  "exponential",
+                                ],
+                                "type": "string",
+                              },
+                              "startedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "state": {
+                                "enum": [
+                                  "awaiting_approval",
+                                  "queued",
+                                  "running",
+                                  "succeeded",
+                                  "failed",
+                                  "cancelled",
+                                  "paused_budget",
+                                  "paused_plugin",
+                                ],
+                                "type": "string",
+                              },
+                              "updatedAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "id",
+                              "releaseId",
+                              "entryResourceVersionId",
+                              "entrySubject",
+                              "legacyEntrypointUnresolved",
+                              "releaseDigest",
+                              "contextDigest",
+                              "contextProvenance",
+                              "contextClassification",
+                              "contextEstimatedTokens",
+                              "projectId",
+                              "requiredToolScopes",
+                              "requiredPluginScopes",
+                              "authorityGrantId",
+                              "state",
+                              "input",
+                              "providerKind",
+                              "developmentDraft",
+                              "providerVersion",
+                              "model",
+                              "maxInputTokens",
+                              "maxOutputTokens",
+                              "maxEstimatedCostUsd",
+                              "estimatedUpperCostUsd",
+                              "actualCostUsd",
+                              "pricingVersion",
+                              "approvalReasons",
+                              "progress",
+                              "message",
+                              "attempts",
+                              "maxAttempts",
+                              "retryBackoff",
+                              "error",
+                              "requestedBy",
+                              "startedAt",
+                              "finishedAt",
+                              "createdAt",
+                              "updatedAt",
+                            ],
+                            "type": "object",
+                          },
+                        ],
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                    },
+                  },
+                  "required": [
+                    "groupKey",
+                    "grant",
+                    "runs",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "One bounded grant atomically approved every reviewed matching run",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
+    "/v1/execution-approval-groups/{groupKey}/reject": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "groupKey",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "rationale": {
+                    "maxLength": 2000,
+                    "minLength": 10,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "rationale",
+                ],
+                "type": "object",
+              },
+            },
+          },
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "groupKey": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string",
+                    },
+                    "runs": {
+                      "items": {
+                        "oneOf": [
+                          {
+                            "properties": {
+                              "actualCostUsd": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "number",
+                              },
+                              "approvalReasons": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "attempts": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "authorityGrantId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "contextClassification": {
+                                "enum": [
+                                  "public",
+                                  "internal",
+                                  "private",
+                                  "restricted",
+                                ],
+                                "type": "string",
+                              },
+                              "contextDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "contextEstimatedTokens": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "contextProvenance": {
+                                "items": {
+                                  "properties": {
+                                    "classification": {
+                                      "enum": [
+                                        "public",
+                                        "internal",
+                                        "private",
+                                        "restricted",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "source": {
+                                      "enum": [
+                                        "core",
+                                        "private_profile",
+                                        "business_domain",
+                                        "project",
+                                        "agent",
+                                        "request",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "tokenContribution": {
+                                      "minimum": 0,
+                                      "type": "integer",
+                                    },
+                                  },
+                                  "required": [
+                                    "source",
+                                    "classification",
+                                    "tokenContribution",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                              "developmentDraft": {
+                                "type": "boolean",
+                              },
+                              "digestSnapshotId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "entryResourceVersionId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "entrySubject": {
+                                "additionalProperties": false,
+                                "nullable": true,
+                                "properties": {
+                                  "kind": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "name": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "version": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "version",
+                                ],
+                                "type": "object",
+                              },
+                              "error": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "estimatedUpperCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "finishedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "input": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "legacyEntrypointUnresolved": {
+                                "enum": [
+                                  false,
+                                ],
+                                "type": "boolean",
+                              },
+                              "maxAttempts": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxEstimatedCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "maxInputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxOutputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "message": {
+                                "type": "string",
+                              },
+                              "model": {
+                                "type": "string",
+                              },
+                              "pricingVersion": {
+                                "type": "string",
+                              },
+                              "progress": {
+                                "maximum": 100,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "projectId": {
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "providerKind": {
+                                "enum": [
+                                  "deterministic",
+                                  "anthropic",
+                                  "gateway",
+                                ],
+                                "type": "string",
+                              },
+                              "providerVersion": {
+                                "type": "string",
+                              },
+                              "releaseDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "releaseId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "requestedBy": {
+                                "type": "string",
+                              },
+                              "requiredPluginScopes": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "approvalRequired": {
+                                      "type": "boolean",
+                                    },
+                                    "effect": {
+                                      "enum": [
+                                        "read",
+                                        "write",
+                                        "destructive",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "executionPlacement": {
+                                      "enum": [
+                                        "control_plane",
+                                        "workstation",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "installationId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "limits": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "maxEstimatedCostUsd": {
+                                          "maximum": 100000,
+                                          "minimum": 0,
+                                          "type": "number",
+                                        },
+                                        "maxInvocationsPerRun": {
+                                          "maximum": 10000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxRecords": {
+                                          "maximum": 1000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxResponseBytes": {
+                                          "maximum": 50000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maximumBytesBilled": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer",
+                                        },
+                                        "timeoutMs": {
+                                          "maximum": 300000,
+                                          "minimum": 100,
+                                          "type": "integer",
+                                        },
+                                      },
+                                      "required": [
+                                        "timeoutMs",
+                                        "maxResponseBytes",
+                                        "maxInvocationsPerRun",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    "pluginDigest": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string",
+                                    },
+                                    "pluginVersionId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "scopeDescription": {
+                                      "maxLength": 500,
+                                      "minLength": 10,
+                                      "type": "string",
+                                    },
+                                    "tool": {
+                                      "maxLength": 160,
+                                      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "installationId",
+                                    "pluginVersionId",
+                                    "tool",
+                                    "limits",
+                                    "pluginDigest",
+                                    "effect",
+                                    "scopeDescription",
+                                    "executionPlacement",
+                                    "approvalRequired",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "requiredToolScopes": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "requiresPluginApproval": {
+                                "default": false,
+                                "type": "boolean",
+                              },
+                              "retryBackoff": {
+                                "enum": [
+                                  "fixed",
+                                  "exponential",
+                                ],
+                                "type": "string",
+                              },
+                              "startedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "state": {
+                                "enum": [
+                                  "awaiting_approval",
+                                  "queued",
+                                  "running",
+                                  "succeeded",
+                                  "failed",
+                                  "cancelled",
+                                  "paused_budget",
+                                  "paused_plugin",
+                                ],
+                                "type": "string",
+                              },
+                              "updatedAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "id",
+                              "releaseId",
+                              "entryResourceVersionId",
+                              "entrySubject",
+                              "legacyEntrypointUnresolved",
+                              "releaseDigest",
+                              "contextDigest",
+                              "contextProvenance",
+                              "contextClassification",
+                              "contextEstimatedTokens",
+                              "projectId",
+                              "requiredToolScopes",
+                              "requiredPluginScopes",
+                              "authorityGrantId",
+                              "state",
+                              "input",
+                              "providerKind",
+                              "developmentDraft",
+                              "providerVersion",
+                              "model",
+                              "maxInputTokens",
+                              "maxOutputTokens",
+                              "maxEstimatedCostUsd",
+                              "estimatedUpperCostUsd",
+                              "actualCostUsd",
+                              "pricingVersion",
+                              "approvalReasons",
+                              "progress",
+                              "message",
+                              "attempts",
+                              "maxAttempts",
+                              "retryBackoff",
+                              "error",
+                              "requestedBy",
+                              "startedAt",
+                              "finishedAt",
+                              "createdAt",
+                              "updatedAt",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "properties": {
+                              "actualCostUsd": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "number",
+                              },
+                              "approvalReasons": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "attempts": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "authorityGrantId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "contextClassification": {
+                                "enum": [
+                                  "public",
+                                  "internal",
+                                  "private",
+                                  "restricted",
+                                ],
+                                "type": "string",
+                              },
+                              "contextDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "contextEstimatedTokens": {
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "contextProvenance": {
+                                "items": {
+                                  "properties": {
+                                    "classification": {
+                                      "enum": [
+                                        "public",
+                                        "internal",
+                                        "private",
+                                        "restricted",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "source": {
+                                      "enum": [
+                                        "core",
+                                        "private_profile",
+                                        "business_domain",
+                                        "project",
+                                        "agent",
+                                        "request",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "tokenContribution": {
+                                      "minimum": 0,
+                                      "type": "integer",
+                                    },
+                                  },
+                                  "required": [
+                                    "source",
+                                    "classification",
+                                    "tokenContribution",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "createdAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                              "developmentDraft": {
+                                "type": "boolean",
+                              },
+                              "digestSnapshotId": {
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "entryResourceVersionId": {
+                                "nullable": true,
+                              },
+                              "entrySubject": {
+                                "nullable": true,
+                              },
+                              "error": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "estimatedUpperCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "finishedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "input": {
+                                "additionalProperties": true,
+                                "type": "object",
+                              },
+                              "legacyEntrypointUnresolved": {
+                                "enum": [
+                                  true,
+                                ],
+                                "type": "boolean",
+                              },
+                              "maxAttempts": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxEstimatedCostUsd": {
+                                "minimum": 0,
+                                "type": "number",
+                              },
+                              "maxInputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "maxOutputTokens": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "message": {
+                                "type": "string",
+                              },
+                              "model": {
+                                "type": "string",
+                              },
+                              "pricingVersion": {
+                                "type": "string",
+                              },
+                              "progress": {
+                                "maximum": 100,
+                                "minimum": 0,
+                                "type": "integer",
+                              },
+                              "projectId": {
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "providerKind": {
+                                "enum": [
+                                  "deterministic",
+                                  "anthropic",
+                                  "gateway",
+                                ],
+                                "type": "string",
+                              },
+                              "providerVersion": {
+                                "type": "string",
+                              },
+                              "releaseDigest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "releaseId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "requestedBy": {
+                                "type": "string",
+                              },
+                              "requiredPluginScopes": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "approvalRequired": {
+                                      "type": "boolean",
+                                    },
+                                    "effect": {
+                                      "enum": [
+                                        "read",
+                                        "write",
+                                        "destructive",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "executionPlacement": {
+                                      "enum": [
+                                        "control_plane",
+                                        "workstation",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "installationId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "limits": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "maxEstimatedCostUsd": {
+                                          "maximum": 100000,
+                                          "minimum": 0,
+                                          "type": "number",
+                                        },
+                                        "maxInvocationsPerRun": {
+                                          "maximum": 10000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxRecords": {
+                                          "maximum": 1000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maxResponseBytes": {
+                                          "maximum": 50000000,
+                                          "minimum": 1,
+                                          "type": "integer",
+                                        },
+                                        "maximumBytesBilled": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer",
+                                        },
+                                        "timeoutMs": {
+                                          "maximum": 300000,
+                                          "minimum": 100,
+                                          "type": "integer",
+                                        },
+                                      },
+                                      "required": [
+                                        "timeoutMs",
+                                        "maxResponseBytes",
+                                        "maxInvocationsPerRun",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    "pluginDigest": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string",
+                                    },
+                                    "pluginVersionId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "scopeDescription": {
+                                      "maxLength": 500,
+                                      "minLength": 10,
+                                      "type": "string",
+                                    },
+                                    "tool": {
+                                      "maxLength": 160,
+                                      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "installationId",
+                                    "pluginVersionId",
+                                    "tool",
+                                    "limits",
+                                    "pluginDigest",
+                                    "effect",
+                                    "scopeDescription",
+                                    "executionPlacement",
+                                    "approvalRequired",
+                                  ],
+                                  "type": "object",
+                                },
+                                "type": "array",
+                              },
+                              "requiredToolScopes": {
+                                "items": {
+                                  "type": "string",
+                                },
+                                "type": "array",
+                              },
+                              "requiresPluginApproval": {
+                                "default": false,
+                                "type": "boolean",
+                              },
+                              "retryBackoff": {
+                                "enum": [
+                                  "fixed",
+                                  "exponential",
+                                ],
+                                "type": "string",
+                              },
+                              "startedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "state": {
+                                "enum": [
+                                  "awaiting_approval",
+                                  "queued",
+                                  "running",
+                                  "succeeded",
+                                  "failed",
+                                  "cancelled",
+                                  "paused_budget",
+                                  "paused_plugin",
+                                ],
+                                "type": "string",
+                              },
+                              "updatedAt": {
+                                "format": "date-time",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "id",
+                              "releaseId",
+                              "entryResourceVersionId",
+                              "entrySubject",
+                              "legacyEntrypointUnresolved",
+                              "releaseDigest",
+                              "contextDigest",
+                              "contextProvenance",
+                              "contextClassification",
+                              "contextEstimatedTokens",
+                              "projectId",
+                              "requiredToolScopes",
+                              "requiredPluginScopes",
+                              "authorityGrantId",
+                              "state",
+                              "input",
+                              "providerKind",
+                              "developmentDraft",
+                              "providerVersion",
+                              "model",
+                              "maxInputTokens",
+                              "maxOutputTokens",
+                              "maxEstimatedCostUsd",
+                              "estimatedUpperCostUsd",
+                              "actualCostUsd",
+                              "pricingVersion",
+                              "approvalReasons",
+                              "progress",
+                              "message",
+                              "attempts",
+                              "maxAttempts",
+                              "retryBackoff",
+                              "error",
+                              "requestedBy",
+                              "startedAt",
+                              "finishedAt",
+                              "createdAt",
+                              "updatedAt",
+                            ],
+                            "type": "object",
+                          },
+                        ],
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                    },
+                  },
+                  "required": [
+                    "groupKey",
+                    "runs",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Every reviewed matching pending run was atomically rejected",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
     "/v1/execution-runs": {
       "get": {
         "parameters": [
@@ -32652,6 +35721,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "format": "uuid",
                                 "type": "string",
                               },
+                              "entrySubject": {
+                                "additionalProperties": false,
+                                "nullable": true,
+                                "properties": {
+                                  "kind": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "name": {
+                                    "maxLength": 160,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "version": {
+                                    "maxLength": 80,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "version",
+                                ],
+                                "type": "object",
+                              },
                               "error": {
                                 "additionalProperties": true,
                                 "type": "object",
@@ -32678,6 +35774,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                   false,
                                 ],
                                 "type": "boolean",
+                              },
+                              "maxAttempts": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
                               },
                               "maxEstimatedCostUsd": {
                                 "minimum": 0,
@@ -32844,6 +35945,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "default": false,
                                 "type": "boolean",
                               },
+                              "retryBackoff": {
+                                "enum": [
+                                  "fixed",
+                                  "exponential",
+                                ],
+                                "type": "string",
+                              },
                               "startedAt": {
                                 "format": "date-time",
                                 "nullable": true,
@@ -32871,6 +35979,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "id",
                               "releaseId",
                               "entryResourceVersionId",
+                              "entrySubject",
                               "legacyEntrypointUnresolved",
                               "releaseDigest",
                               "contextDigest",
@@ -32897,6 +36006,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "progress",
                               "message",
                               "attempts",
+                              "maxAttempts",
+                              "retryBackoff",
                               "error",
                               "requestedBy",
                               "startedAt",
@@ -32997,6 +36108,9 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "entryResourceVersionId": {
                                 "nullable": true,
                               },
+                              "entrySubject": {
+                                "nullable": true,
+                              },
                               "error": {
                                 "additionalProperties": true,
                                 "type": "object",
@@ -33023,6 +36137,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                   true,
                                 ],
                                 "type": "boolean",
+                              },
+                              "maxAttempts": {
+                                "exclusiveMinimum": true,
+                                "minimum": 0,
+                                "type": "integer",
                               },
                               "maxEstimatedCostUsd": {
                                 "minimum": 0,
@@ -33189,6 +36308,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "default": false,
                                 "type": "boolean",
                               },
+                              "retryBackoff": {
+                                "enum": [
+                                  "fixed",
+                                  "exponential",
+                                ],
+                                "type": "string",
+                              },
                               "startedAt": {
                                 "format": "date-time",
                                 "nullable": true,
@@ -33216,6 +36342,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "id",
                               "releaseId",
                               "entryResourceVersionId",
+                              "entrySubject",
                               "legacyEntrypointUnresolved",
                               "releaseDigest",
                               "contextDigest",
@@ -33242,6 +36369,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "progress",
                               "message",
                               "attempts",
+                              "maxAttempts",
+                              "retryBackoff",
                               "error",
                               "requestedBy",
                               "startedAt",
@@ -33301,6 +36430,12 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                   "input": {
                     "additionalProperties": true,
                     "type": "object",
+                  },
+                  "maxAttempts": {
+                    "default": 3,
+                    "maximum": 100,
+                    "minimum": 1,
+                    "type": "integer",
                   },
                   "maxEstimatedCostUsd": {
                     "maximum": 100000,
@@ -33373,6 +36508,14 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                   },
                   "releaseId": {
                     "format": "uuid",
+                    "type": "string",
+                  },
+                  "retryBackoff": {
+                    "default": "exponential",
+                    "enum": [
+                      "fixed",
+                      "exponential",
+                    ],
                     "type": "string",
                   },
                 },
@@ -33486,6 +36629,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "format": "uuid",
                           "type": "string",
                         },
+                        "entrySubject": {
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "name": {
+                              "maxLength": 160,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "version": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "kind",
+                            "version",
+                          ],
+                          "type": "object",
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -33512,6 +36682,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             false,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -33678,6 +36853,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -33705,6 +36887,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -33731,6 +36914,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -33831,6 +37016,9 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "entryResourceVersionId": {
                           "nullable": true,
                         },
+                        "entrySubject": {
+                          "nullable": true,
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -33857,6 +37045,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             true,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -34023,6 +37216,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -34050,6 +37250,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -34076,6 +37277,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -34331,6 +37534,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "format": "uuid",
                           "type": "string",
                         },
+                        "entrySubject": {
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "name": {
+                              "maxLength": 160,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "version": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "kind",
+                            "version",
+                          ],
+                          "type": "object",
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -34357,6 +37587,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             false,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -34523,6 +37758,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -34550,6 +37792,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -34576,6 +37819,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -34676,6 +37921,9 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "entryResourceVersionId": {
                           "nullable": true,
                         },
+                        "entrySubject": {
+                          "nullable": true,
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -34702,6 +37950,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             true,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -34868,6 +38121,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -34895,6 +38155,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -34921,6 +38182,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -35154,6 +38417,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "entryResourceVersionId": {
                           "format": "uuid",
                           "type": "string",
+                        },
+                        "entrySubject": {
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "name": {
+                              "maxLength": 160,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "version": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "kind",
+                            "version",
+                          ],
+                          "type": "object",
                         },
                         "id": {
                           "format": "uuid",
@@ -35441,6 +38731,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "format": "uuid",
                               "type": "string",
                             },
+                            "entrySubject": {
+                              "additionalProperties": false,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "maxLength": 80,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "name": {
+                                  "maxLength": 160,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "version": {
+                                  "maxLength": 80,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                              },
+                              "required": [
+                                "name",
+                                "kind",
+                                "version",
+                              ],
+                              "type": "object",
+                            },
                             "error": {
                               "additionalProperties": true,
                               "type": "object",
@@ -35467,6 +38784,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 false,
                               ],
                               "type": "boolean",
+                            },
+                            "maxAttempts": {
+                              "exclusiveMinimum": true,
+                              "minimum": 0,
+                              "type": "integer",
                             },
                             "maxEstimatedCostUsd": {
                               "minimum": 0,
@@ -35633,6 +38955,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "default": false,
                               "type": "boolean",
                             },
+                            "retryBackoff": {
+                              "enum": [
+                                "fixed",
+                                "exponential",
+                              ],
+                              "type": "string",
+                            },
                             "startedAt": {
                               "format": "date-time",
                               "nullable": true,
@@ -35660,6 +38989,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "id",
                             "releaseId",
                             "entryResourceVersionId",
+                            "entrySubject",
                             "legacyEntrypointUnresolved",
                             "releaseDigest",
                             "contextDigest",
@@ -35686,6 +39016,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "progress",
                             "message",
                             "attempts",
+                            "maxAttempts",
+                            "retryBackoff",
                             "error",
                             "requestedBy",
                             "startedAt",
@@ -35786,6 +39118,9 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "entryResourceVersionId": {
                               "nullable": true,
                             },
+                            "entrySubject": {
+                              "nullable": true,
+                            },
                             "error": {
                               "additionalProperties": true,
                               "type": "object",
@@ -35812,6 +39147,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 true,
                               ],
                               "type": "boolean",
+                            },
+                            "maxAttempts": {
+                              "exclusiveMinimum": true,
+                              "minimum": 0,
+                              "type": "integer",
                             },
                             "maxEstimatedCostUsd": {
                               "minimum": 0,
@@ -35978,6 +39318,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "default": false,
                               "type": "boolean",
                             },
+                            "retryBackoff": {
+                              "enum": [
+                                "fixed",
+                                "exponential",
+                              ],
+                              "type": "string",
+                            },
                             "startedAt": {
                               "format": "date-time",
                               "nullable": true,
@@ -36005,6 +39352,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "id",
                             "releaseId",
                             "entryResourceVersionId",
+                            "entrySubject",
                             "legacyEntrypointUnresolved",
                             "releaseDigest",
                             "contextDigest",
@@ -36031,6 +39379,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "progress",
                             "message",
                             "attempts",
+                            "maxAttempts",
+                            "retryBackoff",
                             "error",
                             "requestedBy",
                             "startedAt",
@@ -36293,6 +39643,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "format": "uuid",
                           "type": "string",
                         },
+                        "entrySubject": {
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "name": {
+                              "maxLength": 160,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "version": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "kind",
+                            "version",
+                          ],
+                          "type": "object",
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -36319,6 +39696,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             false,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -36485,6 +39867,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -36512,6 +39901,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -36538,6 +39928,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -36638,6 +40030,9 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "entryResourceVersionId": {
                           "nullable": true,
                         },
+                        "entrySubject": {
+                          "nullable": true,
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -36664,6 +40059,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             true,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -36830,6 +40230,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -36857,6 +40264,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -36883,6 +40291,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -37073,6 +40483,33 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "format": "uuid",
                           "type": "string",
                         },
+                        "entrySubject": {
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "name": {
+                              "maxLength": 160,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                            "version": {
+                              "maxLength": 80,
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "kind",
+                            "version",
+                          ],
+                          "type": "object",
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -37099,6 +40536,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             false,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -37265,6 +40707,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -37292,6 +40741,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -37318,6 +40768,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -37418,6 +40870,9 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "entryResourceVersionId": {
                           "nullable": true,
                         },
+                        "entrySubject": {
+                          "nullable": true,
+                        },
                         "error": {
                           "additionalProperties": true,
                           "type": "object",
@@ -37444,6 +40899,11 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             true,
                           ],
                           "type": "boolean",
+                        },
+                        "maxAttempts": {
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "integer",
                         },
                         "maxEstimatedCostUsd": {
                           "minimum": 0,
@@ -37610,6 +41070,13 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                           "default": false,
                           "type": "boolean",
                         },
+                        "retryBackoff": {
+                          "enum": [
+                            "fixed",
+                            "exponential",
+                          ],
+                          "type": "string",
+                        },
                         "startedAt": {
                           "format": "date-time",
                           "nullable": true,
@@ -37637,6 +41104,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "id",
                         "releaseId",
                         "entryResourceVersionId",
+                        "entrySubject",
                         "legacyEntrypointUnresolved",
                         "releaseDigest",
                         "contextDigest",
@@ -37663,6 +41131,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "progress",
                         "message",
                         "attempts",
+                        "maxAttempts",
+                        "retryBackoff",
                         "error",
                         "requestedBy",
                         "startedAt",
@@ -38138,6 +41608,15 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "reject",
                     ],
                     "type": "string",
+                  },
+                  "decisionGroupKey": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string",
+                  },
+                  "expectedRequestCount": {
+                    "maximum": 250,
+                    "minimum": 1,
+                    "type": "integer",
                   },
                   "rationale": {
                     "maxLength": 2000,
@@ -38728,9 +42207,18 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     ],
                     "type": "string",
                   },
+                  "decisionGroupKey": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string",
+                  },
                   "editedValue": {
                     "additionalProperties": true,
                     "type": "object",
+                  },
+                  "expectedRequestCount": {
+                    "maximum": 250,
+                    "minimum": 1,
+                    "type": "integer",
                   },
                   "rationale": {
                     "maxLength": 2000,
@@ -42080,6 +45568,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "content": {
               "application/json": {
                 "schema": {
+                  "nullable": true,
                   "properties": {
                     "currentReleaseDigest": {
                       "nullable": true,
@@ -42134,49 +45623,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 },
               },
             },
-            "description": "Current production release pointer",
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "error": {
-                      "properties": {
-                        "code": {
-                          "minLength": 1,
-                          "type": "string",
-                        },
-                        "details": {
-                          "additionalProperties": true,
-                          "description": "Arbitrary JSON value.",
-                          "type": "object",
-                        },
-                        "message": {
-                          "minLength": 1,
-                          "type": "string",
-                        },
-                        "requestId": {
-                          "minLength": 1,
-                          "type": "string",
-                        },
-                      },
-                      "required": [
-                        "code",
-                        "message",
-                        "requestId",
-                      ],
-                      "type": "object",
-                    },
-                  },
-                  "required": [
-                    "error",
-                  ],
-                  "type": "object",
-                },
-              },
-            },
-            "description": "Typed API error",
+            "description": "Current production release pointer, or null before the channel is assigned",
           },
         },
       },

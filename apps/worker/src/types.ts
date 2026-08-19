@@ -23,7 +23,10 @@ export interface ClaimedRun {
   estimatedUpperCostUsd: number;
   attempts: number;
   maxAttempts: number;
+  retryBackoff: 'fixed' | 'exponential';
 }
+
+export type RetrySuppressionReason = 'plugin_invocation_started';
 
 export interface ProviderUsageSettlement {
   usage: ModelUsage;
@@ -83,5 +86,6 @@ export interface WorkerStore {
     code: string,
     retryable: boolean,
     incurred?: ProviderUsageSettlement,
+    retrySuppressedBy?: RetrySuppressionReason,
   ): Promise<FailureDisposition>;
 }

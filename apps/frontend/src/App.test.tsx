@@ -56,6 +56,19 @@ async function completeSpecification(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('Agent Builder workflow', () => {
+  it('opens as the Build workbench with drafting-specific workflow marks', () => {
+    renderWithClient(<App />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Build' })).toBeInTheDocument();
+    expect(screen.getByText(/Paul OS checks certified agents first/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Faster\. Governed\. Effective\./i)).not.toBeInTheDocument();
+    expect(
+      Array.from(document.querySelectorAll('[data-workflow-mark]')).map((mark) =>
+        mark.getAttribute('data-workflow-mark'),
+      ),
+    ).toEqual(['definition-sheet', 'source-table', 'control-flow', 'acceptance-gate']);
+  });
+
   it('unlocks each workflow step only after its predecessor is complete', async () => {
     const user = userEvent.setup();
     renderWithClient(<App />);

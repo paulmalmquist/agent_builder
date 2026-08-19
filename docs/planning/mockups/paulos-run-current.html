@@ -1,0 +1,1272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Paul OS — Run current</title>
+    <!-- Self-contained. No CDN, no fetch. WebGL with complete flat fallback. -->
+    <style>
+      :root {
+        --bg: #05070a;
+        --panel: #0b0e14;
+        --ink: #f5f6f8;
+        --i2: #aeb4bf;
+        --mut: #8f96a3;
+        --dim: #5c6270;
+        --faint: #333944;
+        --pur: #9578ff;
+        --purs: #b9aaff;
+        --teal: #2f9d82;
+        --amb: #e8b34b;
+        --red: #e0645f;
+        --bd: rgba(255, 255, 255, 0.09);
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          400 14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Inter,
+          Roboto,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      canvas {
+        position: fixed;
+        inset: 0;
+        display: block;
+      }
+      .ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 5;
+      }
+      .hd {
+        position: absolute;
+        top: 26px;
+        left: 32px;
+        max-width: 52ch;
+      }
+      .hd .k {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        color: var(--dim);
+      }
+      .hd h2 {
+        font-size: 21px;
+        font-weight: 650;
+        letter-spacing: -0.012em;
+        margin-top: 12px;
+      }
+      .hd p {
+        font-size: 12.5px;
+        color: var(--mut);
+        margin-top: 6px;
+      }
+      .hd p b {
+        color: var(--i2);
+        font-weight: 600;
+      }
+      .agents {
+        position: absolute;
+        top: 26px;
+        right: 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        pointer-events: auto;
+      }
+      .ag {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(11, 14, 20, 0.6);
+        border: 1px solid var(--bd);
+        border-radius: 8px;
+        padding: 7px 12px;
+        cursor: pointer;
+        backdrop-filter: blur(9px);
+        min-width: 212px;
+        transition: all 180ms var(--ease);
+      }
+      .ag:hover,
+      .ag.on {
+        border-color: var(--pur);
+        background: rgba(149, 120, 255, 0.12);
+      }
+      .ag .tier {
+        font: 700 9px/1 sans-serif;
+        letter-spacing: 0.08em;
+        color: var(--faint);
+        width: 20px;
+      }
+      .ag.on .tier,
+      .ag:hover .tier {
+        color: var(--pur);
+      }
+      .ag .nm {
+        font-size: 12px;
+        font-weight: 520;
+      }
+      .ag b {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        font-size: 11.5px;
+        font-weight: 640;
+        color: var(--mut);
+      }
+      .stat {
+        position: absolute;
+        left: 32px;
+        bottom: 118px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .s {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 12px;
+        color: var(--i2);
+        background: rgba(11, 14, 20, 0.55);
+        border: 1px solid var(--bd);
+        border-radius: 7px;
+        padding: 5px 11px;
+        min-width: 224px;
+        backdrop-filter: blur(8px);
+      }
+      .s i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: block;
+        flex: none;
+      }
+      .s b {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        font-weight: 640;
+        color: var(--ink);
+      }
+      .s.warn {
+        border-color: rgba(232, 179, 75, 0.5);
+      }
+      .s.warn b {
+        color: var(--amb);
+      }
+      .cap {
+        position: absolute;
+        left: 50%;
+        bottom: 118px;
+        transform: translateX(-50%);
+        max-width: 56ch;
+        text-align: center;
+        font-size: 12.5px;
+        color: var(--i2);
+        background: rgba(11, 14, 20, 0.62);
+        border: 1px solid var(--bd);
+        border-radius: 9px;
+        padding: 9px 16px;
+        backdrop-filter: blur(10px);
+        opacity: 0;
+        transition: opacity 420ms var(--ease);
+      }
+      .cap.show {
+        opacity: 1;
+      }
+      .cap b {
+        color: var(--ink);
+        font-weight: 620;
+      }
+      .scrub {
+        position: absolute;
+        left: 32px;
+        right: 32px;
+        bottom: 40px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        pointer-events: auto;
+      }
+      .btn {
+        font: 640 10px/1 sans-serif;
+        letter-spacing: 0.15em;
+        color: var(--i2);
+        background: rgba(11, 14, 20, 0.62);
+        border: 1px solid var(--bd);
+        border-radius: 7px;
+        padding: 9px 14px;
+        cursor: pointer;
+        min-width: 86px;
+        text-align: center;
+        backdrop-filter: blur(8px);
+        transition: all 180ms var(--ease);
+      }
+      .btn:hover {
+        border-color: var(--pur);
+        color: var(--ink);
+      }
+      .clock {
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+        color: var(--mut);
+        width: 44px;
+        text-align: center;
+      }
+      input[type='range'] {
+        flex: 1;
+        appearance: none;
+        -webkit-appearance: none;
+        height: 26px;
+        background: transparent;
+        cursor: pointer;
+      }
+      input[type='range']::-webkit-slider-runnable-track {
+        height: 2px;
+        background: var(--faint);
+        border-radius: 1px;
+      }
+      input[type='range']::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--ink);
+        border: 2px solid var(--pur);
+        margin-top: -5px;
+      }
+      input[type='range']::-moz-range-track {
+        height: 2px;
+        background: var(--faint);
+      }
+      input[type='range']::-moz-range-thumb {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--ink);
+        border: 2px solid var(--pur);
+      }
+      .leg {
+        position: absolute;
+        right: 32px;
+        bottom: 118px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 10.5px;
+        color: var(--mut);
+        text-align: left;
+      }
+      .leg span {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .leg i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .ft {
+        position: absolute;
+        left: 32px;
+        bottom: 16px;
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        color: var(--faint);
+      }
+      .ft2 {
+        position: absolute;
+        right: 32px;
+        bottom: 16px;
+        font-size: 9px;
+        letter-spacing: 0.09em;
+        color: var(--faint);
+        text-align: right;
+      }
+      .nl {
+        position: absolute;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      .nl .a {
+        font-size: 11.5px;
+        font-weight: 560;
+        color: var(--i2);
+      }
+      .nl .b {
+        font-size: 8.5px;
+        letter-spacing: 0.13em;
+        color: var(--dim);
+        margin-top: 1px;
+      }
+      .nl b {
+        font-variant-numeric: tabular-nums;
+        color: var(--ink);
+        font-weight: 640;
+        font-size: 11.5px;
+        margin-left: 7px;
+      }
+      .nl.right {
+        text-align: left;
+      }
+      .nl.left {
+        text-align: right;
+      }
+      .nl.mid {
+        text-align: center;
+      }
+      #fb {
+        display: none;
+        position: fixed;
+        inset: 0;
+        overflow: auto;
+        padding: 48px 40px;
+        z-index: 9;
+        background: var(--bg);
+      }
+      #fb .in {
+        max-width: 680px;
+        margin: 0 auto;
+      }
+      #fb h2 {
+        font-size: 21px;
+        font-weight: 650;
+        margin: 10px 0 6px;
+      }
+      #fb p {
+        font-size: 13px;
+        color: var(--mut);
+        margin-bottom: 14px;
+      }
+      #fb .row {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--bd);
+        padding: 8px 2px;
+        font-size: 13px;
+      }
+      #fb .row b {
+        font-variant-numeric: tabular-nums;
+      }
+      #fb svg {
+        width: 100%;
+        height: 170px;
+        margin: 18px 0;
+      }
+      #fb .tl {
+        font-size: 12.5px;
+        color: var(--i2);
+        margin-top: 16px;
+        line-height: 1.9;
+      }
+      #fb .tl em {
+        color: var(--dim);
+        font-style: normal;
+        font-variant-numeric: tabular-nums;
+        margin-right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <div class="ui">
+      <div class="hd">
+        <div class="k">PAUL OS · RUN CURRENT · 2,600 RUNS · ONE POINT EACH</div>
+        <h2>One day through the factory</h2>
+        <p>
+          Every dot is one agent run. It starts at a <b>trigger</b>, is worked by an
+          <b>agent</b> using a <b>tool</b>, passes a <b>gate</b>, and lands in an outcome. Watch the
+          amber pool that forms in front of <b>your approval</b> — the agents were never the
+          bottleneck.
+        </p>
+      </div>
+      <div class="agents" id="agents"></div>
+      <div class="stat" id="stat">
+        <div class="s"><i style="background: var(--pur)"></i>running now<b id="cRun">0</b></div>
+        <div class="s" id="sWait">
+          <i style="background: var(--amb)"></i>waiting on your approval<b id="cWait">0</b>
+        </div>
+        <div class="s"><i style="background: var(--teal)"></i>shipped<b id="cShip">0</b></div>
+        <div class="s">
+          <i style="background: var(--amb)"></i>needs you (decisions)<b id="cNeed">0</b>
+        </div>
+        <div class="s"><i style="background: var(--red)"></i>failed<b id="cFail">0</b></div>
+      </div>
+      <div class="leg">
+        <span><i style="background: var(--pur)"></i>working</span>
+        <span><i style="background: var(--amb)"></i>waiting on you</span>
+        <span><i style="background: var(--teal)"></i>shipped</span>
+        <span><i style="background: var(--red)"></i>failed</span>
+      </div>
+      <div class="cap" id="cap"></div>
+      <div class="scrub">
+        <button class="btn" id="play">PAUSE</button>
+        <span class="clock" id="clock">06:00</span>
+        <input type="range" id="rng" min="0" max="24" step="0.005" value="0" />
+        <span class="clock">24:00</span>
+      </div>
+      <div class="ft">
+        SELF-CONTAINED · NO CDN · DPR CAPPED AT 2 · PAUSES WHEN HIDDEN · COMPLETE FLAT FALLBACK
+      </div>
+      <div class="ft2">
+        WHY THE GPU: 2,600 RUNS × 5 TRAIL PASSES, WHOLE DAY = 8 TIMESTAMPS PER RUN,<br />REPLAYED
+        ENTIRELY IN THE VERTEX SHADER. SCRUBBING COSTS NOTHING.
+      </div>
+      <div id="labels"></div>
+    </div>
+    <div id="fb">
+      <div class="in">
+        <div class="k" style="font-size: 10px; letter-spacing: 0.22em; color: var(--dim)">
+          PAUL OS · RUN CURRENT · FLAT VIEW
+        </div>
+        <h2>One day through the factory</h2>
+        <p>
+          WebGL isn’t available here, so this is the same day as numbers and one chart — nothing
+          missing, just flat.
+        </p>
+        <div id="fbRows"></div>
+        <svg
+          id="fbSvg"
+          viewBox="0 0 680 170"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Queue depth in front of your approval, over the day"
+        ></svg>
+        <div class="tl" id="fbTl"></div>
+      </div>
+    </div>
+    <script>
+      'use strict';
+      /* ---------- seeded rng ---------- */
+      function mulberry32(a) {
+        return function () {
+          a |= 0;
+          a = (a + 0x6d2b79f5) | 0;
+          var t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      const R = mulberry32(20260818);
+      const rexp = (m) => -Math.log(1 - R()) * m;
+      const pick = (w) => {
+        let s = 0;
+        for (const x of w) s += x[1];
+        let r = R() * s;
+        for (const x of w) {
+          r -= x[1];
+          if (r <= 0) return x[0];
+        }
+        return w[w.length - 1][0];
+      };
+
+      /* ---------- topology ---------- */
+      const TRIG = [
+        { x: 18, y: 11, n: 'Schedule', s: 'CRON · DIGESTS' },
+        { x: 18, y: 26.5, n: 'Event', s: 'ALERTS · WEBHOOKS' },
+        { x: 18, y: 42, n: 'You ask', s: 'MANUAL REQUESTS' },
+      ];
+      const AG = [
+        {
+          x: 34,
+          y: 10,
+          n: 'Cost sentinel',
+          s: 'T0 · READ-ONLY',
+          tier: '00',
+          tools: [
+            [0, 0.6],
+            [1, 0.25],
+            [7, 0.15],
+          ],
+          appr: 0.04,
+        },
+        {
+          x: 34,
+          y: 18.5,
+          n: 'Incident responder',
+          s: 'T1 · MULTI-SOURCE',
+          tier: '01',
+          tools: [
+            [1, 0.5],
+            [2, 0.25],
+            [0, 0.25],
+          ],
+          appr: 0.1,
+        },
+        {
+          x: 34,
+          y: 27,
+          n: 'Burndown reporter',
+          s: 'T2 · DECISION-GRADE',
+          tier: '02',
+          tools: [
+            [4, 0.35],
+            [5, 0.35],
+            [3, 0.3],
+          ],
+          appr: 0.12,
+        },
+        {
+          x: 34,
+          y: 35.5,
+          n: 'Reconciliation analyst',
+          s: 'T1 · MULTI-SOURCE',
+          tier: '03',
+          tools: [
+            [0, 0.5],
+            [6, 0.2],
+            [2, 0.15],
+            [7, 0.15],
+          ],
+          appr: 0.15,
+        },
+        {
+          x: 34,
+          y: 44,
+          n: 'Evidence packager',
+          s: 'T3 · DRAFTS · GATED',
+          tier: '04',
+          tools: [
+            [4, 0.4],
+            [5, 0.3],
+            [6, 0.3],
+          ],
+          appr: 1,
+        },
+      ];
+      const TOOL = [
+        { x: 52, y: 8, n: 'Warehouse' },
+        { x: 52, y: 13.1, n: 'Logs' },
+        { x: 52, y: 18.2, n: 'Git' },
+        { x: 52, y: 23.3, n: 'Schedule' },
+        { x: 52, y: 28.4, n: 'Quality' },
+        { x: 52, y: 33.5, n: 'ERP' },
+        { x: 52, y: 38.6, n: 'Docs' },
+        { x: 52, y: 43.7, n: 'Web' },
+      ];
+      const GATE = [
+        { x: 68, y: 17.5, n: 'Auto checks' },
+        { x: 68, y: 35.5, n: 'Your approval' },
+      ];
+      const OUT = [
+        { x: 84, y: 17, n: 'Shipped' },
+        { x: 84, y: 30.5, n: 'Needs you' },
+        { x: 84, y: 42.5, n: 'Failed' },
+      ];
+
+      /* ---------- simulate the day ---------- */
+      const runs = [];
+      function spawn(t0, trig, mix) {
+        const a = pick(mix);
+        runs.push({ t0, trig, a });
+      }
+      const mixS = [
+          [0, 0.45],
+          [2, 0.55],
+        ],
+        mixE = [
+          [0, 0.18],
+          [1, 0.4],
+          [2, 0.02],
+          [3, 0.32],
+          [4, 0.08],
+        ],
+        mixY = [
+          [0, 0.02],
+          [1, 0.12],
+          [2, 0.22],
+          [3, 0.34],
+          [4, 0.3],
+        ];
+      for (let i = 0; i < 210; i++) spawn(6 + Math.min(2.4, rexp(0.55)), 0, mixS);
+      for (let i = 0; i < 70; i++) spawn(12 + Math.min(1.5, rexp(0.4)), 0, mixS);
+      for (let h = 5; h < 24; h++) for (let i = 0; i < 12; i++) spawn(h + R(), 0, mixS);
+      const hw = [];
+      for (let h = 0; h < 24; h++) {
+        let w = 0.22;
+        if (h >= 8 && h < 19) w = 1;
+        if (h >= 10 && h < 17) w = 1.5;
+        if (h < 5) w = 0.1;
+        hw.push(w);
+      }
+      const hws = hw.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < 1500; i++) {
+        let r = R() * hws,
+          h = 0;
+        for (; h < 24; h++) {
+          r -= hw[h];
+          if (r <= 0) break;
+        }
+        spawn(Math.min(23.9, h + R()), 1, mixE);
+      }
+      const yw = [
+        [8.7, 11.5, 0.42],
+        [13.5, 17.2, 0.5],
+        [19.4, 20.4, 0.08],
+      ];
+      for (let i = 0; i < 420; i++) {
+        let r = R(),
+          w = yw[0];
+        for (const q of yw) {
+          if (r < q[2]) {
+            w = q;
+            break;
+          }
+          r -= q[2];
+        }
+        spawn(w[0] + R() * (w[1] - w[0]), 2, mixY);
+      }
+      runs.sort((p, q) => p.t0 - q.t0);
+      const N = runs.length,
+        TR = 0.3;
+      for (const r of runs) {
+        const A = AG[r.a];
+        r.tool = pick(A.tools);
+        r.t1 = r.t0 + TR;
+        r.t2 = r.t1 + 0.25 + rexp(0.3);
+        r.t3 = r.t2 + TR;
+        const wd = (0.2 + rexp(0.28)) * (r.tool === 7 ? 1.6 : 1);
+        r.t4 = r.t3 + wd;
+        let fp = r.tool === 7 ? 0.1 : 0.035;
+        if (r.tool === 7 && r.t4 > 13 && r.t4 < 14.5) fp *= 3.2;
+        r.fail = R() < fp;
+        r.appr = !r.fail && R() < A.appr;
+      }
+      /* approval clearing: capacity = your sittings */
+      const slots = [];
+      for (let t = 8.5; t < 8.85; t += 0.005) slots.push(t);
+      for (let t = 11.5; t < 11.95; t += 0.005) slots.push(t);
+      for (let t = 16.5; t < 17.05; t += 0.005) slots.push(t);
+      for (let t = 9.3; t < 19; t += 0.55) slots.push(t, t + 0.02);
+      slots.sort((a, b) => a - b);
+      const apr = runs.filter((r) => r.appr).sort((a, b) => a.t4 + TR - (b.t4 + TR));
+      let si = 0,
+        win2 = 0;
+      for (const r of apr) {
+        r.t5 = r.t4 + TR;
+        while (si < slots.length && slots[si] < r.t5) si++;
+        if (si < slots.length) {
+          r.t6 = slots[si++];
+          if (r.t6 >= 11.5 && r.t6 < 11.95) win2++;
+        } else r.t6 = 99;
+      }
+      for (const r of runs) {
+        if (r.fail) {
+          r.t5 = r.t4 + TR;
+          r.t6 = r.t5;
+          r.t7 = r.t5;
+          r.o = 2;
+          continue;
+        }
+        if (!r.appr) {
+          r.t5 = r.t4 + TR;
+          r.t6 = r.t5 + 0.05 + R() * 0.1;
+          r.o = R() < 0.9 ? 0 : 1;
+          r.t7 = r.t6 + TR;
+          continue;
+        }
+        r.o = R() < 0.72 ? 0 : 1;
+        r.t7 = r.t6 >= 90 ? 99 : r.t6 + TR;
+      }
+      /* queue index at arrival + queue depth curve */
+      const ev = [];
+      for (const r of apr) {
+        ev.push([r.t5, 1, r]);
+        if (r.t6 < 90) ev.push([r.t6, -1, null]);
+      }
+      ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      let q = 0,
+        peakQ = 0,
+        peakT = 0;
+      const qCurve = [[0, 0]];
+      for (const e of ev) {
+        if (e[1] > 0) {
+          e[2].qi = q;
+        }
+        q += e[1];
+        qCurve.push([e[0], q]);
+        if (q > peakQ) {
+          peakQ = q;
+          peakT = e[0];
+        }
+      }
+      const leftOver = apr.filter((r) => r.t6 >= 90).length;
+      /* outcome piles: golden spiral by landing order */
+      for (const b of [0, 1, 2]) {
+        const done = runs.filter((r) => r.o === b && r.t7 < 90).sort((a, c) => a.t7 - c.t7);
+        const CAP = [5.1, 3.6, 2.4][b];
+        done.forEach((r, k) => {
+          const rr = Math.min(CAP, 0.16 * Math.sqrt(k + 1)),
+            an = k * 2.399963;
+          r.rx = OUT[b].x + rr * Math.cos(an);
+          r.ry = OUT[b].y + rr * Math.sin(an) * 0.8;
+        });
+      }
+      for (const r of runs) {
+        if (r.rx === undefined) {
+          r.rx = GATE[1].x;
+          r.ry = GATE[1].y;
+        }
+      }
+      /* per-agent counts */
+      const agCount = [0, 0, 0, 0, 0];
+      for (const r of runs) agCount[r.a]++;
+
+      /* ---------- captions (live numbers) ---------- */
+      const fmt = (n) => n.toLocaleString('en-US');
+      const hh = (t) =>
+        String(Math.floor(t)).padStart(2, '0') +
+        ':' +
+        String(Math.floor((t % 1) * 60)).padStart(2, '0');
+      function qAt(t) {
+        let v = 0;
+        for (const [tt, q] of qCurve) {
+          if (tt > t) break;
+          v = q;
+        }
+        return v;
+      }
+      const CAPS = [
+        [5.95, '<b>06:00</b> — the schedulers wake. The morning digests spawn as one river.'],
+        [8.2, 'Runs finish into two gates: <b>auto checks</b>, and <b>you</b>.'],
+        [
+          10.1,
+          "Runs are finishing faster than you're approving. The amber pool in front of <b>your approval</b> is growing.",
+        ],
+        [
+          11.5,
+          `<b>11:30</b> — you sit down. Twenty minutes of your attention clears <b>${fmt(win2)} runs</b>.`,
+        ],
+        [
+          13.2,
+          'The <b>web</b> connector is having a bad hour. Every falling ember is a run it failed.',
+        ],
+        [
+          15.9,
+          `<b>${fmt(qAt(16.4))} runs</b> parked at your approval. The factory was never the bottleneck.`,
+        ],
+        [16.55, 'Second sitting. The pool drains in minutes.'],
+        [17.6, 'After five, nobody approves. Watch the evening stack up — unattended.'],
+        [
+          22.6,
+          `What's still orbiting the gate is tomorrow's first decision: <b>${fmt(leftOver)} runs</b> will greet you at 08:30.`,
+        ],
+      ];
+
+      /* ---------- GL ---------- */
+      const canvas = document.getElementById('gl');
+      const gl =
+        canvas.getContext('webgl2', { antialias: true, alpha: false }) ||
+        canvas.getContext('webgl', { antialias: true, alpha: false });
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!gl) {
+        flatFallback();
+      } else {
+        main();
+      }
+
+      function flatFallback() {
+        canvas.style.display = 'none';
+        document.querySelector('.ui').style.display = 'none';
+        const fb = document.getElementById('fb');
+        fb.style.display = 'block';
+        const end = { run: 0, wait: leftOver, ship: 0, need: 0, fail: 0 };
+        for (const r of runs) {
+          if (r.t7 < 90) {
+            if (r.o === 0) end.ship++;
+            else if (r.o === 1) end.need++;
+            else end.fail++;
+          }
+        }
+        document.getElementById('fbRows').innerHTML =
+          `<div class="row"><span>runs today</span><b>${fmt(N)}</b></div>
+    <div class="row"><span>shipped</span><b style="color:var(--teal)">${fmt(end.ship)}</b></div>
+    <div class="row"><span>needs you (decisions)</span><b style="color:var(--amb)">${fmt(end.need)}</b></div>
+    <div class="row"><span>failed</span><b style="color:var(--red)">${fmt(end.fail)}</b></div>
+    <div class="row"><span>still waiting on your approval at midnight</span><b style="color:var(--amb)">${fmt(leftOver)}</b></div>
+    <div class="row"><span>deepest approval queue</span><b>${fmt(peakQ)} at ${hh(peakT)}</b></div>`;
+        let d = 'M0,168 ',
+          mx = peakQ;
+        for (const [t, v] of qCurve)
+          d += `L${((t / 24) * 680).toFixed(1)},${(168 - (v / mx) * 150).toFixed(1)} `;
+        d += 'L680,168 Z';
+        document.getElementById('fbSvg').innerHTML =
+          `<path d="${d}" fill="rgba(232,179,75,.18)" stroke="#e8b34b" stroke-width="1.5"/>
+    <text x="8" y="14" fill="#8f96a3" font-size="10">queue in front of your approval</text>
+    <text x="${(peakT / 24) * 680 - 4}" y="${168 - (peakQ / mx) * 150 - 6}" fill="#e8b34b" font-size="10" text-anchor="end">${peakQ} at ${hh(peakT)}</text>`;
+        document.getElementById('fbTl').innerHTML = CAPS.map(
+          (c) => `<div><em>${hh(c[0])}</em>${c[1]}</div>`,
+        ).join('');
+      }
+
+      function main() {
+        const DPR = Math.min(devicePixelRatio || 1, 2);
+        /* pack run attributes: 6 vec4 per run */
+        const F = new Float32Array(N * 24);
+        runs.forEach((r, i) => {
+          const A = AG[r.a],
+            T = TOOL[r.tool],
+            G = r.fail ? OUT[2] : GATE[r.appr ? 1 : 0],
+            O = r.fail ? OUT[2] : OUT[r.o];
+          const o = i * 24,
+            Tg = TRIG[r.trig];
+          F[o] = Tg.x;
+          F[o + 1] = Tg.y;
+          F[o + 2] = A.x;
+          F[o + 3] = A.y;
+          F[o + 4] = T.x;
+          F[o + 5] = T.y;
+          F[o + 6] = G.x;
+          F[o + 7] = G.y;
+          F[o + 8] = O.x;
+          F[o + 9] = O.y;
+          F[o + 10] = r.rx;
+          F[o + 11] = r.ry;
+          F[o + 12] = r.t0;
+          F[o + 13] = r.t1;
+          F[o + 14] = r.t2;
+          F[o + 15] = r.t3;
+          F[o + 16] = r.t4;
+          F[o + 17] = r.t5;
+          F[o + 18] = r.t6;
+          F[o + 19] = r.t7;
+          F[o + 20] = r.a;
+          F[o + 21] = r.o;
+          F[o + 22] = r.qi || 0;
+          F[o + 23] = R();
+        });
+        const VS = `
+precision highp float;
+attribute vec4 aA,aB,aC,aT0,aT1,aM;
+uniform float uT,uOff,uU,uMotion,uHov,uDPR;
+uniform vec2 uVP,uC;
+varying vec4 vCol;varying float vCore;
+vec2 bez(vec2 P,vec2 Q,float s){
+  float e=s*s*(3.0-2.0*s);
+  vec2 c1=P+vec2((Q.x-P.x)*.45,0.),c2=Q-vec2((Q.x-P.x)*.45,0.);
+  float u=1.0-e;
+  return u*u*u*P+3.*u*u*e*c1+3.*u*e*e*c2+e*e*e*Q;}
+void main(){
+  float t=uT-uOff;
+  vec2 P=aA.xy;float sz=2.2,al=1.,core=0.;
+  vec3 pur=vec3(.584,.471,1.),teal=vec3(.184,.616,.51),amb=vec3(.91,.702,.294),red=vec3(.878,.392,.373);
+  vec3 col=pur;
+  float T0=aT0.x,T1=aT0.y,T2=aT0.z,T3=aT0.w,T4=aT1.x,T5=aT1.y,T6=aT1.z,T7=aT1.w;
+  bool appr=aB.w>28.0&&aM.y<1.5;
+  bool fail=aM.y>1.5;
+  float trans=0.;
+  if(t<T0){al=0.;}
+  else if(t<T1){P=bez(aA.xy,aA.zw,(t-T0)/(T1-T0));trans=1.;core=.5;}
+  else if(t<T2){float a=aM.w*6.283+t*(1.2+aM.w)*uMotion;P=aA.zw+(0.55+aM.w*1.1)*vec2(cos(a),sin(a)*.8);core=.35;}
+  else if(t<T3){P=bez(aA.zw,aB.xy,(t-T2)/(T3-T2));trans=1.;core=.5;}
+  else if(t<T4){float a=aM.w*6.283-t*(1.4+aM.w*.7)*uMotion;P=aB.xy+(0.45+aM.w*.9)*vec2(cos(a),sin(a)*.8);core=.35;}
+  else if(t<T5){float s=(t-T4)/(T5-T4);P=bez(aB.xy,aB.zw,s);trans=1.;core=.5;
+    if(fail){P.y+=2.6*s*s;col=mix(pur,red,s);} }
+  else if(t<T6){
+    if(appr){float w=clamp((t-T5)/1.1,0.,1.);col=mix(pur,amb,w);
+      float rr=1.2+min(aM.z,170.)*.031;
+      float a=aM.w*6.283+t*(.5+aM.w*.25)*uMotion;
+      P=aB.zw+rr*vec2(cos(a),sin(a)*.82);sz=2.4;core=.15*w;}
+    else{float a=aM.w*6.283+t*2.0*uMotion;P=aB.zw+0.5*vec2(cos(a),sin(a)*.8);core=.3;}}
+  else if(t<T7){float s=(t-T6)/(T7-T6);P=bez(aB.zw,aC.xy,s);trans=1.;core=.5;
+    col=mix(col,aM.y<0.5?teal:(aM.y<1.5?amb:red),s);}
+  else{P=aC.zw;col=aM.y<0.5?teal:(aM.y<1.5?amb:red);al=.42;sz=1.9;
+    P+=uMotion*0.04*vec2(sin(uT*2.6+aM.w*9.),cos(uT*2.2+aM.w*7.));}
+  if(uOff>0.0){al*= trans>0.5? .5:0.0; sz*=.82;}
+  if(uHov>-.5){al*= abs(aM.x-uHov)<.5?1.0:.05;}
+  vCol=vec4(col,al);vCore=core;
+  vec2 clip=(P-uC)*uU/(uVP*.5);clip.y=-clip.y;
+  gl_Position=vec4(clip,0.,1.);
+  gl_PointSize=sz*uDPR*(1.0+core*.5);}`;
+        const FS = `
+precision mediump float;varying vec4 vCol;varying float vCore;
+void main(){
+  vec2 d=gl_PointCoord-.5;float r=length(d);
+  float a=smoothstep(.5,.14,r);
+  vec3 c=vCol.rgb+vCore*vec3(1.)*smoothstep(.3,.0,r);
+  gl_FragColor=vec4(c*vCol.a*a,1.0);}`;
+        const WVS = `
+precision highp float;attribute vec2 aP;attribute float aW;
+uniform float uU,uHov;uniform vec2 uVP,uC;varying float vA;
+void main(){
+  float a=.05;
+  if(uHov>-.5){a= aW<-.5? .02 : (abs(aW-uHov)<.5? .3 : .012);}
+  vA=a;
+  vec2 clip=(aP-uC)*uU/(uVP*.5);clip.y=-clip.y;
+  gl_Position=vec4(clip,0.,1.);}`;
+        const WFS = `precision mediump float;varying float vA;
+void main(){gl_FragColor=vec4(vec3(.72,.75,.85)*vA,1.);}`;
+        const RVS = `
+precision highp float;attribute vec3 aP;
+uniform float uU,uDPR;uniform mediump float uQ;uniform vec2 uVP,uC;varying float vK;
+void main(){vK=aP.z;
+  vec2 clip=(aP.xy-uC)*uU/(uVP*.5);clip.y=-clip.y;
+  gl_Position=vec4(clip,0.,1.);
+  float s=30.0;if(aP.z>3.5&&aP.z<4.5)s=34.0+uQ*10.0;
+  gl_PointSize=s*uDPR;}`;
+        const RFS = `
+precision mediump float;varying float vK;uniform float uQ;
+void main(){
+  vec2 d=gl_PointCoord-.5;float r=length(d);
+  float ring=smoothstep(.5,.47,r)-smoothstep(.40,.37,r);
+  vec3 col=vec3(.42,.46,.56);
+  float glow=0.0;
+  if(vK>3.5&&vK<4.5){col=mix(col,vec3(.91,.702,.294),clamp(uQ*1.4,0.,1.));
+    glow=uQ*.35*smoothstep(.45,.0,r);}
+  gl_FragColor=vec4(col*ring*.85+vec3(.91,.702,.294)*glow,1.);}`;
+        function prog(v, f) {
+          const p = gl.createProgram();
+          for (const [t, s] of [
+            [gl.VERTEX_SHADER, v],
+            [gl.FRAGMENT_SHADER, f],
+          ]) {
+            const sh = gl.createShader(t);
+            gl.shaderSource(sh, s);
+            gl.compileShader(sh);
+            if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(sh);
+            gl.attachShader(p, sh);
+          }
+          gl.linkProgram(p);
+          if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw gl.getProgramInfoLog(p);
+          return p;
+        }
+        const P1 = prog(VS, FS),
+          P2 = prog(WVS, WFS),
+          P3 = prog(RVS, RFS);
+        /* run buffer */
+        const bufR = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufR);
+        gl.bufferData(gl.ARRAY_BUFFER, F, gl.STATIC_DRAW);
+        const attR = ['aA', 'aB', 'aC', 'aT0', 'aT1', 'aM'].map((n) => gl.getAttribLocation(P1, n));
+        /* wires */
+        function bz(P, Q) {
+          const pts = [],
+            c1 = [P.x + (Q.x - P.x) * 0.45, P.y],
+            c2 = [Q.x - (Q.x - P.x) * 0.45, Q.y];
+          for (let k = 0; k <= 24; k++) {
+            const e = k / 24,
+              u = 1 - e;
+            pts.push([
+              u * u * u * P.x + 3 * u * u * e * c1[0] + 3 * u * e * e * c2[0] + e * e * e * Q.x,
+              u * u * u * P.y + 3 * u * u * e * c1[1] + 3 * u * e * e * c2[1] + e * e * e * Q.y,
+            ]);
+          }
+          return pts;
+        }
+        const wseg = [];
+        function wire(P, Q, tag) {
+          const p = bz(P, Q);
+          for (let k = 0; k < 24; k++)
+            wseg.push(p[k][0], p[k][1], tag, p[k + 1][0], p[k + 1][1], tag);
+        }
+        AG.forEach((A, ai) => {
+          const trigs = new Set(runs.filter((r) => r.a === ai).map((r) => r.trig));
+          trigs.forEach((ti) => wire(TRIG[ti], A, ai));
+          A.tools.forEach(([ti]) => wire(A, TOOL[ti], ai));
+        });
+        TOOL.forEach((T) => {
+          wire(T, GATE[0], -1);
+          wire(T, GATE[1], -1);
+        });
+        GATE.forEach((G) => {
+          wire(G, OUT[0], -1);
+          wire(G, OUT[1], -1);
+        });
+        const bufW = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufW);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(wseg), gl.STATIC_DRAW);
+        const wN = wseg.length / 3;
+        /* node rings: kind 0 trig 1 agent 2 tool 3 gate-auto 4 gate-appr 5..7 outs */
+        const nodes = [];
+        TRIG.forEach((n) => nodes.push(n.x, n.y, 0));
+        AG.forEach((n) => nodes.push(n.x, n.y, 1));
+        TOOL.forEach((n) => nodes.push(n.x, n.y, 2));
+        nodes.push(GATE[0].x, GATE[0].y, 3, GATE[1].x, GATE[1].y, 4);
+        OUT.forEach((n, i) => nodes.push(n.x, n.y, 5 + i));
+        const bufN = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufN);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(nodes), gl.STATIC_DRAW);
+        const nN = nodes.length / 3;
+
+        gl.clearColor(0.0196, 0.0275, 0.0392, 1);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE);
+
+        /* ---------- layout / labels ---------- */
+        const labels = document.getElementById('labels');
+        let U = 1,
+          CW = 0,
+          CH = 0;
+        function proj(x, y) {
+          return [CW / 2 + (x - 51) * U, CH / 2 + (y - 26.5) * U];
+        }
+        function makeLabels() {
+          labels.innerHTML = '';
+          const put = (x, y, cls, html) => {
+            const d = document.createElement('div');
+            d.className = 'nl ' + cls;
+            d.innerHTML = html;
+            labels.appendChild(d);
+            const [px, py] = proj(x, y);
+            if (cls === 'left') {
+              d.style.right = CW - px + 24 + 'px';
+              d.style.top = py - 12 + 'px';
+            } else if (cls === 'mid') {
+              d.style.left = px - 60 + 'px';
+              d.style.width = '120px';
+              d.style.top = py + 17 + 'px';
+            } else {
+              d.style.left = px + 16 + 'px';
+              d.style.top = py - 12 + 'px';
+            }
+            return d;
+          };
+          TRIG.forEach((n) =>
+            put(n.x, n.y, 'mid', `<div class="a">${n.n}</div><div class="b">${n.s}</div>`),
+          );
+          AG.forEach((n) =>
+            put(n.x, n.y, 'left', `<div class="a">${n.n}</div><div class="b">${n.s}</div>`),
+          );
+          TOOL.forEach((n) =>
+            put(
+              n.x,
+              n.y,
+              'right',
+              `<div class="a" style="font-size:10.5px;color:var(--mut)">${n.n}</div>`,
+            ),
+          );
+          put(GATE[0].x, GATE[0].y, 'mid', `<div class="a">${GATE[0].n}</div>`);
+          put(
+            GATE[1].x,
+            GATE[1].y,
+            'mid',
+            `<div class="a" style="color:var(--amb)">${GATE[1].n}</div><div class="b" id="qlab"></div>`,
+          );
+          OUT.forEach((n, i) =>
+            put(n.x, n.y, 'right', `<div class="a">${n.n}<b id="ol${i}">0</b></div>`),
+          );
+        }
+        function resize() {
+          CW = innerWidth;
+          CH = innerHeight;
+          canvas.width = CW * DPR;
+          canvas.height = CH * DPR;
+          canvas.style.width = CW + 'px';
+          canvas.style.height = CH + 'px';
+          U = Math.min(CW / 118, CH / 62);
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          makeLabels();
+          needs = true;
+        }
+        addEventListener('resize', resize);
+
+        /* ---------- agent chips ---------- */
+        let hov = -1;
+        const agBox = document.getElementById('agents');
+        AG.forEach((A, i) => {
+          const d = document.createElement('div');
+          d.className = 'ag';
+          d.innerHTML = `<span class="tier">${A.tier}</span><span class="nm">${A.n}</span><b>${fmt(agCount[i])}</b>`;
+          d.onmouseenter = () => {
+            hov = i;
+            d.classList.add('on');
+            needs = true;
+          };
+          d.onmouseleave = () => {
+            hov = -1;
+            d.classList.remove('on');
+            needs = true;
+          };
+          agBox.appendChild(d);
+        });
+
+        /* ---------- playback ---------- */
+        let T = 5.2,
+          playing = !reduced,
+          needs = true,
+          last = performance.now(),
+          hidden = false;
+        const SPEED = 24 / 20; /* 20 s replay */
+        if (reduced) {
+          T = Math.min(23.5, peakT + 0.02);
+        }
+        const rng = document.getElementById('rng'),
+          clock = document.getElementById('clock'),
+          playBtn = document.getElementById('play'),
+          cap = document.getElementById('cap');
+        playBtn.textContent = playing ? 'PAUSE' : 'REPLAY';
+        playBtn.onclick = () => {
+          if (!playing && T >= 24) T = 5.2;
+          playing = !playing;
+          playBtn.textContent = playing ? 'PAUSE' : T >= 24 ? 'REPLAY' : 'RESUME';
+          needs = true;
+          if (playing) {
+            last = performance.now();
+            loop();
+          }
+        };
+        rng.oninput = () => {
+          T = +rng.value;
+          playing = false;
+          playBtn.textContent = T >= 24 ? 'REPLAY' : 'RESUME';
+          needs = true;
+          draw();
+        };
+        document.addEventListener('visibilitychange', () => {
+          hidden = document.hidden;
+          if (!hidden && playing) {
+            last = performance.now();
+            loop();
+          }
+        });
+
+        /* ---------- counters & caption ---------- */
+        const cRun = document.getElementById('cRun'),
+          cWait = document.getElementById('cWait'),
+          cShip = document.getElementById('cShip'),
+          cNeed = document.getElementById('cNeed'),
+          cFail = document.getElementById('cFail'),
+          sWait = document.getElementById('sWait');
+        let capIdx = -1;
+        function hud() {
+          let run = 0,
+            wait = 0,
+            ship = 0,
+            need = 0,
+            fail = 0;
+          for (const r of runs) {
+            if (T < r.t0) continue;
+            if (r.t7 < 90 && T >= r.t7) {
+              if (r.o === 0) ship++;
+              else if (r.o === 1) need++;
+              else fail++;
+              continue;
+            }
+            if (r.appr && T >= r.t5 && T < Math.min(r.t6, 90)) wait++;
+            else run++;
+          }
+          cRun.textContent = fmt(run);
+          cWait.textContent = fmt(wait);
+          cShip.textContent = fmt(ship);
+          cNeed.textContent = fmt(need);
+          cFail.textContent = fmt(fail);
+          sWait.classList.toggle('warn', wait > 25);
+          const ql = document.getElementById('qlab');
+          if (ql) ql.textContent = wait > 0 ? fmt(wait) + ' WAITING' : '';
+          for (let i = 0; i < 3; i++) {
+            const el = document.getElementById('ol' + i);
+            if (el) el.textContent = fmt(i === 0 ? ship : i === 1 ? need : fail);
+          }
+          clock.textContent = hh(Math.min(T, 23.999));
+          rng.value = T;
+          let ci = -1;
+          for (let i = 0; i < CAPS.length; i++) if (T >= CAPS[i][0]) ci = i;
+          if (ci !== capIdx) {
+            capIdx = ci;
+            if (ci < 0) {
+              cap.classList.remove('show');
+            } else {
+              cap.innerHTML = CAPS[ci][1];
+              cap.classList.add('show');
+            }
+          }
+          return wait;
+        }
+
+        /* ---------- draw ---------- */
+        function setCommon(p) {
+          gl.uniform1f(gl.getUniformLocation(p, 'uU'), U * DPR);
+          gl.uniform2f(gl.getUniformLocation(p, 'uVP'), CW * DPR, CH * DPR);
+          gl.uniform2f(gl.getUniformLocation(p, 'uC'), 51, 26.5);
+        }
+        function draw() {
+          const wait = hud();
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          /* wires */
+          gl.useProgram(P2);
+          setCommon(P2);
+          gl.uniform1f(gl.getUniformLocation(P2, 'uHov'), hov);
+          gl.bindBuffer(gl.ARRAY_BUFFER, bufW);
+          const aP = gl.getAttribLocation(P2, 'aP'),
+            aW = gl.getAttribLocation(P2, 'aW');
+          gl.enableVertexAttribArray(aP);
+          gl.vertexAttribPointer(aP, 2, gl.FLOAT, false, 12, 0);
+          gl.enableVertexAttribArray(aW);
+          gl.vertexAttribPointer(aW, 1, gl.FLOAT, false, 12, 8);
+          gl.drawArrays(gl.LINES, 0, wN);
+          gl.disableVertexAttribArray(aW);
+          /* rings */
+          gl.useProgram(P3);
+          setCommon(P3);
+          gl.uniform1f(gl.getUniformLocation(P3, 'uDPR'), DPR);
+          gl.uniform1f(gl.getUniformLocation(P3, 'uQ'), Math.min(1, wait / 140));
+          gl.bindBuffer(gl.ARRAY_BUFFER, bufN);
+          const aPn = gl.getAttribLocation(P3, 'aP');
+          gl.enableVertexAttribArray(aPn);
+          gl.vertexAttribPointer(aPn, 3, gl.FLOAT, false, 12, 0);
+          gl.drawArrays(gl.POINTS, 0, nN);
+          /* runs: trails then main */
+          gl.useProgram(P1);
+          setCommon(P1);
+          gl.uniform1f(gl.getUniformLocation(P1, 'uDPR'), DPR);
+          gl.uniform1f(gl.getUniformLocation(P1, 'uT'), T);
+          gl.uniform1f(gl.getUniformLocation(P1, 'uMotion'), reduced ? 0 : 1);
+          gl.uniform1f(gl.getUniformLocation(P1, 'uHov'), hov);
+          gl.bindBuffer(gl.ARRAY_BUFFER, bufR);
+          attR.forEach((loc, k) => {
+            gl.enableVertexAttribArray(loc);
+            gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 96, k * 16);
+          });
+          const offs = reduced ? [0] : [0.18, 0.135, 0.09, 0.045, 0];
+          const uOff = gl.getUniformLocation(P1, 'uOff');
+          for (const o of offs) {
+            gl.uniform1f(uOff, o);
+            gl.drawArrays(gl.POINTS, 0, N);
+          }
+        }
+        function loop() {
+          if (hidden || !playing) return;
+          const now = performance.now(),
+            dt = (now - last) / 1000;
+          last = now;
+          T += dt * SPEED;
+          if (T >= 24) {
+            T = 24;
+            playing = false;
+            playBtn.textContent = 'REPLAY';
+          }
+          draw();
+          if (playing) requestAnimationFrame(loop);
+        }
+        resize();
+        draw();
+        if (playing) {
+          last = performance.now();
+          requestAnimationFrame(loop);
+        }
+        /* render-on-demand when paused */
+        setInterval(() => {
+          if (!playing && needs && !hidden) {
+            needs = false;
+            draw();
+          }
+        }, 120);
+      }
+    </script>
+  </body>
+</html>

@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 
 const now = '2026-08-17T12:00:00.000Z';
+const attentionApprovalGroupKey = 'a'.repeat(64);
 
 const emptyLifecycleCounts = {
   experimental: 0,
@@ -24,18 +25,18 @@ const emptyRunStateCounts = {
 };
 
 const attentionItem = {
-  id: 'execution_approval:14141414-1414-4141-8141-141414141414',
+  id: `execution_approval:${attentionApprovalGroupKey}`,
   kind: 'execution_approval',
   shelf: 'decide',
-  headline: 'Daily Briefing asks for bounded authority',
-  delta: 'One release · read-only calendar access · about $0.40 per run',
+  headline: 'Daily Briefing wants authority for one run.',
+  delta: 'Calendar read access · up to $0.40 per run',
   status: 'decide',
   primaryAction: {
     kind: 'approve_run',
     label: 'Review and approve',
     consequence: 'Allows only matching work inside these limits.',
     undo: 'Revoke the grant to stop later matching work.',
-    resourceId: '14141414-1414-4141-8141-141414141414',
+    resourceId: attentionApprovalGroupKey,
     requiresRationale: true,
   },
   secondaryAction: {
@@ -43,7 +44,7 @@ const attentionItem = {
     label: 'Reject request',
     consequence: 'Cancels this run and records your reason.',
     undo: 'Create a new request after its limits change.',
-    resourceId: '14141414-1414-4141-8141-141414141414',
+    resourceId: attentionApprovalGroupKey,
     requiresRationale: true,
   },
   cost: { period: 'run', usd: 0.4, budgetUsd: 0.5 },
@@ -67,6 +68,9 @@ const attentionItem = {
     releaseId: '16161616-1616-4161-8161-161616161616',
     evaluationId: null,
     expiresAt: null,
+    approvalGroupKey: attentionApprovalGroupKey,
+    requestCount: 1,
+    subject: { name: 'Daily Briefing', kind: 'agent', version: '1.0.0' },
     reviewFacts: [
       { label: 'Release', value: 'Daily Briefing production release' },
       { label: 'Authority', value: 'Calendar — read only' },
@@ -75,7 +79,7 @@ const attentionItem = {
   },
 };
 
-function json(body: object, status = 200) {
+function json(body: unknown, status = 200) {
   return {
     status,
     contentType: 'application/json',
@@ -146,18 +150,7 @@ export async function stubConsoleReadModels(
     }
 
     if (path.startsWith('/v1/production-channels/')) {
-      await route.fulfill(
-        json({
-          key: path.slice('/v1/production-channels/'.length),
-          projectId: null,
-          currentReleaseId: null,
-          currentReleaseDigest: null,
-          priorReleaseId: null,
-          promotedBy: null,
-          promotedAt: null,
-          updatedAt: now,
-        }),
-      );
+      await route.fulfill(json(null));
       return;
     }
 

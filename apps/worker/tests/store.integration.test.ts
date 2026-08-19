@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   ApprovalRequestState,
+  AutomationBackoff,
   AuthorityGrantState,
   ContextClassification,
   ExecutionRunState,
@@ -25,6 +26,7 @@ import {
 import type { WorkerConfig } from '../src/config.js';
 import { ExecutionEngine } from '../src/engine.js';
 import { PrismaWorkerStore } from '../src/store.js';
+import type { ClaimedRun } from '../src/types.js';
 
 const databaseEnabled = process.env['RUN_DATABASE_INTEGRATION'] === 'true';
 const describeDatabase = databaseEnabled ? describe : describe.skip;
@@ -162,6 +164,7 @@ async function createRun(
   grant: AuthorityGrant,
   estimatedUpperCostUsd = 0.1,
   developmentDraft = true,
+  retryBackoff: AutomationBackoff = AutomationBackoff.EXPONENTIAL,
 ): Promise<ExecutionRun> {
   const entry = await prisma.releaseResource.findFirstOrThrow({
     where: { releaseId: release.id, kind: ResourceKind.SKILL },
@@ -195,6 +198,7 @@ async function createRun(
       maxEstimatedCostUsd: estimatedUpperCostUsd,
       estimatedUpperCostUsd,
       pricingVersion: config.pricing.version,
+      retryBackoff,
       idempotencyKey: `worker-test:${randomUUID()}`,
       requestedBy: 'worker-test',
     },
@@ -211,6 +215,7 @@ async function fixture(
     projectId?: string;
     developmentDraft?: boolean;
     contextDigest?: string;
+    retryBackoff?: AutomationBackoff;
   } = {},
 ): Promise<Fixture> {
   const release = await dailyBriefRelease(options.projectId ?? null);
@@ -245,7 +250,33 @@ async function fixture(
       grant,
       options.estimatedUpperCostUsd,
       options.developmentDraft ?? true,
+      options.retryBackoff ?? AutomationBackoff.EXPONENTIAL,
     ),
+  };
+}
+
+function claimedForRetry(run: ExecutionRun): ClaimedRun {
+  return {
+    id: run.id,
+    releaseId: run.releaseId,
+    releaseDigest: run.releaseDigest,
+    entryResourceVersionId: run.entryResourceVersionId as string,
+    contextDigest: run.contextDigest,
+    authorityGrantId: run.authorityGrantId as string,
+    developmentDraft: run.developmentDraft,
+    productionEpoch: null,
+    input,
+    providerKind: 'deterministic',
+    providerVersion: run.providerVersion,
+    model: run.model,
+    pricingVersion: run.pricingVersion,
+    maxInputTokens: run.maxInputTokens,
+    maxOutputTokens: run.maxOutputTokens,
+    maxEstimatedCostUsd: Number(run.maxEstimatedCostUsd),
+    estimatedUpperCostUsd: Number(run.estimatedUpperCostUsd),
+    attempts: run.attempts,
+    maxAttempts: run.maxAttempts,
+    retryBackoff: run.retryBackoff === AutomationBackoff.FIXED ? 'fixed' : 'exponential',
   };
 }
 
@@ -451,14 +482,24 @@ describeDatabase('PrismaWorkerStore integration', () => {
 
     await expect(store.claimNext(`worker:${randomUUID()}`, 5_000)).resolves.toBeNull();
 
-    const [run, grant] = await Promise.all([
+    const [run, grant, approval] = await Promise.all([
       prisma.executionRun.findUniqueOrThrow({ where: { id: created.run.id } }),
       prisma.authorityGrant.findUniqueOrThrow({ where: { id: created.grant.id } }),
+      prisma.approvalRequest.findUniqueOrThrow({ where: { runId: created.run.id } }),
     ]);
     expect(run.state).toBe(ExecutionRunState.AWAITING_APPROVAL);
     expect(run.message).toContain('no longer the current production release');
     expect(grant.usedRuns).toBe(0);
     expect(Number(grant.reservedCostUsd)).toBe(0);
+    expect(approval).toMatchObject({
+      state: ApprovalRequestState.PENDING,
+      requestVersion: 2,
+      decisionGroupKey: null,
+      decisionGroupSize: null,
+      decidedBy: null,
+      rationale: null,
+      decidedAt: null,
+    });
   });
 
   it('requires a human-approved first run for the exact production epoch', async () => {
@@ -468,9 +509,21 @@ describeDatabase('PrismaWorkerStore integration', () => {
 
     await expect(store.claimNext(`worker:${randomUUID()}`, 5_000)).resolves.toBeNull();
 
-    const run = await prisma.executionRun.findUniqueOrThrow({ where: { id: created.run.id } });
+    const [run, approval] = await Promise.all([
+      prisma.executionRun.findUniqueOrThrow({ where: { id: created.run.id } }),
+      prisma.approvalRequest.findUniqueOrThrow({ where: { runId: created.run.id } }),
+    ]);
     expect(run.state).toBe(ExecutionRunState.AWAITING_APPROVAL);
     expect(run.message).toContain('requires human approval');
+    expect(approval).toMatchObject({
+      state: ApprovalRequestState.PENDING,
+      requestVersion: 1,
+      decisionGroupKey: null,
+      decisionGroupSize: null,
+      decidedBy: null,
+      rationale: null,
+      decidedAt: null,
+    });
   });
 
   it('does not reuse first-run approval after the same release enters a new epoch', async () => {
@@ -485,9 +538,21 @@ describeDatabase('PrismaWorkerStore integration', () => {
 
     await expect(store.claimNext(`worker:${randomUUID()}`, 5_000)).resolves.toBeNull();
 
-    const run = await prisma.executionRun.findUniqueOrThrow({ where: { id: created.run.id } });
+    const [run, approval] = await Promise.all([
+      prisma.executionRun.findUniqueOrThrow({ where: { id: created.run.id } }),
+      prisma.approvalRequest.findUniqueOrThrow({ where: { runId: created.run.id } }),
+    ]);
     expect(run.state).toBe(ExecutionRunState.AWAITING_APPROVAL);
     expect(run.message).toContain('requires human approval');
+    expect(approval).toMatchObject({
+      state: ApprovalRequestState.PENDING,
+      requestVersion: 2,
+      decisionGroupKey: null,
+      decisionGroupSize: null,
+      decidedBy: null,
+      rationale: null,
+      decidedAt: null,
+    });
   });
 
   it('discards an in-flight result and records its cost after the production pointer moves', async () => {
@@ -793,6 +858,103 @@ describeDatabase('PrismaWorkerStore integration', () => {
     expect(grant.usedRuns).toBe(1);
     expect(costMetric?.value).toBeGreaterThan(0);
     expect(outcome).toBeNull();
+    await prisma.executionRun.update({
+      where: { id: created.run.id },
+      data: { updatedAt: new Date(Date.now() - 10_000) },
+    });
+    const cleanupClaim = await store.claimNext('worker:retry-cleanup', 5_000);
+    expect(cleanupClaim?.id).toBe(created.run.id);
+    if (cleanupClaim !== null) {
+      await store.cancelClaimed(cleanupClaim.id, 'worker:retry-cleanup');
+    }
+  });
+
+  it('uses the run-snapshotted fixed or exponential strategy for retry delay and eligibility', async () => {
+    const [fixed, exponential] = await Promise.all([
+      fixture({ retryBackoff: AutomationBackoff.FIXED }),
+      fixture({ retryBackoff: AutomationBackoff.EXPONENTIAL }),
+    ]);
+    await prisma.$transaction([
+      prisma.executionRun.update({
+        where: { id: fixed.run.id },
+        data: {
+          state: ExecutionRunState.RUNNING,
+          attempts: 2,
+          leaseOwner: 'worker:fixed-policy',
+          leaseExpiresAt: new Date(Date.now() + 5_000),
+        },
+      }),
+      prisma.executionRun.update({
+        where: { id: exponential.run.id },
+        data: {
+          state: ExecutionRunState.RUNNING,
+          attempts: 2,
+          leaseOwner: 'worker:exponential-policy',
+          leaseExpiresAt: new Date(Date.now() + 5_000),
+        },
+      }),
+      prisma.runStep.create({
+        data: {
+          runId: fixed.run.id,
+          stepKey: 'model-execution',
+          idempotencyKey: `${fixed.run.id}:model-execution`,
+          state: 'running',
+          result: { attempt: 2 },
+        },
+      }),
+      prisma.runStep.create({
+        data: {
+          runId: exponential.run.id,
+          stepKey: 'model-execution',
+          idempotencyKey: `${exponential.run.id}:model-execution`,
+          state: 'running',
+          result: { attempt: 2 },
+        },
+      }),
+    ]);
+    const [fixedRun, exponentialRun] = await Promise.all([
+      prisma.executionRun.findUniqueOrThrow({ where: { id: fixed.run.id } }),
+      prisma.executionRun.findUniqueOrThrow({ where: { id: exponential.run.id } }),
+    ]);
+
+    await expect(
+      store.failOrRetry(
+        claimedForRetry(fixedRun),
+        'worker:fixed-policy',
+        'RETRYABLE_TEST_FAILURE',
+        true,
+      ),
+    ).resolves.toMatchObject({ state: 'queued', retryAfterMs: 1_000 });
+    await expect(
+      store.failOrRetry(
+        claimedForRetry(exponentialRun),
+        'worker:exponential-policy',
+        'RETRYABLE_TEST_FAILURE',
+        true,
+      ),
+    ).resolves.toMatchObject({ state: 'queued', retryAfterMs: 4_000 });
+
+    const eligibilityTime = new Date(Date.now() - 1_500);
+    await prisma.executionRun.updateMany({
+      where: { id: { in: [fixed.run.id, exponential.run.id] } },
+      data: { updatedAt: eligibilityTime },
+    });
+    const fixedClaim = await store.claimNext('worker:fixed-eligibility', 5_000);
+    expect(fixedClaim?.id).toBe(fixed.run.id);
+    if (fixedClaim !== null) {
+      expect(fixedClaim.retryBackoff).toBe('fixed');
+      await store.cancelClaimed(fixedClaim.id, 'worker:fixed-eligibility');
+    }
+
+    await prisma.executionRun.update({
+      where: { id: exponential.run.id },
+      data: { updatedAt: new Date(Date.now() - 10_000) },
+    });
+    const exponentialClaim = await store.claimNext('worker:exponential-cleanup', 5_000);
+    expect(exponentialClaim?.id).toBe(exponential.run.id);
+    if (exponentialClaim !== null) {
+      await store.cancelClaimed(exponentialClaim.id, 'worker:exponential-cleanup');
+    }
   });
 
   it('charges maxRuns once per logical run while reserving cost for every retry attempt', async () => {

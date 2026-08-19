@@ -15,6 +15,7 @@ export const interpretationId = '99999999-9999-4999-8999-999999999999';
 export const platformResourceId = '12121212-1212-4121-8121-121212121212';
 const platformFamilyId = '13131313-1313-4131-8131-131313131313';
 export const executionRunId = '14141414-1414-4141-8141-141414141414';
+export const attentionApprovalGroupKey = 'f'.repeat(64);
 export const authorityGrantId = '15151515-1515-4151-8151-151515151515';
 const releaseId = '16161616-1616-4161-8161-161616161616';
 const outcomeId = '17171717-1717-4171-8171-171717171717';
@@ -368,42 +369,44 @@ export function resetFixtures() {
 }
 
 function attentionItem() {
+  const requestCount = 4;
   return {
-    id: `execution_approval:${executionRunId}`,
+    id: `execution_approval:${attentionApprovalGroupKey}`,
     kind: 'execution_approval' as const,
     shelf: 'decide' as const,
-    headline: 'Daily Briefing is ready for its first approved run',
-    delta: 'One new immutable release asks to run with read-only calendar access.',
+    headline: `Daily Briefing wants authority for ${requestCount} runs.`,
+    delta: 'Calendar — read only · up to $0.12 per run',
     status: 'decide' as const,
     primaryAction: {
       kind: 'approve_run' as const,
       label: 'Review and approve',
-      consequence: 'Approves this exact release, input, scope, context, and budget envelope.',
-      undo: 'Revoke the grant at any time to stop later matching runs.',
-      resourceId: executionRunId,
+      consequence: `Queues these ${requestCount} runs under one bounded grant. Matching future runs may use it until its limits or expiry.`,
+      undo: 'Revoke the grant to prevent later matching runs from using it.',
+      resourceId: attentionApprovalGroupKey,
       requiresRationale: true,
     },
     secondaryAction: {
       kind: 'reject_run' as const,
       label: 'Reject request',
-      consequence: 'Cancels this run and records the reason without granting authority.',
+      consequence: `Cancels these ${requestCount} pending runs and records your reason.`,
       undo: 'Create a new request if its scope or evidence changes.',
-      resourceId: executionRunId,
+      resourceId: attentionApprovalGroupKey,
       requiresRationale: true,
     },
-    cost: { period: 'run' as const, usd: 0.4, budgetUsd: 0.5 },
-    reason: 'The first run of every newly promoted release requires your approval.',
+    cost: { period: 'run' as const, usd: 0.12, budgetUsd: 0.25 },
+    reason:
+      'Without approval, Daily Briefing remains paused and performs no work for these requests.',
     provenance: {
-      sourceType: 'execution_run',
-      sourceId: executionRunId,
-      actorId: 'test-operator',
-      requestId: 'test-request',
-      explanation: 'A human-started production run reached its first-run authority gate.',
+      sourceType: 'ApprovalRequestGroup',
+      sourceId: attentionApprovalGroupKey,
+      actorId: null,
+      requestId: null,
+      explanation: `The execution service grouped ${requestCount} exact pending runs with the same authority requirements.`,
     },
     occurredAt: now,
     payload: {
-      sourceType: 'execution_run',
-      sourceId: executionRunId,
+      sourceType: 'ApprovalRequestGroup',
+      sourceId: attentionApprovalGroupKey,
       detailPath: `/runs?run=${executionRunId}`,
       scopes: ['Calendar — read only'],
       runId: executionRunId,
@@ -411,13 +414,18 @@ function attentionItem() {
       channelKey: null,
       releaseId,
       evaluationId: null,
-      expiresAt: '2026-08-01T14:00:00.000Z',
+      expiresAt: null,
+      approvalGroupKey: attentionApprovalGroupKey,
+      requestCount,
+      subject: { name: 'Daily Briefing', kind: 'agent', version: '1.0.0' },
       reviewFacts: [
-        { label: 'Release', value: 'Daily Briefing · immutable production digest' },
+        { label: 'Subject', value: 'Daily Briefing · agent 1.0.0' },
+        { label: 'Requests', value: `${requestCount} matching pending runs` },
         { label: 'Authority', value: 'Calendar — read only' },
-        { label: 'Budget', value: 'About $0.40 per run · $0.50 maximum' },
+        { label: 'Immutable digest', value: 'b'.repeat(64) },
+        { label: 'Requester', value: 'worker-test' },
       ],
-      metadata: {},
+      metadata: { runIds: [executionRunId], releaseDigest: 'b'.repeat(64) },
     },
   };
 }
@@ -427,8 +435,8 @@ function degradedAttentionItem() {
     id: `stalled_run:${executionRunId}`,
     kind: 'stalled_run' as const,
     shelf: 'degraded' as const,
-    headline: 'One run exhausted its retry limit',
-    delta: 'Three attempts failed · no outcome was published.',
+    headline: 'Daily Briefing failed before producing an outcome.',
+    delta: '40% complete · no new work can proceed',
     status: 'degraded' as const,
     primaryAction: {
       kind: 'open_details' as const,
@@ -447,7 +455,8 @@ function degradedAttentionItem() {
       requiresRationale: true,
     },
     cost: { period: 'run' as const, usd: 0.12, budgetUsd: 0.5 },
-    reason: 'The worker exhausted the configured retry policy without producing an outcome.',
+    reason:
+      'Daily Briefing produced no outcome, and acknowledgement is available only after reviewing its recorder.',
     provenance: {
       sourceType: 'execution_run',
       sourceId: executionRunId,
@@ -467,7 +476,11 @@ function degradedAttentionItem() {
       releaseId,
       evaluationId: null,
       expiresAt: null,
+      approvalGroupKey: null,
+      requestCount: 1,
+      subject: { name: 'Daily Briefing', kind: 'agent', version: '1.0.0' },
       reviewFacts: [
+        { label: 'Subject', value: 'Daily Briefing · agent 1.0.0' },
         { label: 'Run state', value: 'Failed after the final retry' },
         { label: 'Cost', value: '$0.12 incurred' },
       ],
@@ -688,6 +701,7 @@ function platformRun() {
     id: executionRunId,
     releaseId,
     entryResourceVersionId: platformResourceId,
+    entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
     legacyEntrypointUnresolved: false as const,
     releaseDigest: 'b'.repeat(64),
     contextDigest: 'd'.repeat(64),
@@ -724,6 +738,8 @@ function platformRun() {
         ? 'Awaiting a bounded authority envelope'
         : 'Execution queued',
     attempts: 0,
+    maxAttempts: 3,
+    retryBackoff: 'exponential' as const,
     error: null,
     requestedBy: 'test-operator',
     startedAt: null,
@@ -757,6 +773,7 @@ function authorityGrant() {
     id: authorityGrantId,
     releaseId,
     entryResourceVersionId: platformResourceId,
+    entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
     releaseDigest: 'b'.repeat(64),
     contextDigest: 'd'.repeat(64),
     projectId: 'daily-operations',
@@ -782,10 +799,11 @@ function authorityGrant() {
 function automationSchedule() {
   return {
     id: automationScheduleId,
-    name: 'Daily operations briefing',
+    name: `Compose daily brief ${automationScheduleId}`,
     channelKey: 'daily-operations',
     releaseId,
     entryResourceVersionId: platformResourceId,
+    entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
     releaseDigest: 'b'.repeat(64),
     projectId: 'daily-operations',
     authorityGrantId,
@@ -1018,15 +1036,53 @@ export const handlers = [
       item: String(params.itemId).startsWith('stalled_run')
         ? degradedAttentionItem()
         : attentionItem(),
+      membership: String(params.itemId).startsWith('stalled_run')
+        ? null
+        : {
+            exactCount: 4,
+            records: [
+              '30303030-3030-4030-8030-303030303031',
+              '30303030-3030-4030-8030-303030303032',
+              '30303030-3030-4030-8030-303030303033',
+              '30303030-3030-4030-8030-303030303034',
+            ].map((approvalRequestId, index) => ({
+              label: `Authority request ${String(index + 1).padStart(2, '0')}`,
+              subject: { name: 'Daily Briefing', kind: 'agent', version: '1.0.0' },
+              occurredAt: `2026-07-30T10:0${index}:00.000Z`,
+              evidence: [
+                {
+                  label: 'Decision match',
+                  value: 'Exact authority, input, retry, and cost requirements match this group.',
+                },
+              ],
+              technicalReferences: [
+                { label: 'Approval request', value: approvalRequestId },
+                {
+                  label: 'Execution run',
+                  value:
+                    index === 0 ? executionRunId : `31313131-3131-4131-8131-31313131313${index}`,
+                },
+              ],
+            })),
+          },
       timeline: [
         {
           id: '26262626-2626-4262-8262-262626262626',
-          phase: 'authority-check',
-          state: 'awaiting_approval',
-          message: 'The immutable release is waiting for its first human authority decision.',
+          phase: 'model-execution',
+          state: 'succeeded',
+          message: 'Model execution succeeded.',
           durationMs: 18,
-          costUsd: 0,
-          occurredAt: now,
+          costUsd: 0.0042,
+          occurredAt: '2026-07-31T14:00:02.000Z',
+        },
+        {
+          id: '27272727-2727-4272-8272-272727272727',
+          phase: 'worker-claimed',
+          state: 'running',
+          message: 'The worker claimed the run.',
+          durationMs: null,
+          costUsd: null,
+          occurredAt: '2026-07-31T14:00:01.000Z',
         },
       ],
       details: { releaseDigest: 'a'.repeat(64), toolScopeCount: 1 },
@@ -1218,6 +1274,69 @@ export const handlers = [
 
   http.get('http://localhost/v1/execution-runs', () =>
     HttpResponse.json({ items: [platformRun()], total: 80, countsByState: executionRunCounts() }),
+  ),
+
+  http.get(`http://localhost/v1/execution-runs/${executionRunId}`, () =>
+    HttpResponse.json(platformRun()),
+  ),
+
+  http.post(
+    `http://localhost/v1/execution-approval-groups/${attentionApprovalGroupKey}/approve`,
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        maxRuns?: unknown;
+        totalCostBudgetUsd?: unknown;
+        pluginScopes?: unknown;
+      };
+      lastPluginApprovalScopes = Array.isArray(body.pluginScopes) ? body.pluginScopes : null;
+      if (
+        typeof body.maxRuns !== 'number' ||
+        body.maxRuns < 4 ||
+        typeof body.totalCostBudgetUsd !== 'number' ||
+        body.totalCostBudgetUsd < 0.48
+      ) {
+        return HttpResponse.json(
+          {
+            error: {
+              code: 'AUTHORITY_ENVELOPE_INSUFFICIENT',
+              message: 'Approval must cover every reviewed matching run.',
+              requestId: 'test-request',
+            },
+          },
+          { status: 422 },
+        );
+      }
+      platformRunState = 'queued';
+      return HttpResponse.json({
+        groupKey: attentionApprovalGroupKey,
+        grant: authorityGrant(),
+        runs: [platformRun()],
+      });
+    },
+  ),
+
+  http.post(
+    `http://localhost/v1/execution-approval-groups/${attentionApprovalGroupKey}/reject`,
+    async ({ request }) => {
+      const body = (await request.json()) as { rationale?: unknown };
+      if (typeof body.rationale !== 'string' || body.rationale.trim().length < 10) {
+        return HttpResponse.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'A rationale of at least 10 characters is required.',
+              requestId: 'test-request',
+            },
+          },
+          { status: 400 },
+        );
+      }
+      platformRunState = 'cancelled';
+      return HttpResponse.json({
+        groupKey: attentionApprovalGroupKey,
+        runs: [platformRun()],
+      });
+    },
   ),
 
   http.post(`http://localhost/v1/execution-runs/${executionRunId}/approve`, async ({ request }) => {

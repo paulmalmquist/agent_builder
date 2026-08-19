@@ -3,20 +3,24 @@ import {
   consoleActionCopy,
   consoleCriticalCopy,
   type AutomationSchedule,
+  type AuthorityGrant,
   type ExecutionRun,
+  uuidSchema,
 } from '@agent-builder/contracts';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   useApproveExecutionRun,
   useAutomationSchedules,
   useAuthorityGrants,
   useCancelExecutionRun,
+  useExecutionRun,
   useExecutionRuns,
   useRevokeAuthorityGrant,
   useUpdateAutomationScheduleState,
 } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Notice } from '../../components/Notice';
+import { featureFlags } from '../../config/feature-flags';
 import { ApprovalDialog } from './ApprovalDialog';
 import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
 import { GovernedActionDialog } from './GovernedActionDialog';
@@ -25,15 +29,92 @@ function money(value: number | null) {
   return value === null ? '—' : `$${value.toFixed(value < 1 ? 4 : 2)}`;
 }
 
+function actualCost(value: number | null) {
+  return value === null ? 'NOT RECORDED' : money(value);
+}
+
 function time(value: string | null) {
   return value ? new Date(value).toLocaleString() : 'Not started';
 }
 
 function elapsed(start: string | null, end: string | null) {
-  if (start === null || end === null) return '—';
+  if (start === null || end === null) return 'Not started';
   const milliseconds = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
   if (milliseconds < 1_000) return `${milliseconds} ms`;
   return `${(milliseconds / 1_000).toFixed(milliseconds < 10_000 ? 1 : 0)} s`;
+}
+
+function subjectName(subject: ExecutionRun['entrySubject']) {
+  return subject?.name ?? 'Execution subject unavailable';
+}
+
+function subjectDescriptor(subject: ExecutionRun['entrySubject']) {
+  return subject === null
+    ? 'Exact entry subject unavailable'
+    : `${subject.name} · ${subject.kind.replaceAll('_', ' ')} · version ${subject.version}`;
+}
+
+function ExactReleaseBinding({
+  authoredName = null,
+  entryResourceVersionId,
+  releaseDigest,
+  releaseId,
+  subject = null,
+}: {
+  authoredName?: string | null;
+  entryResourceVersionId: string;
+  releaseDigest: string;
+  releaseId: string;
+  subject?: ExecutionRun['entrySubject'];
+}) {
+  return (
+    <details className="run-release-binding">
+      <summary>EXACT RELEASE REFERENCE</summary>
+      <dl>
+        {authoredName ? (
+          <div>
+            <dt>AUTHORED SCHEDULE NAME</dt>
+            <dd>{authoredName}</dd>
+          </div>
+        ) : null}
+        {subject ? (
+          <div>
+            <dt>ENTRY SUBJECT</dt>
+            <dd>{subjectDescriptor(subject)}</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>RELEASE DIGEST</dt>
+          <dd>
+            <code>{releaseDigest}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>RELEASE RECORD</dt>
+          <dd>
+            <code>{releaseId}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>ENTRY RESOURCE VERSION</dt>
+          <dd>
+            <code>{entryResourceVersionId}</code>
+          </dd>
+        </div>
+      </dl>
+      <p>Exact identifiers are subordinate audit references, not user-facing names.</p>
+    </details>
+  );
+}
+
+function runMessage(run: ExecutionRun) {
+  if (run.state === 'failed' && /^execution failed$/iu.test(run.message.trim())) {
+    return 'No specific failure reason was recorded.';
+  }
+  if (run.state === 'cancelled' && /^cancelled$/iu.test(run.message.trim())) {
+    return 'The execution was cancelled before a usable outcome was recorded.';
+  }
+  return run.message;
 }
 
 function PluginScopeSummary({ scopes }: { scopes: ExecutionRun['requiredPluginScopes'] }) {
@@ -57,15 +138,16 @@ function PluginScopeSummary({ scopes }: { scopes: ExecutionRun['requiredPluginSc
 
 function RunFlightRecorder({ run }: { run: ExecutionRun }) {
   const terminal = ['succeeded', 'failed', 'cancelled'].includes(run.state);
+  const runSubjectName = subjectName(run.entrySubject);
   return (
     <details className="run-flight-recorder">
       <summary>
         <span>FLIGHT RECORDER</span>
         <span>
-          {run.progress}% · {money(run.actualCostUsd)}
+          {run.progress}% · COST {actualCost(run.actualCostUsd)}
         </span>
       </summary>
-      <ol aria-label={`Run ${run.id.slice(0, 8)} phases`}>
+      <ol aria-label={`${runSubjectName} execution phases`}>
         <li data-phase-state="complete">
           <span>01</span>
           <div>
@@ -112,7 +194,7 @@ function RunFlightRecorder({ run }: { run: ExecutionRun }) {
         </li>
       </ol>
       <footer>
-        <span>ACTUAL COST · {money(run.actualCostUsd)}</span>
+        <span>ACTUAL COST · {actualCost(run.actualCostUsd)}</span>
         <span>CEILING · {money(run.maxEstimatedCostUsd)}</span>
         <span>ATTEMPTS · {run.attempts}</span>
       </footer>
@@ -187,7 +269,9 @@ function ScheduleStateControl({
   return (
     <form className="schedule-state-form" onSubmit={submit}>
       <label>
-        <span className="sr-only">Rationale for changing {schedule.name}</span>
+        <span className="sr-only">
+          Rationale for changing {schedule.entrySubject?.name ?? 'automation'} schedule
+        </span>
         <input
           maxLength={2_000}
           minLength={10}
@@ -204,7 +288,12 @@ function ScheduleStateControl({
 }
 
 export function RunsPage() {
+  const [searchParams] = useSearchParams();
+  const requestedRunReference = searchParams.get('run')?.trim() ?? null;
+  const requestedRunResult = uuidSchema.safeParse(requestedRunReference);
+  const requestedRunId = requestedRunResult.success ? requestedRunResult.data : null;
   const runs = useExecutionRuns({ limit: 50 });
+  const requestedRun = useExecutionRun(requestedRunId);
   const grants = useAuthorityGrants({ limit: 50 });
   const schedules = useAutomationSchedules();
   const approve = useApproveExecutionRun();
@@ -212,8 +301,12 @@ export function RunsPage() {
   const revoke = useRevokeAuthorityGrant();
   const updateSchedule = useUpdateAutomationScheduleState();
   const [approvalRun, setApprovalRun] = useState<ExecutionRun | null>(null);
-  const [revocationGrantId, setRevocationGrantId] = useState<string | null>(null);
-  const runItems = runs.isError ? [] : (runs.data?.items ?? []);
+  const [revocationGrant, setRevocationGrant] = useState<AuthorityGrant | null>(null);
+  const listedRunItems = runs.isError ? [] : (runs.data?.items ?? []);
+  const runItems =
+    requestedRun.data && !listedRunItems.some((run) => run.id === requestedRun.data.id)
+      ? [requestedRun.data, ...listedRunItems]
+      : listedRunItems;
   const grantItems = grants.isError ? [] : (grants.data?.items ?? []);
   const scheduleItems = schedules.isError ? [] : (schedules.data?.items ?? []);
   const mutationError = cancel.error ?? revoke.error ?? updateSchedule.error;
@@ -231,6 +324,12 @@ export function RunsPage() {
         <a href="#operate-authority">AUTHORITY</a>
         <a href="#operate-schedules">SCHEDULES</a>
         <Link to="/attention">APPROVALS ↗</Link>
+        {featureFlags.visualSurfacesEnabled ? (
+          <>
+            <Link to="/observatory">FLOW VIEW ↗</Link>
+            <Link to="/wall">SIGNAL WALL ↗</Link>
+          </>
+        ) : null}
       </nav>
       <InstrumentStrip
         readings={[
@@ -260,6 +359,14 @@ export function RunsPage() {
         ]}
       />
       {mutationError ? <Notice tone="error">{getErrorMessage(mutationError)}</Notice> : null}
+      {requestedRunReference !== null && !requestedRunResult.success ? (
+        <Notice tone="error">The requested source run reference is invalid.</Notice>
+      ) : null}
+      {requestedRunId !== null && requestedRun.isError ? (
+        <Notice tone="error">
+          Requested source run unavailable. {getErrorMessage(requestedRun.error)}
+        </Notice>
+      ) : null}
       <div className="runs-layout">
         <section aria-busy={runs.isLoading} className="os-panel" id="operate-runs">
           <header className="os-panel-heading">
@@ -280,26 +387,39 @@ export function RunsPage() {
               </div>
             ) : null}
             {runItems.map((run) => (
-              <article className="run-card" key={run.id}>
+              <article
+                className="run-card"
+                data-source-target={run.id === requestedRunId ? 'true' : undefined}
+                id={`run-${run.id}`}
+                key={run.id}
+              >
                 <header>
                   <div>
-                    <h2>Run {run.id.slice(0, 8)}</h2>
-                    <p>{run.message}</p>
+                    <h2>{subjectName(run.entrySubject)}</h2>
+                    <p>{runMessage(run)}</p>
                   </div>
                   <span className="os-status-chip" data-state={run.state}>
                     {run.state.replaceAll('_', ' ')}
                   </span>
                 </header>
                 <div className="run-metadata">
-                  <code title={run.releaseDigest}>RELEASE · {run.releaseDigest.slice(0, 16)}…</code>
+                  <span>ENTRY · {subjectDescriptor(run.entrySubject)}</span>
+                  <span>RELEASE BINDING · EXACT IMMUTABLE VERSION</span>
                   <span>
                     PROVIDER · {run.providerKind} / {run.model}
                   </span>
                   <span>
-                    COST · {money(run.actualCostUsd)} / {money(run.maxEstimatedCostUsd)} ceiling
+                    COST · {actualCost(run.actualCostUsd)} / {money(run.maxEstimatedCostUsd)}{' '}
+                    ceiling
                   </span>
                   <span>START · {time(run.startedAt)}</span>
                 </div>
+                <ExactReleaseBinding
+                  entryResourceVersionId={run.entryResourceVersionId ?? 'UNRESOLVED'}
+                  releaseDigest={run.releaseDigest}
+                  releaseId={run.releaseId}
+                  subject={run.entrySubject}
+                />
                 <PluginScopeSummary scopes={run.requiredPluginScopes} />
                 <RunFlightRecorder run={run} />
                 <RunContextInspector run={run} />
@@ -352,7 +472,7 @@ export function RunsPage() {
               <article className="approval-card" key={grant.id}>
                 <header>
                   <div>
-                    <h2>Grant {grant.id.slice(0, 8)}</h2>
+                    <h2>{subjectName(grant.entrySubject)} authority</h2>
                     <p>{grant.rationale}</p>
                   </div>
                   <span className="os-status-chip" data-state={grant.state}>
@@ -360,9 +480,8 @@ export function RunsPage() {
                   </span>
                 </header>
                 <div className="run-metadata">
-                  <code title={grant.releaseDigest}>
-                    RELEASE · {grant.releaseDigest.slice(0, 16)}…
-                  </code>
+                  <span>ENTRY · {subjectDescriptor(grant.entrySubject)}</span>
+                  <span>RELEASE BINDING · EXACT IMMUTABLE VERSION</span>
                   <span>
                     RUNS · {grant.usedRuns} / {grant.maxRuns}
                   </span>
@@ -372,6 +491,12 @@ export function RunsPage() {
                   <span>EXPIRES · {time(grant.validUntil)}</span>
                   <span>TOOLS · {grant.toolScopes.join(', ') || 'no legacy tools'}</span>
                 </div>
+                <ExactReleaseBinding
+                  entryResourceVersionId={grant.entryResourceVersionId}
+                  releaseDigest={grant.releaseDigest}
+                  releaseId={grant.releaseId}
+                  subject={grant.entrySubject}
+                />
                 {grant.pluginScopes.length > 0 ? (
                   <div className="run-plugin-scopes">
                     <strong>GRANTED PLUGIN ACCESS</strong>
@@ -389,7 +514,7 @@ export function RunsPage() {
                   <button
                     className="secondary-button run-action"
                     disabled={revoke.isPending}
-                    onClick={() => setRevocationGrantId(grant.id)}
+                    onClick={() => setRevocationGrant(grant)}
                     type="button"
                   >
                     REVOKE AUTHORITY
@@ -428,7 +553,7 @@ export function RunsPage() {
             <article className="resource-card" key={schedule.id}>
               <header>
                 <div>
-                  <h2>{schedule.name}</h2>
+                  <h2>{schedule.entrySubject?.name ?? 'Automation'} schedule</h2>
                   <p>Channel · {schedule.channelKey}</p>
                 </div>
                 <span className="os-status-chip" data-state={schedule.state}>
@@ -436,13 +561,19 @@ export function RunsPage() {
                 </span>
               </header>
               <div className="run-metadata">
-                <code title={schedule.releaseDigest}>
-                  RELEASE · {schedule.releaseDigest.slice(0, 16)}…
-                </code>
+                <span>ENTRY · {subjectDescriptor(schedule.entrySubject)}</span>
+                <span>RELEASE BINDING · EXACT PRODUCTION POINTER</span>
                 <span>NEXT · {time(schedule.nextRunAt)}</span>
                 <span>INTERVAL · {schedule.intervalSeconds.toLocaleString()} seconds</span>
                 <span>AUTHORITY · {schedule.authorityGrantId ? 'BOUND' : 'APPROVAL REQUIRED'}</span>
               </div>
+              <ExactReleaseBinding
+                authoredName={schedule.name}
+                entryResourceVersionId={schedule.entryResourceVersionId}
+                releaseDigest={schedule.releaseDigest}
+                releaseId={schedule.releaseId}
+                subject={schedule.entrySubject}
+              />
               <ScheduleStateControl
                 isPending={updateSchedule.isPending}
                 onUpdate={(state, rationale) =>
@@ -472,18 +603,18 @@ export function RunsPage() {
           run={approvalRun}
         />
       ) : null}
-      {revocationGrantId ? (
+      {revocationGrant ? (
         <GovernedActionDialog
           action={consoleActionCopy.revokeGrant}
           error={revoke.isError ? getErrorMessage(revoke.error) : null}
           introduction={consoleCriticalCopy.authorityRevocation.introduction}
           isPending={revoke.isPending}
           kicker="AUTHORITY REVOCATION"
-          onClose={() => setRevocationGrantId(null)}
+          onClose={() => setRevocationGrant(null)}
           onConfirm={() =>
-            revoke.mutate(revocationGrantId, { onSuccess: () => setRevocationGrantId(null) })
+            revoke.mutate(revocationGrant.id, { onSuccess: () => setRevocationGrant(null) })
           }
-          title={`Revoke grant ${revocationGrantId.slice(0, 8)}`}
+          title={`Revoke ${subjectName(revocationGrant.entrySubject)} authority`}
         />
       ) : null}
     </main>

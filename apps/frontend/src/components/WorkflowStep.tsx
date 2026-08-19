@@ -1,4 +1,5 @@
 import { Icon } from './Icon';
+import { WorkflowDraftingMark, type WorkflowDraftingMarkName } from './WorkflowDraftingMark';
 
 export type WorkflowStepId = 1 | 2 | 3 | 4;
 
@@ -6,7 +7,7 @@ interface WorkflowStepProps {
   step: WorkflowStepId;
   title: string;
   description: string;
-  icon: 'scope' | 'database' | 'code' | 'success';
+  mark: WorkflowDraftingMarkName;
   complete: boolean;
   locked: boolean;
   lockedByStep: WorkflowStepId | null;
@@ -22,7 +23,7 @@ export function WorkflowStep({
   step,
   title,
   description,
-  icon,
+  mark,
   complete,
   locked,
   lockedByStep,
@@ -72,7 +73,7 @@ export function WorkflowStep({
         type="button"
       >
         <span className="step-icon">
-          <Icon name={icon} size={48} />
+          <WorkflowDraftingMark name={mark} />
         </span>
         <span className="step-copy">
           <strong>

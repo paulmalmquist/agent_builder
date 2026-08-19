@@ -14,3 +14,6 @@ separately identifies what the verified Agent Builder baseline already implement
 | 0007 | Provider-neutral model execution                      |
 | 0008 | Evaluation subjects use resource-version foreign keys |
 | 0009 | Legacy API compatibility has a fixed sunset           |
+| 0010 | Identity and isolation prototype                      |
+| 0011 | Workspace-local uniqueness boundary                   |
+| 0012 | Definition, knowledge, and execution graph integrity  |

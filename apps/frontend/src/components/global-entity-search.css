@@ -3,6 +3,12 @@
   gap: 4px;
 }
 
+.global-search-results [role='group'] {
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(10, 12, 17, 0.99);
+}
+
 .global-search-results [role='group'] + [role='group'] {
   margin-top: 4px;
   padding-top: 4px;

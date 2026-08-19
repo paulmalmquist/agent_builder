@@ -37,8 +37,91 @@ function time(value: string) {
   return new Date(value).toLocaleString();
 }
 
-function shortId(value: string | null) {
-  return value === null ? 'NONE' : value.slice(0, 8).toUpperCase();
+const UUID_FRAGMENT =
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/iu;
+const OPAQUE_HEX_FRAGMENT = /\b[0-9a-f]{8,}\b/iu;
+
+function readableWords(value: string) {
+  const trimmed = value.trim();
+  const words = (
+    trimmed.includes(' ') ? trimmed.replace(/[._]+/gu, ' ') : trimmed.replace(/[._-]+/gu, ' ')
+  ).replace(/\s+/gu, ' ');
+  return words.length === 0 ? words : `${words[0]?.toLocaleUpperCase()}${words.slice(1)}`;
+}
+
+function safeCardLabel(value: string, fallback: string) {
+  if (
+    UUID_FRAGMENT.test(value) ||
+    OPAQUE_HEX_FRAGMENT.test(value) ||
+    /\b(?:human|service|system|test|worker)[.:/_-]/iu.test(value) ||
+    /(?:[\\/]|\b[a-z][a-z0-9+.-]*:\/\/)/iu.test(value)
+  ) {
+    return fallback;
+  }
+  const readable = readableWords(value);
+  return readable.length === 0 ? fallback : readable;
+}
+
+function safeCardCopy(value: string, fallback: string) {
+  return safeCardLabel(value, fallback) === fallback
+    ? fallback
+    : value.trim().replace(/\s+/gu, ' ');
+}
+
+function improvementTarget(value: string) {
+  const normalized = value.trim();
+  if (UUID_FRAGMENT.test(normalized) || OPAQUE_HEX_FRAGMENT.test(normalized)) {
+    return 'Governed definition';
+  }
+  const typedTarget = /^(Agent|Skill):([^@]+)@(.+)$/iu.exec(normalized);
+  if (typedTarget) {
+    return `${readableWords(typedTarget[2] ?? '')} · ${typedTarget[1]} version ${typedTarget[3]}`;
+  }
+  const successorTarget = /^([^@]+)@next$/iu.exec(normalized);
+  if (successorTarget) return `${readableWords(successorTarget[1] ?? '')} · successor version`;
+  return safeCardLabel(normalized, 'Governed definition');
+}
+
+function memorySubject(namespace: string) {
+  return safeCardLabel(namespace, 'Governed memory proposal');
+}
+
+interface ProvenanceReference {
+  label: string;
+  value: string;
+}
+
+function TechnicalProvenance({
+  references,
+  sourceRunId = null,
+}: {
+  references: ProvenanceReference[];
+  sourceRunId?: string | null;
+}) {
+  return (
+    <details className="run-release-binding incubator-provenance">
+      <summary>TECHNICAL PROVENANCE</summary>
+      {sourceRunId ? (
+        <Link
+          className="incubator-source-link"
+          to={`/operate?run=${sourceRunId}#run-${sourceRunId}`}
+        >
+          OPEN SOURCE RUN →
+        </Link>
+      ) : null}
+      <dl>
+        {references.map((reference, index) => (
+          <div key={`${reference.label}:${reference.value}:${index}`}>
+            <dt>{reference.label}</dt>
+            <dd>
+              <code>{reference.value}</code>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p>Exact identifiers are retained for audit and source inspection, not as card labels.</p>
+    </details>
+  );
 }
 
 function ImprovementReviewForm({
@@ -159,7 +242,7 @@ function MemoryReviewForm({
         <label>
           <span>REPLACEMENT MEMORY · JSON OBJECT</span>
           <textarea
-            aria-label={`Replacement JSON for ${candidate.namespace}`}
+            aria-label={`Replacement JSON for ${memorySubject(candidate.namespace)}`}
             onChange={(event) => setEditedJson(event.target.value)}
             required
             rows={5}
@@ -207,10 +290,11 @@ export function IncubatorPage() {
       candidateId: candidate.id,
       value: { decision, rationale },
     });
+    const candidateLabel = safeCardLabel(candidate.title, 'Governed improvement');
     setConfirmation(
       decision === 'incubate'
-        ? `${candidate.title} entered the governed incubator.`
-        : `${candidate.title} was rejected without modifying any definition.`,
+        ? `${candidateLabel} entered the governed incubator.`
+        : `${candidateLabel} was rejected without modifying any definition.`,
     );
   }
 
@@ -229,8 +313,8 @@ export function IncubatorPage() {
     });
     setConfirmation(
       decision === 'reject'
-        ? `${candidate.namespace} was rejected and remains outside durable memory.`
-        : `${candidate.namespace} was accepted as an immutable memory record.`,
+        ? `${memorySubject(candidate.namespace)} was rejected and remains outside durable memory.`
+        : `${memorySubject(candidate.namespace)} was accepted as an immutable memory record.`,
     );
   }
 
@@ -288,18 +372,41 @@ export function IncubatorPage() {
               <article className="run-card" key={observation.id}>
                 <header>
                   <div>
-                    <h2>{observation.signalType.replaceAll('_', ' ')}</h2>
-                    <p>{observation.summary}</p>
+                    <h2>{safeCardLabel(observation.signalType, 'Operational observation')}</h2>
+                    <p>
+                      {safeCardCopy(
+                        observation.summary,
+                        'Operational observation retained for review.',
+                      )}
+                    </p>
                   </div>
                   <span className="os-status-chip">OBSERVED</span>
                 </header>
                 <div className="run-metadata">
-                  <span>SIGNAL · {observation.signalKey}</span>
-                  <span>RUN · {shortId(observation.sourceRunId)}</span>
-                  <span>OUTCOME · {shortId(observation.sourceOutcomeId)}</span>
-                  <span>ACTOR · {observation.observedBy}</span>
+                  <span>
+                    EXECUTION LINEAGE ·{' '}
+                    {observation.sourceRunId === null ? 'NOT LINKED' : 'RETAINED'}
+                  </span>
+                  <span>
+                    OUTCOME EVIDENCE ·{' '}
+                    {observation.sourceOutcomeId === null ? 'NOT RECORDED' : 'RETAINED'}
+                  </span>
+                  <span>PROVENANCE · RECORDER RETAINED IN AUDIT</span>
                   <span>TIME · {time(observation.observedAt)}</span>
                 </div>
+                <TechnicalProvenance
+                  references={[
+                    { label: 'SIGNAL KEY', value: observation.signalKey },
+                    { label: 'OBSERVATION RECORD', value: observation.id },
+                    ...(observation.sourceOutcomeId === null
+                      ? []
+                      : [{ label: 'SOURCE OUTCOME', value: observation.sourceOutcomeId }]),
+                    ...(observation.sourceRunId === null
+                      ? []
+                      : [{ label: 'SOURCE RUN', value: observation.sourceRunId }]),
+                  ]}
+                  sourceRunId={observation.sourceRunId}
+                />
               </article>
             ))}
           </div>
@@ -326,19 +433,31 @@ export function IncubatorPage() {
               <article className="run-card" key={candidate.id}>
                 <header>
                   <div>
-                    <h2>{candidate.title}</h2>
-                    <p>Bounded proposal for {candidate.proposedTarget}.</p>
+                    <h2>{safeCardLabel(candidate.title, 'Review a governed improvement')}</h2>
+                    <p>Bounded proposal for {improvementTarget(candidate.proposedTarget)}.</p>
                   </div>
                   <span className="os-status-chip" data-state={candidate.state}>
                     {candidate.state}
                   </span>
                 </header>
                 <div className="run-metadata">
-                  <span>OBSERVATION · {shortId(candidate.observationId)}</span>
-                  <span>EVIDENCE REFERENCES · {candidate.evidenceRefs.length}</span>
-                  <span>CREATED BY · {candidate.createdBy}</span>
+                  <span>SOURCE · GOVERNED OBSERVATION RETAINED</span>
+                  <span>EVIDENCE · {candidate.evidenceRefs.length} REFERENCES RETAINED</span>
+                  <span>
+                    CURATION · HUMAN DECISION {candidate.reviewedAt ? 'RECORDED' : 'PENDING'}
+                  </span>
                   <span>CREATED · {time(candidate.createdAt)}</span>
                 </div>
+                <TechnicalProvenance
+                  references={[
+                    { label: 'CANDIDATE RECORD', value: candidate.id },
+                    { label: 'SOURCE OBSERVATION', value: candidate.observationId },
+                    ...candidate.evidenceRefs.map((value, index) => ({
+                      label: `EVIDENCE ${String(index + 1).padStart(2, '0')}`,
+                      value,
+                    })),
+                  ]}
+                />
                 {candidate.state === 'proposed' ? (
                   <ImprovementReviewForm
                     isPending={
@@ -376,7 +495,7 @@ export function IncubatorPage() {
               <article className="run-card" key={candidate.id}>
                 <header>
                   <div>
-                    <h2>{candidate.namespace}</h2>
+                    <h2>{memorySubject(candidate.namespace)}</h2>
                     <p>Contents withheld. Review the linked source run before deciding.</p>
                   </div>
                   <span className="os-status-chip" data-state={candidate.state}>
@@ -384,11 +503,18 @@ export function IncubatorPage() {
                   </span>
                 </header>
                 <div className="run-metadata">
-                  <span>SOURCE RUN · {shortId(candidate.sourceRunId)}</span>
-                  <span>STAGED BY · {candidate.stagedBy}</span>
+                  <span>SOURCE · EXECUTION LEDGER RETAINED</span>
+                  <span>PROVENANCE · STAGING ACTOR RETAINED IN AUDIT</span>
                   <span>STAGED · {time(candidate.stagedAt)}</span>
-                  <span>REVIEWED BY · {candidate.reviewedBy ?? 'PENDING'}</span>
+                  <span>HUMAN REVIEW · {candidate.reviewedAt ? 'RECORDED' : 'PENDING'}</span>
                 </div>
+                <TechnicalProvenance
+                  references={[
+                    { label: 'MEMORY CANDIDATE', value: candidate.id },
+                    { label: 'SOURCE RUN', value: candidate.sourceRunId },
+                  ]}
+                  sourceRunId={candidate.sourceRunId}
+                />
                 {candidate.state === 'staged' ? (
                   <MemoryReviewForm
                     candidate={candidate}

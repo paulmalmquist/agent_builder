@@ -16,6 +16,7 @@ export interface WorkerPluginPlanSource {
 export interface PluginRunPlanResult {
   context: Record<string, JsonValue>;
   costUsd: number;
+  invocationCount: number;
 }
 
 /**
@@ -56,6 +57,6 @@ export class WorkerPluginPlanCoordinator {
         costUsd += result.costUsd;
       }
     }
-    return { context, costUsd };
+    return { context, costUsd, invocationCount: planned.length };
   }
 }

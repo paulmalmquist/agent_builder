@@ -34,6 +34,7 @@ import {
   attentionResolutionSchema,
   attentionResponseSchema,
   declineReleaseRequestSchema,
+  executionApprovalGroupParamsSchema,
   rejectExecutionRunRequestSchema,
   resolveAttentionItemRequestSchema,
 } from './attention-schemas.js';
@@ -92,6 +93,7 @@ import {
   uuidSchema,
 } from './schemas.js';
 import {
+  approveExecutionRunGroupResponseSchema,
   approveExecutionRunRequestSchema,
   approveExecutionRunResponseSchema,
   authorityGrantListQuerySchema,
@@ -113,6 +115,7 @@ import {
   resourceListQuerySchema,
   resourceListResponseSchema,
   resourceVersionSchema,
+  rejectExecutionRunGroupResponseSchema,
 } from './platform-schemas.js';
 import {
   configurePluginInstallationRequestSchema,
@@ -132,6 +135,7 @@ import {
 import {
   createReleaseEvaluationRequestSchema,
   productionChannelKeySchema,
+  productionChannelLookupSchema,
   productionChannelMutationResponseSchema,
   productionChannelSchema,
   promoteReleaseRequestSchema,
@@ -245,6 +249,41 @@ registry.registerPath({
   responses: {
     200: { description: 'Governed catalog publication', content: json(catalogPublicationSchema) },
     404: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/execution-approval-groups/{groupKey}/approve',
+  request: {
+    params: executionApprovalGroupParamsSchema,
+    body: { content: json(approveExecutionRunRequestSchema) },
+  },
+  responses: {
+    200: {
+      description: 'One bounded grant atomically approved every reviewed matching run',
+      content: json(approveExecutionRunGroupResponseSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
+    422: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/v1/execution-approval-groups/{groupKey}/reject',
+  request: {
+    params: executionApprovalGroupParamsSchema,
+    body: { content: json(rejectExecutionRunRequestSchema) },
+  },
+  responses: {
+    200: {
+      description: 'Every reviewed matching pending run was atomically rejected',
+      content: json(rejectExecutionRunGroupResponseSchema),
+    },
+    403: errorResponse,
+    404: errorResponse,
+    409: errorResponse,
   },
 });
 registry.registerPath({
@@ -763,10 +802,9 @@ registry.registerPath({
   request: { params: channelParam },
   responses: {
     200: {
-      description: 'Current production release pointer',
-      content: json(productionChannelSchema),
+      description: 'Current production release pointer, or null before the channel is assigned',
+      content: json(productionChannelLookupSchema),
     },
-    404: errorResponse,
   },
 });
 registry.registerPath({

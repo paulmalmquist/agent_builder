@@ -4,6 +4,7 @@ import { useAgentDetail, useFamilyVersions } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Icon } from '../../components/Icon';
 import { Notice } from '../../components/Notice';
+import { featureFlags } from '../../config/feature-flags';
 
 interface AgentDetailDrawerProps {
   agentId: string;
@@ -192,6 +193,17 @@ export function AgentDetailDrawer({ agentId, onClose }: AgentDetailDrawerProps) 
               ) : null}
             </section>
             <div className="drawer-actions">
+              {featureFlags.visualSurfacesEnabled ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    void navigate(`/bench/${agent.id}`);
+                  }}
+                  type="button"
+                >
+                  Inspect assembly
+                </button>
+              ) : null}
               <button className="primary-button" onClick={() => openBuilder('use')} type="button">
                 Use as-is
               </button>

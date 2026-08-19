@@ -1,10 +1,11 @@
-import { useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Brand } from './Brand';
 
 export interface PlatformRailItem {
   active: boolean;
   badge?: number;
+  group: 'daily' | 'workspace' | 'settings';
   label: string;
   number: string;
   path: string;
@@ -29,6 +30,11 @@ export function PlatformRail({
   items: readonly PlatformRailItem[];
   onToggle: () => void;
 }) {
+  const [visibleTooltip, setVisibleTooltip] = useState<{
+    label: string;
+    top: number;
+  } | null>(null);
+
   useEffect(() => {
     function handleCollapseShortcut(event: globalThis.KeyboardEvent) {
       if (event.key !== '[' || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -45,18 +51,35 @@ export function PlatformRail({
     if (event.key === '[') event.stopPropagation();
   }
 
-  const dailyItems = items.slice(0, 3);
-  const operatingItems = items.slice(3, 9);
-  const settings = items[9];
+  function showCollapsedLabel(item: PlatformRailItem, target: HTMLElement) {
+    if (!collapsed) return;
+    const bounds = target.getBoundingClientRect();
+    setVisibleTooltip({ label: item.label, top: bounds.top + bounds.height / 2 });
+  }
+
+  function hideCollapsedLabel() {
+    setVisibleTooltip(null);
+  }
+
+  const dailyItems = items.filter((item) => item.group === 'daily');
+  const operatingItems = items.filter((item) => item.group === 'workspace');
+  const settingsItems = items.filter((item) => item.group === 'settings');
 
   function navItem(item: PlatformRailItem) {
     return (
       <Link
         aria-current={item.active ? 'page' : undefined}
+        aria-describedby={
+          collapsed && visibleTooltip?.label === item.label ? 'platform-rail-tooltip' : undefined
+        }
         aria-label={collapsed ? item.label : undefined}
         className={item.active ? 'platform-rail-link active' : 'platform-rail-link'}
         key={item.path}
+        onBlur={hideCollapsedLabel}
+        onFocus={(event) => showCollapsedLabel(item, event.currentTarget)}
         onKeyDown={preventShortcutPropagation}
+        onMouseEnter={(event) => showCollapsedLabel(item, event.currentTarget)}
+        onMouseLeave={hideCollapsedLabel}
         title={collapsed ? item.label : undefined}
         to={item.path}
       >
@@ -96,10 +119,10 @@ export function PlatformRail({
         <div className="platform-rail-group">{dailyItems.map(navItem)}</div>
         <div aria-hidden="true" className="platform-rail-separator" />
         <div className="platform-rail-group">{operatingItems.map(navItem)}</div>
-        {settings ? (
+        {settingsItems.length > 0 ? (
           <>
             <div aria-hidden="true" className="platform-rail-separator" />
-            <div className="platform-rail-group">{navItem(settings)}</div>
+            <div className="platform-rail-group">{settingsItems.map(navItem)}</div>
           </>
         ) : null}
       </nav>
@@ -108,6 +131,16 @@ export function PlatformRail({
         <span>[&nbsp;&nbsp; {collapsed ? 'EXPAND' : 'COLLAPSE'}</span>
         <small>WORKSPACE SCOPED</small>
       </footer>
+      {collapsed && visibleTooltip ? (
+        <span
+          className="platform-rail-tooltip"
+          id="platform-rail-tooltip"
+          role="tooltip"
+          style={{ top: visibleTooltip.top }}
+        >
+          {visibleTooltip.label}
+        </span>
+      ) : null}
     </aside>
   );
 }

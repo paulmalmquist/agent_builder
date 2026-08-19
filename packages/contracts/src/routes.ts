@@ -42,6 +42,10 @@ export const platformApiRoutes = {
   executionRun: (runId: string) => `/v1/execution-runs/${runId}`,
   approveExecutionRun: (runId: string) => `/v1/execution-runs/${runId}/approve`,
   rejectExecutionRun: (runId: string) => `/v1/execution-runs/${runId}/reject`,
+  approveExecutionApprovalGroup: (groupKey: string) =>
+    `/v1/execution-approval-groups/${encodeURIComponent(groupKey)}/approve`,
+  rejectExecutionApprovalGroup: (groupKey: string) =>
+    `/v1/execution-approval-groups/${encodeURIComponent(groupKey)}/reject`,
   cancelExecutionRun: (runId: string) => `/v1/execution-runs/${runId}/cancel`,
   outcomes: '/v1/outcomes',
   metrics: '/v1/metrics',

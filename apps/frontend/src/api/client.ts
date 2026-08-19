@@ -21,6 +21,7 @@ import {
   shadowDeployResponseSchema,
   similarityResponseSchema,
   sourceListResponseSchema,
+  approveExecutionRunGroupResponseSchema,
   approveExecutionRunResponseSchema,
   automationScheduleListResponseSchema,
   automationScheduleSchema,
@@ -36,8 +37,9 @@ import {
   improvementCandidateListResponseSchema,
   improvementCandidateSchema,
   platformApiRoutes,
-  productionChannelSchema,
+  productionChannelLookupSchema,
   productionChannelMutationResponseSchema,
+  rejectExecutionRunGroupResponseSchema,
   pluginCatalogItemSchema,
   pluginCatalogResponseSchema,
   pluginHealthCheckSchema,
@@ -187,11 +189,14 @@ export type ConfigurePluginInput = {
 export type ReviewImprovementInput = {
   decision: 'incubate' | 'reject';
   rationale: string;
+  decisionGroupKey?: string;
+  expectedRequestCount?: number;
 };
 
-export type ReviewMemoryInput =
+export type ReviewMemoryInput = (
   | { decision: 'accept' | 'reject'; rationale: string }
-  | { decision: 'edit_accept'; editedValue: Record<string, unknown>; rationale: string };
+  | { decision: 'edit_accept'; editedValue: Record<string, unknown>; rationale: string }
+) & { decisionGroupKey?: string; expectedRequestCount?: number };
 
 export type DeclineReleaseInput = {
   releaseId: string;
@@ -830,10 +835,26 @@ export const platformApi = {
     );
   },
 
+  approveExecutionApprovalGroup(groupKey: string, value: ApproveRunInput) {
+    return request(
+      platformApiRoutes.approveExecutionApprovalGroup(groupKey),
+      approveExecutionRunGroupResponseSchema,
+      jsonBody(value),
+    );
+  },
+
   rejectExecutionRun(runId: string, rationale: string) {
     return request(
       platformApiRoutes.rejectExecutionRun(runId),
       executionRunSchema,
+      jsonBody({ rationale }),
+    );
+  },
+
+  rejectExecutionApprovalGroup(groupKey: string, rationale: string) {
+    return request(
+      platformApiRoutes.rejectExecutionApprovalGroup(groupKey),
+      rejectExecutionRunGroupResponseSchema,
       jsonBody({ rationale }),
     );
   },
@@ -887,7 +908,7 @@ export const platformApi = {
   },
 
   getProductionChannel(channelKey: string) {
-    return request(platformApiRoutes.productionChannel(channelKey), productionChannelSchema);
+    return request(platformApiRoutes.productionChannel(channelKey), productionChannelLookupSchema);
   },
 
   promoteRelease(channelKey: string, value: PromoteReleaseInput) {

@@ -12,6 +12,7 @@ export function diffProgramState(
   const beforeParts = byId(before.parts);
   const beforeLoops = byId(before.decisionLoops);
   const beforeInterfaces = byId(before.interfaces);
+  const beforeAgents = byId(before.agents);
   const newlyPrintedPartIds: string[] = [];
   const productionPromotionPartIds: string[] = [];
   const retiredPartIds: string[] = [];
@@ -59,6 +60,17 @@ export function diffProgramState(
     .filter((contract) => !beforeInterfaces.get(contract.id)?.governed && contract.governed)
     .map(({ id }) => id);
   const beforeEvidence = new Set(before.availableEvidenceIds);
+  const newlyCertifiedAgentIds = after.agents
+    .filter((agent) => {
+      const previous = beforeAgents.get(agent.id);
+      return (
+        agent.certificationStatus === 'certified' &&
+        agent.certificationEvidenceFresh &&
+        (previous?.certificationStatus !== 'certified' || !previous.certificationEvidenceFresh)
+      );
+    })
+    .map(({ id }) => id)
+    .sort();
   return {
     from: before.selectedAt,
     to: after.selectedAt,
@@ -70,6 +82,7 @@ export function diffProgramState(
       a.partId.localeCompare(b.partId),
     ),
     activatedAgentPartIds: activatedAgentPartIds.sort(),
+    newlyCertifiedAgentIds,
     decisionLatencyChanges: decisionLatencyChanges.sort((a, b) =>
       a.decisionLoopId.localeCompare(b.decisionLoopId),
     ),

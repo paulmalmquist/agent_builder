@@ -1,9 +1,14 @@
 import type {
+  AimAgentCertificationStatus,
+  AimAgentConnector,
+  AimAgentTier,
   AimCapabilityLayer,
   AimDisplayPolicy,
   AimLifecycle,
+  AimMakeMethod,
   AimProgramDefinition,
   AimReadiness,
+  AimWorkstreamDefinition,
 } from '@agent-builder/contracts/aim';
 
 export type AimEvidenceGateStatus =
@@ -46,10 +51,19 @@ export interface AimPartState {
   label: string;
   anchorId: string;
   fallbackRegion: string | null;
+  makeMethod: AimMakeMethod;
+  process: string;
+  ownerGroupId: string;
+  coverage: {
+    agentIds: string[];
+    evidenceRefs: string[];
+    agentCount: number;
+    certifiedAgentCount: number;
+    evidenceFreshnessHours: number | null;
+  };
   capabilityIds: string[];
   capabilityLayers: AimCapabilityLayer[];
   participatingGroupIds: string[];
-  primaryGroupId: string | null;
   problem: string;
   decisionLoopIds: string[];
   unlocksPartIds: string[];
@@ -68,6 +82,34 @@ export interface AimPartState {
   evidenceGate: AimEvidenceGate;
   evidenceRefs: string[];
   sourceRefs: string[];
+}
+
+export interface AimAgentState {
+  id: string;
+  label: string;
+  description: string;
+  tier: AimAgentTier;
+  certificationStatus: AimAgentCertificationStatus;
+  certificationEvidenceFresh: boolean;
+  synthetic: boolean;
+  groupIds: string[];
+  partIds: string[];
+  connectors: AimAgentConnector[];
+  certificationEvidenceRefs: string[];
+  sourceRefs: string[];
+}
+
+export interface AimGroupState {
+  id: string;
+  label: string;
+  description: string | null;
+  kind: 'primary' | 'supporting';
+  displayOrder: number;
+  ownedAnchorIds: string[];
+  ownedPartIds: string[];
+  agentIds: string[];
+  certifiedAgentCount: number;
+  hasCertifiedAgent: boolean;
 }
 
 export interface AimPartVisualState {
@@ -139,14 +181,26 @@ export interface AimSourceFreshnessState {
   reconciliationStatus: 'authoritative' | 'corroborated' | 'conflicting' | 'unverified';
 }
 
+export type AimWorkstreamState = AimWorkstreamDefinition & {
+  /** True when any declared source is synthetic. Resolved only from observable, usable sources. */
+  sourceSynthetic: boolean;
+};
+
 export interface AimProgramState {
-  schemaVersion: 'aim.program/v1';
+  schemaVersion: 'aim.program/v2';
   program: AimProgramDefinition;
   displayPolicy: AimDisplayPolicy;
   selectedAt: string;
   outsideTimeline: boolean;
+  groups: AimGroupState[];
+  agents: AimAgentState[];
+  groupCoverage: {
+    primaryGroupCount: number;
+    groupsWithoutCertifiedAgentIds: string[];
+  };
   parts: AimPartState[];
   milestones: AimMilestoneState[];
+  workstreams: AimWorkstreamState[];
   decisionLoops: AimDecisionLoopState[];
   interfaces: AimInterfaceState[];
   metrics: AimMetricState[];
@@ -179,6 +233,7 @@ export interface AimProgramDiff {
     delta: number;
   }>;
   activatedAgentPartIds: string[];
+  newlyCertifiedAgentIds: string[];
   decisionLatencyChanges: Array<{
     decisionLoopId: string;
     beforeHours: number | null;

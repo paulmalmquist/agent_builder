@@ -53,6 +53,7 @@ const passingRunId = 'a2e8dc44-f48f-44fa-951b-e91a2f710882';
 const supplierChampionId = '4a40357e-924f-46db-86ac-b8ed920be486';
 const rejectedChallengerId = '7e2ab2cc-52e8-4cb8-92c3-256626cdade7';
 const inventoryChampionId = 'fbcbcd95-15be-49c0-a8a7-a2bc361b7521';
+const fullFlowActorId = 'human:governance-full-flow';
 
 const knowledge: KnowledgeSection = {
   sources: [
@@ -165,7 +166,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     generatorTimeoutMs: 30_000,
     generatorMaxOutputBytes: 1_000_000,
     shutdownTimeoutMs: 15_000,
-    auth: { enabled: false, actorId: 'integration-test' },
+    auth: { enabled: false, actorId: fullFlowActorId },
     providers: {
       bigquery: false,
       confluence: false,
@@ -785,8 +786,8 @@ spec:
     expect(evaluation.summary).toMatchObject({ passed: 1, failed: 0, total: 1, score: 1 });
     const storedAgent = await prisma.agent.findUniqueOrThrow({ where: { id: accepted.agentId } });
     const storedSpec = await prisma.agentSpec.findUniqueOrThrow({ where: { id: spec.id } });
-    expect(storedAgent.createdBy).toBe('integration-test');
-    expect(storedSpec.createdBy).toBe('integration-test');
+    expect(storedAgent.createdBy).toBe(fullFlowActorId);
+    expect(storedSpec.createdBy).toBe(fullFlowActorId);
     const auditWhere = {
       entityId: { in: [accepted.agentId, spec.id, accepted.jobId] },
     };

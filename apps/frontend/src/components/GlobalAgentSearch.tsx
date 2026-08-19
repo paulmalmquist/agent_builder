@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import type { ResourceVersion } from '@agent-builder/contracts';
+import { agentResourceSpecSchema, type ResourceVersion } from '@agent-builder/contracts';
 import { useNavigate } from 'react-router-dom';
 import { useAgentSearch, usePlatformResources } from '../api/hooks';
 import type { AgentSearchItem } from '../api/client';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Icon } from './Icon';
+import { distinctResourceVersions, isQuarantinedLegacyAgent } from '../lib/user-facing-index';
 import './global-entity-search.css';
 
 interface GlobalAgentSearchProps {
@@ -47,6 +48,9 @@ function displayKind(kind: ResourceVersion['kind']) {
 }
 
 function resourceRoute(resource: ResourceVersion) {
+  if (resource.kind === 'Agent') {
+    return `/catalog?${new URLSearchParams({ resource: resource.id }).toString()}`;
+  }
   const type = knowledgeTypeByKind[resource.kind];
   if (type) {
     return `/knowledge?${new URLSearchParams({ type, entity: resource.id }).toString()}`;
@@ -56,8 +60,9 @@ function resourceRoute(resource: ResourceVersion) {
 
 export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
   const listboxId = useId();
-  const agentGroupId = useId();
-  const resourceGroupId = useId();
+  const governedAgentGroupId = useId();
+  const legacyAgentGroupId = useId();
+  const otherResourceGroupId = useId();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -73,12 +78,34 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
   const agentSearch = useAgentSearch(debouncedQuery, searchEnabled, false);
   const resourceSearch = usePlatformResources({ query: debouncedQuery, limit: 20 }, searchEnabled);
   const currentResults = debouncedQuery === trimmedQuery;
-  const agents = currentResults && !agentSearch.isError ? (agentSearch.data?.items ?? []) : [];
   const resources =
-    currentResults && !resourceSearch.isError ? (resourceSearch.data?.items ?? []) : [];
+    currentResults && !resourceSearch.isError
+      ? distinctResourceVersions(resourceSearch.data?.items ?? [])
+      : [];
+  const governedAgents = resources.filter((resource) => resource.kind === 'Agent');
+  const otherResources = resources.filter((resource) => resource.kind !== 'Agent');
+  const canonicallyLinkedLegacyIds = new Set(
+    governedAgents.flatMap((resource) => {
+      const parsed = agentResourceSpecSchema.safeParse(resource.definition.spec);
+      return parsed.success && parsed.data.legacyCompatibility
+        ? [parsed.data.legacyCompatibility.agentId]
+        : [];
+    }),
+  );
+  const agents =
+    currentResults && !agentSearch.isError
+      ? (agentSearch.data?.items ?? []).filter(
+          (agent) => !isQuarantinedLegacyAgent(agent) && !canonicallyLinkedLegacyIds.has(agent.id),
+        )
+      : [];
   const items: PaletteItem[] = [
+    ...governedAgents.map((value) => ({
+      key: `resource-${value.id}`,
+      type: 'resource' as const,
+      value,
+    })),
     ...agents.map((value) => ({ key: `agent-${value.id}`, type: 'agent' as const, value })),
-    ...resources.map((value) => ({
+    ...otherResources.map((value) => ({
       key: `resource-${value.id}`,
       type: 'resource' as const,
       value,
@@ -220,40 +247,78 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                 <div className="global-search-state">NO MATCHING ENTITIES</div>
               ) : null}
               <div id={listboxId} role="listbox">
-                {agents.length > 0 ? (
-                  <div aria-labelledby={agentGroupId} role="group">
-                    <span className="global-search-group-label" id={agentGroupId}>
-                      LEGACY AGENT CATALOG · {agents.length}
+                {governedAgents.length > 0 ? (
+                  <div aria-labelledby={governedAgentGroupId} role="group">
+                    <span className="global-search-group-label" id={governedAgentGroupId}>
+                      GOVERNED AGENTS · {governedAgents.length}
                     </span>
-                    {agents.map((agent, index) => (
+                    {governedAgents.map((resource, index) => (
                       <button
                         aria-selected={index === activeIndex}
                         className="global-search-option"
-                        id={`${listboxId}-option-agent-${agent.id}`}
-                        key={agent.id}
+                        id={`${listboxId}-option-resource-${resource.id}`}
+                        key={resource.id}
                         onClick={() =>
-                          selectItem({ key: `agent-${agent.id}`, type: 'agent', value: agent })
+                          selectItem({
+                            key: `resource-${resource.id}`,
+                            type: 'resource',
+                            value: resource,
+                          })
                         }
                         onMouseEnter={() => setActiveIndex(index)}
                         role="option"
                         type="button"
                       >
                         <span>
-                          <strong>{highlightedText(agent.name, debouncedQuery)}</strong>
-                          <small>{highlightedText(agent.department, debouncedQuery)}</small>
+                          <strong>{highlightedText(resource.name, debouncedQuery)}</strong>
+                          <small>
+                            Agent definition V{resource.version} · {resource.owner}
+                          </small>
                         </span>
-                        <span className={`status-chip ${agent.status}`}>{agent.status}</span>
+                        <span className="global-search-kind">{resource.lifecycle} definition</span>
                       </button>
                     ))}
                   </div>
                 ) : null}
-                {resources.length > 0 ? (
-                  <div aria-labelledby={resourceGroupId} role="group">
-                    <span className="global-search-group-label" id={resourceGroupId}>
-                      GOVERNED DEFINITIONS · {resources.length}
+                {agents.length > 0 ? (
+                  <div aria-labelledby={legacyAgentGroupId} role="group">
+                    <span className="global-search-group-label" id={legacyAgentGroupId}>
+                      LEGACY AGENTS NOT YET IMPORTED · {agents.length}
                     </span>
-                    {resources.map((resource, resourceIndex) => {
-                      const index = agents.length + resourceIndex;
+                    {agents.map((agent, agentIndex) => {
+                      const index = governedAgents.length + agentIndex;
+                      return (
+                        <button
+                          aria-selected={index === activeIndex}
+                          className="global-search-option"
+                          id={`${listboxId}-option-agent-${agent.id}`}
+                          key={agent.id}
+                          onClick={() =>
+                            selectItem({ key: `agent-${agent.id}`, type: 'agent', value: agent })
+                          }
+                          onMouseEnter={() => setActiveIndex(index)}
+                          role="option"
+                          type="button"
+                        >
+                          <span>
+                            <strong>{highlightedText(agent.name, debouncedQuery)}</strong>
+                            <small>{highlightedText(agent.department, debouncedQuery)}</small>
+                          </span>
+                          <span className={`status-chip ${agent.status}`}>
+                            legacy {agent.status}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {otherResources.length > 0 ? (
+                  <div aria-labelledby={otherResourceGroupId} role="group">
+                    <span className="global-search-group-label" id={otherResourceGroupId}>
+                      OTHER GOVERNED DEFINITIONS · {otherResources.length}
+                    </span>
+                    {otherResources.map((resource, resourceIndex) => {
+                      const index = governedAgents.length + agents.length + resourceIndex;
                       return (
                         <button
                           aria-selected={index === activeIndex}
@@ -274,10 +339,12 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                           <span>
                             <strong>{highlightedText(resource.name, debouncedQuery)}</strong>
                             <small>
-                              {displayKind(resource.kind)} · {resource.owner}
+                              {displayKind(resource.kind)} V{resource.version} · {resource.owner}
                             </small>
                           </span>
-                          <span className="global-search-kind">{resource.lifecycle}</span>
+                          <span className="global-search-kind">
+                            {resource.lifecycle} definition
+                          </span>
                         </button>
                       );
                     })}
@@ -288,7 +355,7 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
           ) : null}
           <span aria-live="polite" className="sr-only" role="status">
             {searchEnabled && currentResults && !isLoading
-              ? `${items.length} result${items.length === 1 ? '' : 's'} available across agents and governed definitions.`
+              ? `${items.length} result${items.length === 1 ? '' : 's'} available across governed agents, legacy agents, and other definitions.`
               : ''}
           </span>
         </div>

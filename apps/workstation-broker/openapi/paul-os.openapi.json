@@ -2406,6 +2406,29 @@
             "type": "string",
             "format": "uuid"
           },
+          "entrySubject": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": ["name", "kind", "version"],
+            "additionalProperties": false
+          },
           "releaseDigest": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
@@ -2603,6 +2626,29 @@
               "entryResourceVersionId": {
                 "type": "string",
                 "format": "uuid"
+              },
+              "entrySubject": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "kind": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  }
+                },
+                "required": ["name", "kind", "version"],
+                "additionalProperties": false
               },
               "legacyEntrypointUnresolved": {
                 "type": "boolean",
@@ -2840,6 +2886,15 @@
                 "type": "integer",
                 "minimum": 0
               },
+              "maxAttempts": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "retryBackoff": {
+                "type": "string",
+                "enum": ["fixed", "exponential"]
+              },
               "error": {
                 "type": "object",
                 "additionalProperties": true
@@ -2870,6 +2925,7 @@
               "id",
               "releaseId",
               "entryResourceVersionId",
+              "entrySubject",
               "legacyEntrypointUnresolved",
               "releaseDigest",
               "contextDigest",
@@ -2896,6 +2952,8 @@
               "progress",
               "message",
               "attempts",
+              "maxAttempts",
+              "retryBackoff",
               "error",
               "requestedBy",
               "startedAt",
@@ -2916,6 +2974,9 @@
                 "format": "uuid"
               },
               "entryResourceVersionId": {
+                "nullable": true
+              },
+              "entrySubject": {
                 "nullable": true
               },
               "legacyEntrypointUnresolved": {
@@ -3154,6 +3215,15 @@
                 "type": "integer",
                 "minimum": 0
               },
+              "maxAttempts": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "retryBackoff": {
+                "type": "string",
+                "enum": ["fixed", "exponential"]
+              },
               "error": {
                 "type": "object",
                 "additionalProperties": true
@@ -3184,6 +3254,7 @@
               "id",
               "releaseId",
               "entryResourceVersionId",
+              "entrySubject",
               "legacyEntrypointUnresolved",
               "releaseDigest",
               "contextDigest",
@@ -3210,6 +3281,8 @@
               "progress",
               "message",
               "attempts",
+              "maxAttempts",
+              "retryBackoff",
               "error",
               "requestedBy",
               "startedAt",
@@ -3334,6 +3407,29 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "entrySubject": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": ["name", "kind", "version"],
+            "additionalProperties": false
           },
           "releaseDigest": {
             "type": "string",
@@ -4233,6 +4329,45 @@
                       "nullable": true,
                       "format": "date-time"
                     },
+                    "approvalGroupKey": {
+                      "type": "string",
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "decisionGroupKey": {
+                      "type": "string",
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "requestCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "exclusiveMinimum": true,
+                      "default": 1
+                    },
+                    "subject": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        }
+                      },
+                      "required": ["name", "kind", "version"],
+                      "additionalProperties": false
+                    },
                     "reviewFacts": {
                       "type": "array",
                       "items": {
@@ -4559,6 +4694,45 @@
                       "type": "string",
                       "nullable": true,
                       "format": "date-time"
+                    },
+                    "approvalGroupKey": {
+                      "type": "string",
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "decisionGroupKey": {
+                      "type": "string",
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "requestCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "exclusiveMinimum": true,
+                      "default": 1
+                    },
+                    "subject": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        }
+                      },
+                      "required": ["name", "kind", "version"],
+                      "additionalProperties": false
                     },
                     "reviewFacts": {
                       "type": "array",
@@ -4950,6 +5124,45 @@
                     "type": "string",
                     "nullable": true,
                     "format": "date-time"
+                  },
+                  "approvalGroupKey": {
+                    "type": "string",
+                    "nullable": true,
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "decisionGroupKey": {
+                    "type": "string",
+                    "nullable": true,
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "requestCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "default": 1
+                  },
+                  "subject": {
+                    "type": "object",
+                    "nullable": true,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      }
+                    },
+                    "required": ["name", "kind", "version"],
+                    "additionalProperties": false
                   },
                   "reviewFacts": {
                     "type": "array",

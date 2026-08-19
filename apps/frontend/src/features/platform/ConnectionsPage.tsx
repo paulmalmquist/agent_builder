@@ -2,33 +2,23 @@ import { usePluginInstallations, usePlugins } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Notice } from '../../components/Notice';
 import { PluginRegistry } from './PluginRegistry';
+import { hasGovernedRuntime } from './plugin-runtime';
 import { InstrumentStrip, SurfaceHeader } from './SurfaceHeader';
 
 export function ConnectionsPage() {
   const plugins = usePlugins({ includeDisabled: true, limit: 100 });
   const installations = usePluginInstallations();
   const items = plugins.isError ? [] : (plugins.data?.items ?? []);
-  const available =
+  const inventoryAvailable =
     plugins.data !== undefined &&
     !plugins.isError &&
     installations.data !== undefined &&
     !installations.isError;
   const installed = items.filter((plugin) => plugin.installationId !== null);
-  const degraded = items.filter(
-    (plugin) => plugin.healthStatus === 'degraded' || plugin.installationState === 'disabled',
+  const installable = items.filter(
+    (plugin) => plugin.installationId === null && hasGovernedRuntime(plugin),
   );
-  const missingSecrets = items.filter((plugin) => {
-    const installation = installations.data?.items.find(
-      (item) => item.id === plugin.installationId,
-    );
-    return plugin.secretSlots.some(
-      (slot) =>
-        slot.required &&
-        !installation?.secretBindings.some(
-          (binding) => binding.slot === slot.name && binding.configured,
-        ),
-    );
-  });
+  const unavailable = items.filter((plugin) => !hasGovernedRuntime(plugin));
 
   return (
     <main className="os-surface">
@@ -40,15 +30,10 @@ export function ConnectionsPage() {
       />
       <InstrumentStrip
         readings={[
-          { label: 'INSTALLED SHOWN', value: available ? installed.length : '—' },
-          {
-            label: 'HEALTHY SHOWN',
-            value: available
-              ? installed.filter((item) => item.healthStatus === 'healthy').length
-              : '—',
-          },
-          { label: 'DEGRADED SHOWN', value: available ? degraded.length : '—' },
-          { label: 'MISSING SECRET REFS SHOWN', value: available ? missingSecrets.length : '—' },
+          { label: 'CATALOG CARDS SHOWN', value: inventoryAvailable ? items.length : '—' },
+          { label: 'INSTALLED SHOWN', value: inventoryAvailable ? installed.length : '—' },
+          { label: 'READY TO INSTALL', value: inventoryAvailable ? installable.length : '—' },
+          { label: 'RUNTIME UNAVAILABLE', value: inventoryAvailable ? unavailable.length : '—' },
         ]}
       />
       {plugins.isError ? (

@@ -7,7 +7,12 @@ import {
 } from '@prisma/client';
 import type { Request } from 'express';
 import { ReleaseGovernanceService } from '../src/services/release-governance-service.js';
-import { requestContextMiddleware } from '../src/request-context.js';
+import {
+  requestContextMiddleware,
+  runWithPrincipal,
+  type RequestPrincipal,
+} from '../src/request-context.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const releaseId = '10000000-0000-4000-8000-000000000001';
 const secondReleaseId = '10000000-0000-4000-8000-000000000002';
@@ -181,6 +186,21 @@ function runAsHuman<T>(operation: () => Promise<T>): Promise<T> {
       void operation().then(resolve, reject);
     });
   });
+}
+
+function scopedPrincipal(
+  roles: RequestPrincipal['roles'],
+  departmentId: string | null = LOCAL_DEPARTMENT_ID,
+): RequestPrincipal {
+  return {
+    principalId: '10000000-0000-4000-8000-000000000099',
+    actorId: 'human:test',
+    workspaceId: LOCAL_WORKSPACE_ID,
+    departmentId,
+    authentication: 'local',
+    roles,
+    requestId: 'request-release-governance-test',
+  };
 }
 
 describe('ReleaseGovernanceService', () => {
@@ -489,6 +509,29 @@ describe('ReleaseGovernanceService', () => {
     );
     expect(promoted.channel.currentReleaseId).toBe(releaseId);
     expect(promoted.decision.decidedBy).toBe('human:test');
+    expect(transaction.releaseBundle.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: releaseId,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          departmentId: LOCAL_DEPARTMENT_ID,
+        },
+      }),
+    );
+
+    transaction.releaseEvaluation.findFirst
+      .mockReset()
+      .mockResolvedValueOnce(evidence)
+      .mockResolvedValueOnce({ id: 'e0000000-0000-4000-8000-000000000099' });
+    await expect(
+      runAsHuman(() =>
+        service.promote('default', {
+          releaseId,
+          evaluationId,
+          rationale: 'Reject a stale passing evaluation after newer evidence was recorded.',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'RELEASE_EVALUATION_SUPERSEDED', status: 409 });
 
     transaction.releaseBundle.findFirst.mockResolvedValue({
       ...certifiedRelease,
@@ -513,5 +556,71 @@ describe('ReleaseGovernanceService', () => {
         }),
       ),
     ).rejects.toMatchObject({ code: 'UNVERIFIED_RELEASE_PROVENANCE' });
+  });
+
+  it('rejects stale decline evidence and requires admin for workspace-global decisions', async () => {
+    const evidence = {
+      id: evaluationId,
+      releaseId,
+      releaseDigest: release.digest,
+      verdict: ReleaseEvaluationVerdict.PASSED,
+      release,
+      promotionDecisions: [],
+      declineDecisions: [],
+    };
+    const transaction = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      releaseEvaluation: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce(evidence)
+          .mockResolvedValueOnce({ id: 'e0000000-0000-4000-8000-000000000099' }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((operation: (client: typeof transaction) => unknown) =>
+        Promise.resolve(operation(transaction)),
+      ),
+    } as unknown as PrismaClient;
+    const service = new ReleaseGovernanceService(prisma);
+
+    await expect(
+      runAsHuman(() =>
+        service.decline('default', {
+          releaseId,
+          evaluationId,
+          rationale: 'Do not decide from evidence superseded by a newer release evaluation.',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'RELEASE_EVALUATION_SUPERSEDED', status: 409 });
+    expect(transaction.releaseEvaluation.findFirst).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: {
+          id: evaluationId,
+          release: {
+            workspaceId: LOCAL_WORKSPACE_ID,
+            departmentId: LOCAL_DEPARTMENT_ID,
+          },
+        },
+      }),
+    );
+
+    const transactionMock = jest.fn();
+    const noTransaction = {
+      $transaction: transactionMock,
+    } as unknown as PrismaClient;
+    const globalService = new ReleaseGovernanceService(noTransaction);
+    await expect(
+      runWithPrincipal(scopedPrincipal(['owner'], null), () =>
+        globalService.decline('default', {
+          releaseId,
+          evaluationId,
+          rationale: 'A workspace owner must not decide a global release without admin.',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'AUTHORIZATION_REQUIRED', status: 403 });
+    expect(transactionMock).not.toHaveBeenCalled();
   });
 });

@@ -29,9 +29,10 @@ import {
 } from '@agent-builder/contracts';
 import { z } from 'zod';
 import { appendAuditEvent } from '../audit.js';
+import { hasMinimumRole } from '../authorization.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
-import { currentRequestContext } from '../request-context.js';
+import { currentRequestContext, currentRequestPrincipal } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { appendPlatformEvent } from './attention-service.js';
 import { activateReleaseCatalogPublications } from './reuse-service.js';
@@ -138,6 +139,31 @@ function requireHumanActor(): string {
     );
   }
   return context.actor.id;
+}
+
+function governedReleaseDecision(): {
+  actor: string;
+  scope: { workspaceId: string; departmentId: string | null };
+} {
+  const actor = requireHumanActor();
+  const principal = currentRequestPrincipal();
+  if (!hasMinimumRole(principal, 'owner')) {
+    throw new AppError(403, 'AUTHORIZATION_REQUIRED', 'This operation requires the owner role', {
+      requiredRole: 'owner',
+    });
+  }
+  if (principal.departmentId === null && !hasMinimumRole(principal, 'admin')) {
+    throw new AppError(
+      403,
+      'AUTHORIZATION_REQUIRED',
+      'Workspace-global release decisions require the admin role',
+      { requiredRole: 'admin' },
+    );
+  }
+  return {
+    actor,
+    scope: { workspaceId: principal.workspaceId, departmentId: principal.departmentId },
+  };
 }
 
 function expectedChannelKey(projectId: string | null): string {
@@ -378,15 +404,12 @@ export class ReleaseGovernanceService {
     return toEvaluation(record);
   }
 
-  async getChannel(channelKey: string): Promise<ProductionChannel> {
+  async getChannel(channelKey: string): Promise<ProductionChannel | null> {
     const channel = await this.prisma.productionChannel.findFirst({
       where: { key: channelKey, ...aggregateScopeWhere() },
       include: { currentRelease: true },
     });
-    if (channel === null) {
-      throw new AppError(404, 'PRODUCTION_CHANNEL_NOT_FOUND', 'Production channel was not found');
-    }
-    return toChannel(channel);
+    return channel === null ? null : toChannel(channel);
   }
 
   async promote(channelKey: string, input: z.input<typeof promoteReleaseRequestSchema>) {
@@ -401,13 +424,21 @@ export class ReleaseGovernanceService {
 
   async decline(channelKey: string, input: z.input<typeof declineReleaseRequestSchema>) {
     const parsed = declineReleaseRequestSchema.parse(input);
-    const actor = requireHumanActor();
+    const { actor, scope } = governedReleaseDecision();
     const result = await this.prisma.$transaction(
       async (transaction) => {
-        const lockKey = `${aggregateScope().workspaceId}:${channelKey}:release-decision`;
+        const lockKey = `${scope.workspaceId}:${scope.departmentId ?? 'global'}:${channelKey}:release-decision`;
         await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        await transaction.$queryRaw`
+          SELECT "id"
+          FROM "ReleaseBundle"
+          WHERE "id" = ${parsed.releaseId}::uuid
+            AND "workspaceId" = ${scope.workspaceId}::uuid
+            AND "departmentId" IS NOT DISTINCT FROM ${scope.departmentId}::uuid
+          FOR UPDATE
+        `;
         const evidence = await transaction.releaseEvaluation.findFirst({
-          where: { id: parsed.evaluationId, release: aggregateScopeWhere() },
+          where: { id: parsed.evaluationId, release: scope },
           include: {
             release: true,
             promotionDecisions: { select: { id: true } },
@@ -423,6 +454,7 @@ export class ReleaseGovernanceService {
         }
         if (
           evidence.releaseId !== parsed.releaseId ||
+          evidence.releaseDigest !== evidence.release.digest ||
           evidence.verdict !== ReleaseEvaluationVerdict.PASSED
         ) {
           throw new AppError(
@@ -438,6 +470,18 @@ export class ReleaseGovernanceService {
             'The release project does not match the production channel',
           );
         }
+        const latestEvidence = await transaction.releaseEvaluation.findFirst({
+          where: { releaseId: evidence.releaseId },
+          select: { id: true },
+          orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+        });
+        if (latestEvidence?.id !== evidence.id) {
+          throw new AppError(
+            409,
+            'RELEASE_EVALUATION_SUPERSEDED',
+            'A newer release evaluation must be reviewed before this decision can be recorded',
+          );
+        }
         const priorDecline = evidence.declineDecisions[0];
         if (priorDecline !== undefined) {
           if (priorDecline.rationale !== parsed.rationale) {
@@ -448,7 +492,7 @@ export class ReleaseGovernanceService {
             );
           }
           const channel = await transaction.productionChannel.findFirst({
-            where: { key: channelKey, ...aggregateScopeWhere() },
+            where: { key: channelKey, ...scope },
             include: { currentRelease: true },
           });
           return { channel, decision: priorDecline };
@@ -462,7 +506,7 @@ export class ReleaseGovernanceService {
         }
         const decision = await transaction.releaseDeclineDecision.create({
           data: {
-            ...aggregateScope(),
+            ...scope,
             channelKey,
             releaseId: parsed.releaseId,
             evaluationId: parsed.evaluationId,
@@ -483,7 +527,7 @@ export class ReleaseGovernanceService {
           details: { decisionId: decision.id, releaseId: evidence.releaseId, channelKey },
         });
         const channel = await transaction.productionChannel.findFirst({
-          where: { key: channelKey, ...aggregateScopeWhere() },
+          where: { key: channelKey, ...scope },
           include: { currentRelease: true },
         });
         return { channel, decision };
@@ -558,13 +602,21 @@ export class ReleaseGovernanceService {
       rationale: string;
     },
   ) {
-    const actor = requireHumanActor();
+    const { actor, scope } = governedReleaseDecision();
     const result = await this.prisma.$transaction(
       async (transaction) => {
-        const lockKey = `${aggregateScope().workspaceId}:${channelKey}:release-decision`;
+        const lockKey = `${scope.workspaceId}:${scope.departmentId ?? 'global'}:${channelKey}:release-decision`;
         await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        await transaction.$queryRaw`
+          SELECT "id"
+          FROM "ReleaseBundle"
+          WHERE "id" = ${input.releaseId}::uuid
+            AND "workspaceId" = ${scope.workspaceId}::uuid
+            AND "departmentId" IS NOT DISTINCT FROM ${scope.departmentId}::uuid
+          FOR UPDATE
+        `;
         const release = await transaction.releaseBundle.findFirst({
-          where: { id: input.releaseId, ...aggregateScopeWhere() },
+          where: { id: input.releaseId, ...scope },
           include: { resources: { include: { resourceVersion: true } } },
         });
         if (release === null) throw new AppError(404, 'RELEASE_NOT_FOUND', 'Release was not found');
@@ -576,7 +628,7 @@ export class ReleaseGovernanceService {
           );
         }
         const evidence = await transaction.releaseEvaluation.findFirst({
-          where: { id: input.evaluationId, release: aggregateScopeWhere() },
+          where: { id: input.evaluationId, release: scope },
           include: { declineDecisions: { select: { id: true } } },
         });
         if (
@@ -596,6 +648,18 @@ export class ReleaseGovernanceService {
             409,
             'RELEASE_EVIDENCE_ALREADY_DECIDED',
             'This evidence already has an immutable decline decision',
+          );
+        }
+        const latestEvidence = await transaction.releaseEvaluation.findFirst({
+          where: { releaseId: release.id },
+          select: { id: true },
+          orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+        });
+        if (latestEvidence?.id !== evidence.id) {
+          throw new AppError(
+            409,
+            'RELEASE_EVALUATION_SUPERSEDED',
+            'A newer release evaluation must be reviewed before this decision can be recorded',
           );
         }
         if (
@@ -621,7 +685,7 @@ export class ReleaseGovernanceService {
           );
         }
         let channel = await transaction.productionChannel.findFirst({
-          where: { key: channelKey, ...aggregateScopeWhere() },
+          where: { key: channelKey, ...scope },
           include: { currentRelease: true },
         });
         channel ??= await transaction.productionChannel.create({

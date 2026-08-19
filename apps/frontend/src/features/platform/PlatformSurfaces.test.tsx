@@ -3,7 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
 import { renderWithClient } from '../../test/render';
-import { platformRunFixture, releaseEvaluationId, server } from '../../test/server';
+import {
+  automationScheduleId,
+  authorityGrantId,
+  executionRunId,
+  platformRunFixture,
+  releaseEvaluationId,
+  server,
+} from '../../test/server';
 import { ApprovalDialog } from './ApprovalDialog';
 import { EvidencePage } from './EvidencePage';
 import { IncubatorPage } from './IncubatorPage';
@@ -34,6 +41,13 @@ describe('Paul OS console surfaces', () => {
     expect(screen.getByText('PRODUCTION').parentElement).toHaveTextContent('23');
     expect(screen.getByText('CANDIDATE').parentElement).toHaveTextContent('12');
     expect(screen.getByText('DEPRECATED').parentElement).toHaveTextContent('2');
+    const kindFilter = screen.getByLabelText('RESOURCE KIND');
+    expect(
+      within(kindFilter).getByRole('option', { name: 'Evaluation Suite' }),
+    ).toBeInTheDocument();
+    expect(
+      within(kindFilter).getByRole('option', { name: 'Improvement Candidate' }),
+    ).toBeInTheDocument();
   });
 
   it('hides cached Registry data and nominal readings when its dependencies fail', async () => {
@@ -118,15 +132,38 @@ describe('Paul OS console surfaces', () => {
     expect(
       screen.getByText('Permit bounded synthetic daily briefing executions.'),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Daily Brief' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Daily Brief authority' })).toBeInTheDocument();
+    expect(screen.getAllByText('ENTRY · Daily Brief · skill · version 1.0.0')).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'Daily Brief schedule' })).toBeInTheDocument();
+    expect(screen.getByText('COST · NOT RECORDED / $0.2500 ceiling')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(executionRunId.slice(0, 8));
+    expect(document.body).not.toHaveTextContent(authorityGrantId.slice(0, 8));
+    const exactReleaseSummaries = screen.getAllByText('EXACT RELEASE REFERENCE');
+    expect(exactReleaseSummaries).toHaveLength(3);
+    expect(
+      screen.queryByRole('heading', { name: 'EXACT RELEASE REFERENCE' }),
+    ).not.toBeInTheDocument();
+    for (const summary of exactReleaseSummaries) {
+      expect(summary.closest('details')).not.toHaveAttribute('open');
+    }
+    const releaseDigests = screen.getAllByText('b'.repeat(64));
+    expect(releaseDigests).toHaveLength(3);
+    releaseDigests.forEach((digest) => expect(digest).not.toBeVisible());
+    await user.click(exactReleaseSummaries[0]!);
+    expect(releaseDigests[0]).toBeVisible();
     await user.click(screen.getByText('FLIGHT RECORDER'));
-    const flightRecorder = screen.getByRole('list', { name: /Run .* phases/i });
+    const flightRecorder = screen.getByRole('list', { name: /Daily Brief execution phases/i });
     for (const phase of ['REQUEST', 'AUTHORITY', 'EXECUTION', 'OUTCOME']) {
       expect(within(flightRecorder).getByText(phase)).toBeInTheDocument();
     }
     const scheduleHeading = await screen.findByRole('heading', {
-      name: 'Daily operations briefing',
+      name: 'Daily Brief schedule',
     });
     const scheduleCard = scheduleHeading.closest('article')!;
+    expect(
+      within(scheduleCard).getByText(`Compose daily brief ${automationScheduleId}`),
+    ).not.toBeVisible();
     await user.click(within(scheduleCard).getByRole('button', { name: 'PAUSE SCHEDULE' }));
     expect(
       await within(scheduleCard).findByRole('button', { name: 'RESUME SCHEDULE' }),
@@ -149,7 +186,7 @@ describe('Paul OS console surfaces', () => {
     const { client } = renderWithClient(<RunsPage />, ['/runs']);
     expect(await screen.findByText('awaiting approval')).toBeInTheDocument();
     expect(
-      await screen.findByRole('heading', { name: 'Daily operations briefing' }),
+      await screen.findByRole('heading', { name: 'Daily Brief schedule' }),
     ).toBeInTheDocument();
 
     server.use(
@@ -181,9 +218,7 @@ describe('Paul OS console surfaces', () => {
     expect(
       screen.queryByText('Permit bounded synthetic daily briefing executions.'),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'Daily operations briefing' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Daily Brief schedule' })).not.toBeInTheDocument();
     expect(screen.queryByText('No execution runs yet.')).not.toBeInTheDocument();
     expect(screen.queryByText('No authority has been granted.')).not.toBeInTheDocument();
     expect(screen.queryByText('No durable schedules configured.')).not.toBeInTheDocument();
@@ -192,10 +227,19 @@ describe('Paul OS console surfaces', () => {
     }
   });
 
+  it('resolves a provenance link to the exact source run without promoting its ID to copy', async () => {
+    renderWithClient(<RunsPage />, [`/operate?run=${executionRunId}`]);
+
+    const sourceRunHeading = await screen.findByRole('heading', { name: 'Daily Brief' });
+    expect(sourceRunHeading.closest('article')).toHaveAttribute('data-source-target', 'true');
+    expect(document.body).not.toHaveTextContent(executionRunId.slice(0, 8));
+  });
+
   it('shows validated outcomes and measured cost without rendering raw output payloads', async () => {
+    const outcomeRecordId = '17171717-1717-4171-8171-171717171717';
     renderWithClient(<EvidencePage />, [`/evidence?evaluation=${releaseEvaluationId}`]);
 
-    expect(await screen.findByRole('heading', { name: 'Outcome 17171717' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Recorded outcome' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Current production release' })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Deterministic contract evaluation' }),
@@ -209,16 +253,88 @@ describe('Paul OS console surfaces', () => {
     expect(screen.getAllByText(/does not measure semantic model quality/i).length).toBeGreaterThan(
       0,
     );
-    expect(screen.getByRole('heading', { name: 'provider cost usd' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Provider cost usd' })).toBeInTheDocument();
     expect(screen.getByText('$0.0032')).toBeInTheDocument();
+    const provenanceSummaries = screen.getAllByText('TECHNICAL PROVENANCE');
+    expect(provenanceSummaries).toHaveLength(2);
+    provenanceSummaries.forEach((summary) => {
+      expect(summary.closest('details')).not.toHaveAttribute('open');
+    });
+    expect(screen.getByText(outcomeRecordId)).not.toBeVisible();
+    screen.getAllByText(executionRunId).forEach((reference) => expect(reference).not.toBeVisible());
+    expect(screen.queryByText(outcomeRecordId.slice(0, 8))).not.toBeInTheDocument();
     expect(screen.queryByText('Protect the focus block')).not.toBeInTheDocument();
     expect(screen.queryByText('synthetic-test')).not.toBeInTheDocument();
   });
 
+  it('treats an absent production channel as a quiet unassigned state', async () => {
+    server.use(
+      http.get('http://localhost/v1/production-channels/daily-operations', () =>
+        HttpResponse.json(null),
+      ),
+    );
+
+    renderWithClient(<EvidencePage />, ['/evidence']);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'No release is assigned to Daily operations.',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/This is a normal unassigned channel/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Production authority unavailable/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const evaluationSelection = screen.getByRole('region', { name: 'Evaluation selection' });
+    expect(evaluationSelection).not.toHaveTextContent(/query parameter/i);
+    expect(
+      within(evaluationSelection).getByRole('link', { name: 'OPEN AGENT CERTIFICATION →' }),
+    ).toHaveAttribute('href', '/library');
+    expect(
+      within(evaluationSelection).getByRole('link', { name: 'OPEN ATTENTION →' }),
+    ).toHaveAttribute('href', '/attention');
+  });
+
+  it('humanizes punctuated and camel-case metric identifiers', async () => {
+    server.use(
+      http.get('http://localhost/v1/metrics', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: '32323232-3232-4232-8232-323232323232',
+              runId: executionRunId,
+              name: 'outcome.quality',
+              value: 0.91,
+              unit: 'ratio',
+              metadata: {},
+              observedAt: '2026-08-18T14:00:00.000Z',
+            },
+            {
+              id: '33333333-3333-4333-8333-333333333333',
+              runId: executionRunId,
+              name: 'modelInput',
+              value: 1480,
+              unit: 'tokens',
+              metadata: {},
+              observedAt: '2026-08-18T14:01:00.000Z',
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithClient(<EvidencePage />, [`/evidence?evaluation=${releaseEvaluationId}`]);
+
+    expect(await screen.findByRole('heading', { name: 'Outcome quality' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Model input' })).toBeInTheDocument();
+    expect(screen.getByText('Tokens')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('outcome.quality');
+    expect(document.body).not.toHaveTextContent('modelInput');
+  });
+
   it('discloses every failed evidence source and hides cached evidence', async () => {
     const { client } = renderWithClient(<EvidencePage />, ['/evidence']);
-    expect(await screen.findByRole('heading', { name: 'Outcome 17171717' })).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'provider cost usd' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Recorded outcome' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Provider cost usd' })).toBeInTheDocument();
 
     server.use(
       http.get('http://localhost/v1/outcomes', () => unavailable('Outcomes are unavailable.')),
@@ -238,8 +354,8 @@ describe('Paul OS console surfaces', () => {
         'Metrics unavailable. Metrics are unavailable.',
       ]),
     );
-    expect(screen.queryByRole('heading', { name: 'Outcome 17171717' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'provider cost usd' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Recorded outcome' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Provider cost usd' })).not.toBeInTheDocument();
     expect(screen.queryByText('No outcomes have been recorded.')).not.toBeInTheDocument();
     expect(screen.queryByText('No metrics have been observed.')).not.toBeInTheDocument();
     for (const label of ['OUTCOMES SHOWN', 'METRICS SHOWN', 'CITED SHOWN', 'UNRESOLVED SHOWN']) {
@@ -267,21 +383,110 @@ describe('Paul OS console surfaces', () => {
       name: 'Require a schedule reference for time-bound priorities',
     });
     const improvementCard = improvementHeading.closest('article')!;
+    const improvementProvenance = within(improvementCard).getByText('TECHNICAL PROVENANCE');
+    expect(improvementProvenance.closest('details')).not.toHaveAttribute('open');
     await user.click(within(improvementCard).getByRole('button', { name: 'RECORD DECISION' }));
     expect(await screen.findByText(/entered the governed incubator/i)).toBeInTheDocument();
 
-    const memoryHeading = screen.getByRole('heading', { name: 'preferences.briefing' });
+    const memoryHeading = screen.getByRole('heading', { name: 'Preferences briefing' });
     const memoryCard = memoryHeading.closest('article')!;
+    const memoryProvenance = within(memoryCard).getByText('TECHNICAL PROVENANCE');
+    expect(memoryProvenance.closest('details')).not.toHaveAttribute('open');
+    expect(within(memoryCard).getByText(executionRunId)).not.toBeVisible();
+    await user.click(memoryProvenance);
+    expect(within(memoryCard).getByRole('link', { name: 'OPEN SOURCE RUN →' })).toHaveAttribute(
+      'href',
+      `/operate?run=${executionRunId}#run-${executionRunId}`,
+    );
+    await user.click(memoryProvenance);
     await user.click(within(memoryCard).getByRole('button', { name: 'RECORD MEMORY DECISION' }));
     expect(await screen.findByText(/accepted as an immutable memory record/i)).toBeInTheDocument();
 
     expect(screen.queryByText('fixture://observation/priority')).not.toBeInTheDocument();
     expect(screen.queryByText('schedule-risk-first')).not.toBeInTheDocument();
+    expect(screen.getByText('briefing-unresolved-priority')).not.toBeVisible();
+    screen.getAllByText(executionRunId).forEach((reference) => expect(reference).not.toBeVisible());
+    expect(screen.getByText('17171717-1717-4171-8171-171717171717')).not.toBeVisible();
+    screen
+      .getAllByText('23232323-2323-4232-8232-232323232323')
+      .forEach((reference) => expect(reference).not.toBeVisible());
     expect(screen.getByText(/may not apply, commit, certify, or promote/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /view candidate definitions/i })).toHaveAttribute(
       'href',
       '/registry?kind=ImprovementCandidate&lifecycle=experimental',
     );
+  });
+
+  it('sanitizes opaque observation and candidate labels, including decision confirmation', async () => {
+    const user = userEvent.setup();
+    const opaqueLabel = `worker-test:${executionRunId}`;
+    const candidateId = '34343434-3434-4343-8434-343434343434';
+    const observationRecordId = '35353535-3535-4353-8353-353535353535';
+    const candidate = {
+      id: candidateId,
+      observationId: observationRecordId,
+      title: opaqueLabel,
+      proposedTarget: 'daily-brief@next',
+      proposedChange: 'Retain a bounded validation proposal for human review.',
+      evidenceRefs: [`observation:${observationRecordId}`],
+      state: 'proposed' as const,
+      createdBy: 'test-operator',
+      reviewedBy: null,
+      reviewRationale: null,
+      createdAt: '2026-07-31T14:00:00.000Z',
+      reviewedAt: null,
+    };
+    server.use(
+      http.get('http://localhost/v1/observations', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: observationRecordId,
+              signalKey: opaqueLabel,
+              signalType: opaqueLabel,
+              summary: 'A governed operational observation requires review.',
+              evidence: {},
+              provenance: {},
+              sourceRunId: executionRunId,
+              sourceOutcomeId: null,
+              observedBy: 'test-operator',
+              observedAt: '2026-07-31T14:00:00.000Z',
+            },
+          ],
+        }),
+      ),
+      http.get('http://localhost/v1/improvement-candidates', () =>
+        HttpResponse.json({ items: [candidate] }),
+      ),
+      http.post(`http://localhost/v1/improvement-candidates/${candidateId}/review`, () =>
+        HttpResponse.json({
+          ...candidate,
+          state: 'incubating',
+          reviewedBy: 'test-operator',
+          reviewRationale: 'Human review retained the bounded proposal.',
+          reviewedAt: '2026-07-31T14:05:00.000Z',
+        }),
+      ),
+    );
+
+    renderWithClient(<IncubatorPage />, ['/incubator']);
+
+    expect(await screen.findByRole('heading', { name: 'Operational observation' })).toBeVisible();
+    const candidateHeading = await screen.findByRole('heading', {
+      name: 'Review a governed improvement',
+    });
+    expect(screen.queryByRole('heading', { name: opaqueLabel })).not.toBeInTheDocument();
+    await user.click(
+      within(candidateHeading.closest('article')!).getByRole('button', {
+        name: 'RECORD DECISION',
+      }),
+    );
+    expect(
+      await screen.findByText('Governed improvement entered the governed incubator.'),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(`${opaqueLabel} entered the governed incubator.`),
+    ).not.toBeInTheDocument();
   });
 
   it('discloses every failed learning source and hides cached ledger data', async () => {
@@ -297,7 +502,7 @@ describe('Paul OS console surfaces', () => {
       }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole('heading', { name: 'preferences.briefing' }),
+      await screen.findByRole('heading', { name: 'Preferences briefing' }),
     ).toBeInTheDocument();
 
     server.use(
@@ -337,7 +542,7 @@ describe('Paul OS console surfaces', () => {
         name: 'Require a schedule reference for time-bound priorities',
       }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'preferences.briefing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Preferences briefing' })).not.toBeInTheDocument();
     expect(screen.queryByText('No governed observations recorded.')).not.toBeInTheDocument();
     expect(
       screen.queryByText('No improvement candidates are awaiting curation.'),

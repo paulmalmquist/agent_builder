@@ -12,6 +12,7 @@ import { Modal } from '../../components/Modal';
 import { Notice } from '../../components/Notice';
 import { ConnectorMark } from '../../components/connector-marks/ConnectorMark';
 import { getErrorMessage } from '../../api/client';
+import { hasGovernedRuntime } from './plugin-runtime';
 
 function money(value: number) {
   return `$${value.toFixed(value < 1 ? 2 : 0)}`;
@@ -21,10 +22,28 @@ function time(value: string | null) {
   return value ? new Date(value).toLocaleString() : 'Never used';
 }
 
+function typedCapabilityCount(count: number): string {
+  return `${count} typed ${count === 1 ? 'capability' : 'capabilities'}`;
+}
+
+function countVerb(count: number): 'is' | 'are' {
+  return count === 1 ? 'is' : 'are';
+}
+
+function unavailableRuntimeLabel(plugin: PluginCatalogItem): string {
+  if (plugin.executionPlacement === 'workstation') return 'WORKSTATION BROKER';
+  return `${plugin.transport.toUpperCase()} RUNTIME`;
+}
+
+function unavailableRuntimeExplanation(plugin: PluginCatalogItem): string {
+  const runtime = unavailableRuntimeLabel(plugin).toLocaleLowerCase();
+  return `${runtime} is unavailable in this checkpoint. Invocation and setup are withheld from this console until that governed runtime exists.`;
+}
+
 function pluginState(
   plugin: PluginCatalogItem,
 ): PluginCatalogItem['healthStatus'] | 'disabled' | 'unavailable' {
-  if (plugin.executionPlacement === 'workstation') return 'unavailable';
+  if (!hasGovernedRuntime(plugin)) return 'unavailable';
   if (plugin.installationState === 'disabled') return 'disabled';
   return plugin.healthStatus;
 }
@@ -32,7 +51,10 @@ function pluginState(
 function PluginCard({ plugin, onManage }: { plugin: PluginCatalogItem; onManage: () => void }) {
   const state = pluginState(plugin);
   const installed = plugin.installationId !== null;
-  const active = plugin.installationState === 'enabled' && state === 'healthy';
+  const runtimeAvailable = hasGovernedRuntime(plugin);
+  const active = runtimeAvailable && plugin.installationState === 'enabled' && state === 'healthy';
+  const capabilitySummary = typedCapabilityCount(plugin.capabilities.length);
+  const capabilityVerb = countVerb(plugin.capabilities.length);
   return (
     <article className="plugin-card" data-health={state}>
       <header>
@@ -47,13 +69,13 @@ function PluginCard({ plugin, onManage }: { plugin: PluginCatalogItem; onManage:
         <span className="resource-kind">{plugin.transport}</span>
       </header>
       <div className="plugin-card-status">
-        <strong>{state.replaceAll('_', ' ')}</strong>
+        <strong>{runtimeAvailable ? state.replaceAll('_', ' ') : 'runtime unavailable'}</strong>
         <span>
-          {plugin.executionPlacement === 'workstation'
-            ? 'Needs the future workstation broker. It cannot run here.'
+          {!runtimeAvailable
+            ? `${capabilitySummary} ${capabilityVerb} declared. ${unavailableRuntimeExplanation(plugin)}`
             : installed
-              ? `${plugin.capabilities.length} typed capabilities are governed by this installation.`
-              : `${plugin.capabilities.length} typed capabilities are ready to install.`}
+              ? `${capabilitySummary} ${capabilityVerb} governed by this installation.`
+              : `${capabilitySummary} ${capabilityVerb} ready to install.`}
         </span>
       </div>
       <dl className="plugin-readings">
@@ -76,12 +98,12 @@ function PluginCard({ plugin, onManage }: { plugin: PluginCatalogItem; onManage:
       </dl>
       <button
         className={installed ? 'secondary-button' : 'primary-button'}
-        disabled={plugin.executionPlacement === 'workstation'}
+        disabled={!runtimeAvailable}
         onClick={onManage}
         type="button"
       >
-        {plugin.executionPlacement === 'workstation'
-          ? 'WORKSTATION UNAVAILABLE'
+        {!runtimeAvailable
+          ? `${unavailableRuntimeLabel(plugin)} UNAVAILABLE`
           : installed
             ? 'MANAGE PLUGIN'
             : 'INSTALL PLUGIN'}
@@ -203,8 +225,9 @@ function PluginManagementDialog({
         <span>{plugin.executionPlacement.replace('_', ' ')}</span>
       </div>
       <p>
-        {plugin.capabilities.length} typed tools. The runtime checks this exact version, digest,
-        installation, scope, schema, and effect before every call.
+        {typedCapabilityCount(plugin.capabilities.length)} {countVerb(plugin.capabilities.length)}{' '}
+        declared. The runtime checks this exact version, digest, installation, scope, schema, and
+        effect before every call.
       </p>
       <ul className="plugin-capability-list" aria-label="Plugin capabilities">
         {plugin.capabilities.map((capability) => (

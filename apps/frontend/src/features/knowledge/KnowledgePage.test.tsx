@@ -88,20 +88,22 @@ function useResourceResponses(items: ResourceVersion[]) {
 }
 
 describe('KnowledgePage', () => {
-  it('exposes the transfer-ready entity chassis without inventing people', async () => {
+  it('exposes the definition-graph boundary without inventing semantic knowledge', async () => {
     const user = userEvent.setup();
     renderWithClient(<KnowledgePage />, ['/knowledge']);
 
     expect(screen.getByRole('heading', { name: 'Knowledge' })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', {
-        name: 'The graph chassis is ready. Organization data is not here yet.',
+        name: 'The definition graph is ready. Semantic organization data is not here yet.',
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'AIM remains outside this build.' }),
+      screen.getByRole('heading', {
+        name: 'AIM demonstrates a separate synthetic capability map.',
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Enable the local AIM build flag/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'OPEN AIM →' })).toHaveAttribute('href', '/aim');
 
     const entityTypes = screen.getByRole('region', { name: 'Knowledge entity types' });
     for (const label of [
@@ -125,6 +127,11 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/no private directory data is inferred here/i)).toBeInTheDocument();
     expect(screen.queryByText('Synthetic Owner')).not.toBeInTheDocument();
+
+    const closeIndex = screen.getByRole('button', { name: 'CLOSE INDEX' });
+    expect(closeIndex).toHaveClass('secondary-button');
+    await user.click(closeIndex);
+    expect(screen.queryByRole('heading', { name: 'People' })).not.toBeInTheDocument();
   });
 
   it('selects an entity and traverses exact dependencies to agents that touch it', async () => {
@@ -171,8 +178,28 @@ describe('KnowledgePage', () => {
     expect(
       within(relationshipPanel).getByText('AGENTS THAT TOUCH IT').parentElement,
     ).toHaveTextContent('1');
-    expect(within(relationshipPanel).getAllByText('Synthetic Readiness Agent')).toHaveLength(2);
+    const usedByEdge = within(relationshipPanel).getByRole('listitem', {
+      name: 'Synthetic Readiness Dataset USED BY Synthetic Readiness Agent',
+    });
+    expect(within(usedByEdge).getByText('Synthetic Readiness Dataset')).toBeInTheDocument();
+    expect(within(usedByEdge).getByText('Synthetic Readiness Agent')).toBeInTheDocument();
+    expect(usedByEdge).toHaveTextContent('Declared by Synthetic Readiness Agent V1.0.0');
+    expect(within(usedByEdge).getByLabelText('USED BY')).toHaveTextContent('USED BY');
+    expect(within(relationshipPanel).getByText(/Exact version pin/)).toHaveTextContent(
+      'Exact version pin. No semantic relationship is inferred.',
+    );
     expect(within(relationshipPanel).queryByText('Wrong Version Agent')).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByRole('region', { name: 'Knowledge entity types' })).getByRole('button', {
+        name: /Agents & Skills.*2 SHOWN/i,
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: /Synthetic Readiness Agent/i }));
+    const dependsOnEdge = within(screen.getByRole('complementary')).getByRole('listitem', {
+      name: 'Synthetic Readiness Agent DEPENDS ON Synthetic Readiness Dataset',
+    });
+    expect(within(dependsOnEdge).getByLabelText('DEPENDS ON')).toHaveTextContent('DEPENDS ON');
   });
 
   it('resolves a deep link through the exact scoped resource endpoint', async () => {
@@ -215,6 +242,112 @@ describe('KnowledgePage', () => {
       screen.getByText(/Knowledge relationship index is partial: 0 of 127/i),
     ).toBeInTheDocument();
     expect(screen.queryByText('No metrics are imported.')).not.toBeInTheDocument();
+  });
+
+  it('does not let an exact deep link reintroduce an audit-only fixture', async () => {
+    const fixture = resource({
+      id: '26262626-2626-4626-8626-262626262626',
+      familyId: '27272727-2727-4727-8727-272727272727',
+      kind: 'Agent',
+      name: 'Persisted integration fixture',
+      slug: 'persisted-integration-fixture',
+      provenance: { source: 'worker-integration-test' },
+    });
+    server.use(
+      http.get('http://localhost/v1/resources', () => HttpResponse.json(resourceResponse([]))),
+      http.get('http://localhost/v1/resources/:resourceVersionId', () =>
+        HttpResponse.json(fixture),
+      ),
+    );
+
+    renderWithClient(<KnowledgePage />, [`/knowledge?type=agents&entity=${fixture.id}`]);
+
+    expect(
+      await screen.findByText(
+        'This audit-only fixture is excluded from the user-facing knowledge index.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: fixture.name })).not.toBeInTheDocument();
+  });
+
+  it('humanizes opaque incident signal types without exposing their identifier suffix', async () => {
+    const opaqueId = '28282828-2828-4828-8828-282828282828';
+    server.use(
+      http.get('http://localhost/v1/observations', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: '29292929-2929-4929-8929-292929292929',
+              signalKey: 'governed-signal',
+              signalType: `compose-outcome-signal-${opaqueId}`,
+              summary: 'A governed operational signal needs review.',
+              evidence: {},
+              provenance: {},
+              sourceRunId: null,
+              sourceOutcomeId: null,
+              observedBy: 'human:quality-engineer',
+              observedAt: now,
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithClient(<KnowledgePage />, ['/knowledge']);
+
+    await user.click(await screen.findByRole('button', { name: /Incidents.*1 SHOWN/i }));
+    expect(screen.getByText('OBSERVATION · Compose outcome signal')).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(opaqueId, 'u'))).not.toBeInTheDocument();
+  });
+
+  it('shows exact versions, deduplicates exact records, and quarantines explicit fixtures', async () => {
+    const familyId = '19191919-1919-4919-8919-191919191919';
+    const first = resource({
+      id: '20202020-2020-4020-8020-202020202020',
+      familyId,
+      kind: 'Skill',
+      name: 'Daily Brief',
+      slug: 'daily-brief',
+      version: '1.0.0',
+    });
+    const successor = resource({
+      id: '21212121-2121-4121-8121-212121212121',
+      familyId,
+      kind: 'Skill',
+      name: 'Daily Brief',
+      slug: 'daily-brief',
+      version: '1.1.0',
+      digest: 'b'.repeat(64),
+    });
+    const workerFixture = resource({
+      id: '22222222-2222-4222-8222-222222222222',
+      familyId: '23232323-2323-4323-8323-232323232323',
+      kind: 'Skill',
+      name: 'Daily Brief',
+      slug: 'daily-brief-worker-fixture',
+      version: '1.0.0-workerabc',
+      sourceCommit: 'worker-integration-test',
+      digest: 'c'.repeat(64),
+    });
+    const scopeFixture = resource({
+      id: '24242424-2424-4424-8424-242424242424',
+      familyId: '25252525-2525-4525-8525-252525252525',
+      kind: 'Agent',
+      name: 'Scoped legacy mirror',
+      slug: 'scoped-legacy-mirror',
+      provenance: { source: 'scope-test' },
+      digest: 'd'.repeat(64),
+    });
+    useResourceResponses([first, first, successor, workerFixture, scopeFixture]);
+    const user = userEvent.setup();
+    renderWithClient(<KnowledgePage />, ['/knowledge']);
+
+    await user.click(await screen.findByRole('button', { name: /Agents & Skills.*2 SHOWN/i }));
+
+    expect(screen.getByRole('button', { name: /Daily Brief.*V1\.0\.0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Daily Brief.*V1\.1\.0/i })).toBeInTheDocument();
+    expect(screen.queryByText('Scoped legacy mirror')).not.toBeInTheDocument();
+    expect(screen.queryByText('1.0.0-workerabc')).not.toBeInTheDocument();
   });
 
   it('fails closed when governed definitions are unavailable', async () => {

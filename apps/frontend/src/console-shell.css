@@ -148,6 +148,25 @@
   color: var(--purple);
 }
 
+.platform-rail-tooltip {
+  position: fixed;
+  z-index: 50;
+  left: calc(var(--platform-rail-width) + 9px);
+  transform: translateY(-50%);
+  pointer-events: none;
+  padding: 7px 9px;
+  border: 1px solid rgba(188, 195, 208, 0.24);
+  border-radius: 6px;
+  color: #f3f1fa;
+  background: #101218;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
 .platform-rail-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -271,6 +290,25 @@
   display: flex;
   align-items: center;
   gap: 18px;
+}
+
+@media (min-width: 1100px) {
+  .platform-workspace-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 440px) minmax(0, 1fr);
+  }
+
+  .platform-workspace-header .global-search {
+    grid-column: 2;
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .platform-workspace-actions {
+    grid-column: 3;
+    justify-self: end;
+    margin-left: 0;
+  }
 }
 
 .platform-resume-link,

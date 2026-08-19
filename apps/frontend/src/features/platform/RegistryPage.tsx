@@ -40,6 +40,10 @@ function shortenDigest(digest: string) {
   return `${digest.slice(0, 10)}…${digest.slice(-6)}`;
 }
 
+function humanizeResourceKind(kind: ResourceVersion['kind']): string {
+  return kind.replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');
+}
+
 export function RegistryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('query') ?? '';
@@ -106,8 +110,8 @@ export function RegistryPage() {
             <span>AIM · LOCAL PROGRAM MANIFEST</span>
             <h2>Open the manufacturing capability map</h2>
             <p>
-              Review synthetic program capabilities on conceptual geometry. No vehicle CAD or live
-              source connection is used.
+              Review declared groups, hardware, manufacturing methods, and agent coverage. No live
+              authority or source connection is used.
             </p>
           </div>
           <Link className="primary-button" to="/aim">
@@ -131,7 +135,7 @@ export function RegistryPage() {
               <option value="">All kinds</option>
               {resourceKinds.map((value) => (
                 <option key={value} value={value}>
-                  {value.replace(/([a-z])([A-Z])/g, '$1 $2')}
+                  {humanizeResourceKind(value)}
                 </option>
               ))}
             </select>
@@ -173,7 +177,7 @@ export function RegistryPage() {
             {items.map((resource) => (
               <article className="resource-card" key={resource.id}>
                 <header>
-                  <span className="resource-kind">{resource.kind}</span>
+                  <span className="resource-kind">{humanizeResourceKind(resource.kind)}</span>
                   <span className="os-status-chip" data-state={resource.lifecycle}>
                     {resource.lifecycle}
                   </span>

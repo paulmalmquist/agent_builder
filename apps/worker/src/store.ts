@@ -20,6 +20,7 @@ import type {
   HeartbeatResult,
   ProviderUsageSettlement,
   RecoverySummary,
+  RetrySuppressionReason,
   WorkerStore,
 } from './types.js';
 
@@ -51,6 +52,7 @@ type ClaimRow = {
   estimatedUpperCostUsd: Prisma.Decimal;
   attempts: number;
   maxAttempts: number;
+  retryBackoff: 'fixed' | 'exponential';
 };
 
 type GrantLockRow = {
@@ -84,6 +86,9 @@ type LockRow = {
   estimatedUpperCostUsd: Prisma.Decimal;
   actualCostUsd: Prisma.Decimal | null;
   attempts: number;
+  maxAttempts: number;
+  retryBackoff: 'fixed' | 'exponential';
+  pluginInvocationStarted: boolean;
 };
 
 type ExpiredRunRow = {
@@ -94,6 +99,8 @@ type ExpiredRunRow = {
   estimatedUpperCostUsd: Prisma.Decimal;
   attempts: number;
   maxAttempts: number;
+  retryBackoff: 'fixed' | 'exponential';
+  pluginInvocationStarted: boolean;
 };
 type ResourceDefinitionRow = { definition: Prisma.JsonValue };
 type ChannelLockRow = { currentReleaseId: string | null; promotedAt: Date | null };
@@ -154,7 +161,13 @@ function toClaimedRun(row: ClaimRow, productionEpoch: Date | null): ClaimedRun {
     estimatedUpperCostUsd: Number(row.estimatedUpperCostUsd),
     attempts: row.attempts + 1,
     maxAttempts: row.maxAttempts,
+    retryBackoff: row.retryBackoff,
   };
+}
+
+function retryDelayMs(backoff: ClaimedRun['retryBackoff'], attempt: number): number {
+  if (backoff === 'fixed') return 1_000;
+  return Math.min(300_000, 1_000 * 2 ** Math.min(attempt, 8));
 }
 
 function satisfiesConstraints(
@@ -338,25 +351,40 @@ export class PrismaWorkerStore implements WorkerStore {
     return this.prisma.$transaction(async (transaction) => {
       const expired = await transaction.$queryRaw<ExpiredRunRow[]>`
         SELECT "id", "workspaceId", "departmentId", "authorityGrantId",
-               "estimatedUpperCostUsd", "attempts", "maxAttempts"
-        FROM "ExecutionRun"
-        WHERE "state" = 'running'
-          AND "leaseExpiresAt" < NOW()
-          AND "authorityGrantId" IS NOT NULL
-        ORDER BY "leaseExpiresAt" ASC, "id" ASC
-        FOR UPDATE SKIP LOCKED
+               "estimatedUpperCostUsd", "attempts", "maxAttempts", "retryBackoff",
+               EXISTS (
+                 SELECT 1 FROM "PluginInvocation" invocation
+                 WHERE invocation."runId" = run."id"
+               ) AS "pluginInvocationStarted"
+        FROM "ExecutionRun" run
+        WHERE run."state" = 'running'
+          AND run."leaseExpiresAt" < NOW()
+          AND run."authorityGrantId" IS NOT NULL
+        ORDER BY run."leaseExpiresAt" ASC, run."id" ASC
+        FOR UPDATE OF run SKIP LOCKED
       `;
       const failed: ExpiredRunRow[] = [];
       const requeued: ExpiredRunRow[] = [];
       for (const run of expired) {
-        const terminal = run.attempts >= run.maxAttempts;
+        const retrySuppressedBy = run.pluginInvocationStarted
+          ? ('plugin_invocation_started' as const)
+          : null;
+        const terminal = run.attempts >= run.maxAttempts || retrySuppressedBy !== null;
+        const failureCode =
+          retrySuppressedBy === null ? 'WORKER_LEASE_EXHAUSTED' : 'PLUGIN_INVOCATION_RETRY_BLOCKED';
         await transaction.executionRun.update({
           where: { id: run.id },
           data: terminal
             ? {
                 state: ExecutionRunState.FAILED,
-                message: 'Execution retry limit exhausted after worker interruption',
-                error: errorJson('WORKER_LEASE_EXHAUSTED'),
+                message:
+                  retrySuppressedBy === null
+                    ? 'Execution retry limit exhausted after worker interruption'
+                    : 'Execution stopped after a Plugin invocation because its result cannot be replayed safely',
+                error: {
+                  code: failureCode,
+                  ...(retrySuppressedBy === null ? {} : { retrySuppressedBy }),
+                },
                 finishedAt: new Date(),
                 leaseOwner: null,
                 leaseExpiresAt: null,
@@ -379,17 +407,25 @@ export class PrismaWorkerStore implements WorkerStore {
           phase: 'worker-recovery',
           state: terminal ? 'failed' : 'queued',
           message: terminal
-            ? 'Worker recovery exhausted the retry limit.'
+            ? retrySuppressedBy === null
+              ? 'Worker recovery exhausted the retry limit.'
+              : 'Worker recovery blocked replay after a Plugin invocation had started.'
             : 'Worker recovery returned the run to the queue.',
-          metadata: { attempt: run.attempts, maxAttempts: run.maxAttempts },
+          metadata: {
+            attempt: run.attempts,
+            maxAttempts: run.maxAttempts,
+            retryBackoff: run.retryBackoff,
+            ...(retrySuppressedBy === null ? {} : { retrySuppressedBy }),
+          },
         });
         if (terminal) {
           await appendRunPlatformEvent(transaction, run.id, 'execution.failed', {
-            code: 'WORKER_LEASE_EXHAUSTED',
+            code: failureCode,
+            ...(retrySuppressedBy === null ? {} : { retrySuppressedBy }),
           });
           await recordDigestDelivery(transaction, run.id, {
             state: 'failed',
-            code: 'WORKER_LEASE_EXHAUSTED',
+            code: failureCode,
           });
         }
         (terminal ? failed : requeued).push(run);
@@ -398,7 +434,12 @@ export class PrismaWorkerStore implements WorkerStore {
         await transaction.auditEvent.createMany({
           data: failed.map((run) =>
             auditData('execution.recovery_failed', run.id, run, {
-              code: 'WORKER_LEASE_EXHAUSTED',
+              code: run.pluginInvocationStarted
+                ? 'PLUGIN_INVOCATION_RETRY_BLOCKED'
+                : 'WORKER_LEASE_EXHAUSTED',
+              ...(run.pluginInvocationStarted
+                ? { retrySuppressedBy: 'plugin_invocation_started' }
+                : {}),
             }),
           ),
         });
@@ -422,7 +463,7 @@ export class PrismaWorkerStore implements WorkerStore {
                  run."projectId", release."projectId" AS "releaseProjectId", run."requiredToolScopes",
                  run."input", run."providerKind", run."providerVersion", run."model",
                  run."pricingVersion", run."maxInputTokens", run."maxOutputTokens", run."maxEstimatedCostUsd",
-                 run."estimatedUpperCostUsd", run."attempts", run."maxAttempts"
+                 run."estimatedUpperCostUsd", run."attempts", run."maxAttempts", run."retryBackoff"
           FROM "ExecutionRun" run
           JOIN "ReleaseBundle" release
             ON release."id" = run."releaseId"
@@ -433,7 +474,13 @@ export class PrismaWorkerStore implements WorkerStore {
             AND (
               run."attempts" = 0 OR
               run."updatedAt" <= NOW() - (
-                LEAST(300, CAST(POWER(2, LEAST(run."attempts", 8)) AS INTEGER)) * INTERVAL '1 second'
+                CASE run."retryBackoff"
+                  WHEN 'fixed'::"AutomationBackoff" THEN INTERVAL '1 second'
+                  ELSE LEAST(
+                    300,
+                    CAST(POWER(2, LEAST(run."attempts", 8)) AS INTEGER)
+                  ) * INTERVAL '1 second'
+                END
               )
             )
           ORDER BY run."createdAt" ASC, run."id" ASC
@@ -581,6 +628,9 @@ export class PrismaWorkerStore implements WorkerStore {
           create: { runId: candidate.id, reasons: [reason], requestedBy: SYSTEM_ACTOR },
           update: {
             state: ApprovalRequestState.PENDING,
+            requestVersion: { increment: 1 },
+            decisionGroupKey: null,
+            decisionGroupSize: null,
             reasons: [reason],
             requestedBy: SYSTEM_ACTOR,
             decidedBy: null,
@@ -1023,18 +1073,24 @@ export class PrismaWorkerStore implements WorkerStore {
     code: string,
     retryable: boolean,
     incurred?: ProviderUsageSettlement,
+    retrySuppressedBy?: RetrySuppressionReason,
   ): Promise<FailureDisposition> {
     return this.prisma.$transaction(async (transaction) => {
       const locks = await transaction.$queryRaw<LockRow[]>`
         SELECT "id", "workspaceId", "departmentId", "releaseId", "projectId",
                "developmentDraft", "providerKind",
                "cancelRequestedAt",
-               "authorityGrantId", "estimatedUpperCostUsd", "actualCostUsd", "attempts"
-        FROM "ExecutionRun"
-        WHERE "id" = ${run.id}::uuid
-          AND "state" = 'running'
-          AND "leaseOwner" = ${workerId}
-        FOR UPDATE
+               "authorityGrantId", "estimatedUpperCostUsd", "actualCostUsd", "attempts",
+               "maxAttempts", "retryBackoff",
+               EXISTS (
+                 SELECT 1 FROM "PluginInvocation" invocation
+                 WHERE invocation."runId" = candidate."id"
+               ) AS "pluginInvocationStarted"
+        FROM "ExecutionRun" candidate
+        WHERE candidate."id" = ${run.id}::uuid
+          AND candidate."state" = 'running'
+          AND candidate."leaseOwner" = ${workerId}
+        FOR UPDATE OF candidate
       `;
       const lock = locks[0];
       if (lock === undefined) return { state: 'lease_lost', retryAfterMs: null };
@@ -1042,8 +1098,15 @@ export class PrismaWorkerStore implements WorkerStore {
         await this.cancelWithinTransaction(transaction, run.id, workerId, incurred);
         return { state: 'cancelled', retryAfterMs: null };
       }
-      if (retryable && run.attempts < run.maxAttempts) {
-        const retryAfterMs = Math.min(300_000, 1_000 * 2 ** Math.min(run.attempts, 8));
+      const effectiveRetrySuppression =
+        retrySuppressedBy ??
+        (lock.pluginInvocationStarted ? ('plugin_invocation_started' as const) : undefined);
+      if (
+        retryable &&
+        effectiveRetrySuppression === undefined &&
+        lock.attempts < lock.maxAttempts
+      ) {
+        const retryAfterMs = retryDelayMs(lock.retryBackoff, lock.attempts);
         await transaction.executionRun.update({
           where: { id: run.id },
           data: {
@@ -1065,31 +1128,46 @@ export class PrismaWorkerStore implements WorkerStore {
           data: { state: 'retrying', result: { code, retryAfterMs } },
         });
         await transaction.auditEvent.create({
-          data: auditData('execution.retry_scheduled', run.id, lock, { code, retryAfterMs }),
+          data: auditData('execution.retry_scheduled', run.id, lock, {
+            code,
+            retryAfterMs,
+            retryBackoff: lock.retryBackoff,
+          }),
         });
         await appendRunEvent(transaction, run.id, {
           phase: 'retry',
           state: 'queued',
           message: 'A retryable worker failure returned the run to the queue.',
           costUsd: incurred?.actualCostUsd ?? null,
-          metadata: { code, retryAfterMs, attempt: run.attempts },
+          metadata: {
+            code,
+            retryAfterMs,
+            retryBackoff: lock.retryBackoff,
+            attempt: lock.attempts,
+          },
         });
         await this.settleAttempt(
           transaction,
           run.id,
           lock.authorityGrantId,
           Number(lock.estimatedUpperCostUsd),
-          run.attempts,
+          lock.attempts,
           incurred,
         );
         return { state: 'queued', retryAfterMs };
       }
+      const retryWasSuppressed = retryable && effectiveRetrySuppression !== undefined;
       await transaction.executionRun.update({
         where: { id: run.id },
         data: {
           state: ExecutionRunState.FAILED,
-          message: 'Execution failed',
-          error: errorJson(code),
+          message: retryWasSuppressed
+            ? 'Execution stopped after a Plugin invocation because its result cannot be replayed safely'
+            : 'Execution failed',
+          error: {
+            code,
+            ...(retryWasSuppressed ? { retrySuppressedBy: effectiveRetrySuppression } : {}),
+          },
           ...(incurred === undefined
             ? {}
             : { actualCostUsd: Number(lock.actualCostUsd ?? 0) + incurred.actualCostUsd }),
@@ -1101,21 +1179,37 @@ export class PrismaWorkerStore implements WorkerStore {
       });
       await transaction.runStep.update({
         where: { runId_stepKey: { runId: run.id, stepKey: 'model-execution' } },
-        data: { state: 'failed', result: { code } },
+        data: {
+          state: 'failed',
+          result: {
+            code,
+            ...(retryWasSuppressed ? { retrySuppressedBy: effectiveRetrySuppression } : {}),
+          },
+        },
       });
       await transaction.auditEvent.create({
-        data: auditData('execution.failed', run.id, lock, { code }),
+        data: auditData('execution.failed', run.id, lock, {
+          code,
+          ...(retryWasSuppressed ? { retrySuppressedBy: effectiveRetrySuppression } : {}),
+        }),
       });
       await appendRunEvent(transaction, run.id, {
         phase: 'outcome',
         state: 'failed',
-        message: 'The run exhausted its retries without an outcome.',
+        message: retryWasSuppressed
+          ? 'Automatic retry was blocked because a Plugin invocation had already started.'
+          : 'The run exhausted its retries without an outcome.',
         costUsd: incurred?.actualCostUsd ?? null,
-        metadata: { code, attempt: run.attempts },
+        metadata: {
+          code,
+          attempt: lock.attempts,
+          ...(retryWasSuppressed ? { retrySuppressedBy: effectiveRetrySuppression } : {}),
+        },
       });
       await appendRunPlatformEvent(transaction, run.id, 'execution.failed', {
         code,
         costUsd: incurred?.actualCostUsd ?? 0,
+        ...(retryWasSuppressed ? { retrySuppressedBy: effectiveRetrySuppression } : {}),
       });
       await recordDigestDelivery(transaction, run.id, { state: 'failed', code });
       await this.settleAttempt(
@@ -1123,7 +1217,7 @@ export class PrismaWorkerStore implements WorkerStore {
         run.id,
         lock.authorityGrantId,
         Number(lock.estimatedUpperCostUsd),
-        run.attempts,
+        lock.attempts,
         incurred,
       );
       return { state: 'failed', retryAfterMs: null };

@@ -75,6 +75,193 @@ test('metric history drives tank fill, print speed, agent heartbeat, and decisio
   assert.equal(activated.decisionLoops[0].currentLatencyHours, 16);
 });
 
+test('literal hardware, primary ownership, manufacturing process, and agent coverage project directly', () => {
+  const state = at('2026-08-17T12:00:00Z');
+  assert.deepEqual(
+    state.groups.filter(({ kind }) => kind === 'primary').map(({ label }) => label),
+    [
+      'Structures',
+      'Propulsion',
+      'Factory operations',
+      'Integration and test',
+      'Quality',
+      'Avionics and safety',
+    ],
+  );
+  assert.deepEqual(state.groupCoverage.groupsWithoutCertifiedAgentIds, [
+    'group_quality',
+    'group_avionics',
+  ]);
+  assert.equal(state.groupCoverage.primaryGroupCount, 6);
+
+  const tank = part(state, 's1_lox_tank');
+  assert.equal(tank.label, 'Stage 1 oxidizer tank');
+  assert.equal(tank.makeMethod, 'printed');
+  assert.equal(tank.ownerGroupId, 'group_factory');
+  assert.match(tank.process, /Wire additive/);
+  assert.equal(tank.coverage.agentCount, 3);
+  assert.equal(tank.coverage.certifiedAgentCount, 2);
+  assert.equal(tank.coverage.evidenceFreshnessHours, 60);
+
+  const hotFire = state.agents.find(({ id }) => id === 'agent_hot_fire_quicklook');
+  assert.equal(hotFire.tier, 2);
+  assert.equal(hotFire.certificationStatus, 'certified');
+  assert.equal(hotFire.certificationEvidenceFresh, true);
+  assert.equal(hotFire.synthetic, true);
+  assert.deepEqual(
+    hotFire.connectors.map(({ label }) => label),
+    ['Test historian', 'Analytics warehouse'],
+  );
+  assert.ok(hotFire.connectors.every(({ accent }) => /^#[0-9A-F]{6}$/i.test(accent)));
+});
+
+test('validated workstreams project declared dates with resolved source provenance', () => {
+  const state = at('2026-08-17T12:00:00Z');
+  assert.equal(state.workstreams.length, 10);
+  assert.deepEqual(
+    state.workstreams
+      .filter(({ ownerGroupId }) => ownerGroupId === 'group_factory')
+      .map(({ id }) => id),
+    ['workstream_print_cell_qualification', 'workstream_tank_barrel_production'],
+  );
+  assert.deepEqual(
+    state.workstreams.find(({ id }) => id === 'workstream_print_cell_qualification'),
+    {
+      id: 'workstream_print_cell_qualification',
+      label: 'Print cell qualification',
+      ownerGroupId: 'group_factory',
+      affectedPartIds: ['stargate'],
+      startAt: '2026-08-01T00:00:00Z',
+      endAt: '2026-08-15T00:00:00Z',
+      state: 'complete',
+      sourceRefs: ['synthetic_program_plan'],
+      milestoneIds: ['milestone_foundation_gate'],
+      sourceSynthetic: true,
+    },
+  );
+  assert.ok(
+    state.workstreams.every((workstream) =>
+      workstream.sourceRefs.every(
+        (sourceId) => seed.sources.find(({ id }) => id === sourceId)?.synthetic === true,
+      ),
+    ),
+  );
+});
+
+test('workstreams appear only when every declared source is observable and usable', () => {
+  assert.equal(at('2026-08-14T23:59:59Z').workstreams.length, 0);
+  assert.equal(at('2026-08-15T00:00:00Z').workstreams.length, 10);
+
+  const multipleSources = structuredClone(seed);
+  multipleSources.workstreams[0].sourceRefs.push('synthetic_evidence_registry');
+  assert.equal(
+    stateAt(multipleSources, '2026-08-15T00:00:00Z').workstreams.some(
+      ({ id }) => id === multipleSources.workstreams[0].id,
+    ),
+    false,
+  );
+  assert.equal(
+    stateAt(multipleSources, '2026-08-16T00:00:00Z').workstreams.some(
+      ({ id }) => id === multipleSources.workstreams[0].id,
+    ),
+    true,
+  );
+
+  const missing = structuredClone(seed);
+  missing.sources = missing.sources.filter(({ id }) => id !== 'synthetic_program_plan');
+  assert.equal(stateAt(missing, '2026-08-17T12:00:00Z').workstreams.length, 0);
+
+  const conflicting = structuredClone(seed);
+  conflicting.sources.find(({ id }) => id === 'synthetic_program_plan').reconciliationStatus =
+    'conflicting';
+  assert.equal(stateAt(conflicting, '2026-08-17T12:00:00Z').workstreams.length, 0);
+
+  const stale = structuredClone(seed);
+  stale.sources.find(({ id }) => id === 'synthetic_program_plan').freshnessSlaHours = 60;
+  assert.equal(stateAt(stale, '2026-08-17T12:00:00Z').workstreams.length, 10);
+  assert.equal(stateAt(stale, '2026-08-17T12:00:01Z').workstreams.length, 0);
+});
+
+test('workstream sourceSynthetic resolves from any referenced source, not the program flag', () => {
+  const declaredLive = structuredClone(seed);
+  declaredLive.sources.find(({ id }) => id === 'synthetic_program_plan').synthetic = false;
+  assert.ok(
+    stateAt(declaredLive, '2026-08-17T12:00:00Z').workstreams.every(
+      ({ sourceSynthetic }) => !sourceSynthetic,
+    ),
+  );
+
+  const mixed = structuredClone(declaredLive);
+  mixed.workstreams[0].sourceRefs.push('synthetic_evidence_registry');
+  assert.equal(
+    stateAt(mixed, '2026-08-17T12:00:00Z').workstreams.find(
+      ({ id }) => id === mixed.workstreams[0].id,
+    ).sourceSynthetic,
+    true,
+  );
+});
+
+test('certification coverage fails closed when its synthetic evidence becomes stale', () => {
+  const state = at('2027-08-18T12:00:00Z');
+  assert.ok(
+    state.agents
+      .filter(({ certificationStatus }) => certificationStatus === 'certified')
+      .every(({ certificationEvidenceFresh }) => !certificationEvidenceFresh),
+  );
+  assert.deepEqual(
+    state.groupCoverage.groupsWithoutCertifiedAgentIds,
+    state.groups.filter(({ kind }) => kind === 'primary').map(({ id }) => id),
+  );
+});
+
+test('non-synthetic programs do not count synthetic placeholder agents as current coverage', () => {
+  const mixed = structuredClone(seed);
+  mixed.program.synthetic = false;
+
+  const placeholdersOnly = stateAt(mixed, '2026-08-17T12:00:00Z');
+  assert.deepEqual(
+    placeholdersOnly.groupCoverage.groupsWithoutCertifiedAgentIds,
+    placeholdersOnly.groups.filter(({ kind }) => kind === 'primary').map(({ id }) => id),
+  );
+  assert.equal(part(placeholdersOnly, 's1_thrust').coverage.certifiedAgentCount, 0);
+
+  const transferredAgent = mixed.agents.find(({ id }) => id === 'agent_as_built_reconciliation');
+  transferredAgent.synthetic = false;
+  const syntheticFlagOnly = stateAt(mixed, '2026-08-17T12:00:00Z');
+  assert.equal(
+    syntheticFlagOnly.groups.find(({ id }) => id === 'group_structures').hasCertifiedAgent,
+    false,
+  );
+
+  mixed.sources.push({
+    id: 'work_transfer_source',
+    label: 'Governed work transfer',
+    kind: 'manual',
+    adapterVersion: '1.0.0',
+    observedAt: '2026-08-17T10:00:00Z',
+    freshnessSlaHours: 168,
+    classification: 'internal',
+    synthetic: false,
+    reconciliationStatus: 'authoritative',
+  });
+  mixed.evidence.push({
+    id: 'ev_work_transfer_certification',
+    label: 'Governed work transfer certification',
+    type: 'approval',
+    sourceId: 'work_transfer_source',
+    observedAt: '2026-08-17T10:00:00Z',
+    freshnessSlaHours: 168,
+  });
+  transferredAgent.sourceRefs = ['work_transfer_source'];
+  transferredAgent.certificationEvidenceRefs = ['ev_work_transfer_certification'];
+  const oneGovernedAgent = stateAt(mixed, '2026-08-17T12:00:00Z');
+  assert.equal(
+    oneGovernedAgent.groups.find(({ id }) => id === 'group_structures').hasCertifiedAgent,
+    true,
+  );
+  assert.equal(part(oneGovernedAgent, 's1_thrust').coverage.certifiedAgentCount, 1);
+});
+
 test('production lifecycle remains source truth while missing evidence blocks GO presentation', () => {
   const beforeEvidence = part(at('2026-10-16T00:00:00Z'), 's1_thrust');
   assert.equal(beforeEvidence.lifecycle, 'production');
@@ -168,6 +355,7 @@ test('QBR diff reports printed, promoted, retired, evidence, coverage, agents, l
     ),
   );
   assert.ok(diff.activatedAgentPartIds.includes('avionics_bay'));
+  assert.ok(diff.newlyCertifiedAgentIds.includes('agent_hot_fire_quicklook'));
   assert.deepEqual(diff.decisionLatencyChanges[0], {
     decisionLoopId: 'loop_primary_decision',
     beforeHours: 120,

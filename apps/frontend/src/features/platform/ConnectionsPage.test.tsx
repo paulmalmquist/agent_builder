@@ -3,7 +3,43 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { ConnectionsPage } from './ConnectionsPage';
 import { renderWithClient } from '../../test/render';
-import { server } from '../../test/server';
+import { httpPluginVersionId, server } from '../../test/server';
+
+const installableHttpPlugin = {
+  pluginVersionId: httpPluginVersionId,
+  familyId: '38383838-3838-4383-8383-383838383838',
+  slug: 'planning-api',
+  name: 'Planning API',
+  version: '1.0.0',
+  digest: '3'.repeat(64),
+  transport: 'http',
+  executionPlacement: 'control_plane',
+  classification: 'internal',
+  brand: { monogram: 'PA', accent: '#7F9CF5' },
+  capabilities: [
+    {
+      tool: 'record_lookup',
+      description: 'Read one bounded planning record.',
+      effect: 'read',
+      approval: 'not_required',
+      scopeDescription: 'Read bounded planning records only',
+      limits: {
+        timeoutMs: 5_000,
+        maxResponseBytes: 250_000,
+        maxRecords: 100,
+        maxInvocationsPerRun: 5,
+        maxEstimatedCostUsd: 0.05,
+      },
+    },
+  ],
+  secretSlots: [],
+  activeScopeDescriptions: [],
+  costThisWeekUsd: 0,
+  installationId: null,
+  installationState: null,
+  healthStatus: 'unknown',
+  lastUsedAt: null,
+};
 
 function unavailable(message: string) {
   return HttpResponse.json(
@@ -32,36 +68,71 @@ describe('ConnectionsPage', () => {
       expect(screen.getByText(transport)).toBeInTheDocument();
     }
 
+    expect(screen.getByText('CATALOG CARDS SHOWN').parentElement).toHaveTextContent('4');
     expect(screen.getByText('INSTALLED SHOWN').parentElement).toHaveTextContent('2');
-    expect(screen.getByText('HEALTHY SHOWN').parentElement).toHaveTextContent('1');
-    expect(screen.getByText('DEGRADED SHOWN').parentElement).toHaveTextContent('1');
-    expect(screen.getByText('MISSING SECRET REFS SHOWN').parentElement).toHaveTextContent('0');
+    expect(screen.getByText('READY TO INSTALL').parentElement).toHaveTextContent('0');
+    expect(screen.getByText('RUNTIME UNAVAILABLE').parentElement).toHaveTextContent('3');
 
+    const mcpCard = screen.getByRole('heading', { name: 'Team messages' }).closest('article')!;
+    expect(within(mcpCard).getByText(/1 typed capability is declared\./i)).toBeInTheDocument();
+    expect(within(mcpCard).getByRole('button', { name: 'MCP RUNTIME UNAVAILABLE' })).toBeDisabled();
+    const databaseCard = screen
+      .getByRole('heading', { name: 'Analytics preview' })
+      .closest('article')!;
+    expect(
+      within(databaseCard).getByRole('button', { name: 'DB RUNTIME UNAVAILABLE' }),
+    ).toBeDisabled();
     const localCard = screen.getByRole('heading', { name: 'Local files' }).closest('article')!;
     expect(
-      within(localCard).getByRole('button', { name: 'WORKSTATION UNAVAILABLE' }),
+      within(localCard).getByRole('button', { name: 'WORKSTATION BROKER UNAVAILABLE' }),
     ).toBeDisabled();
+    expect(within(localCard).getByText(/workstation broker is unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/Only HTTP tools execute in this checkpoint/i)).toBeInTheDocument();
   });
 
-  it('installs an available Plugin without a core-code-specific flow', async () => {
-    const user = userEvent.setup();
+  it('distinguishes one visible installable catalog card from installed cards', async () => {
+    server.use(
+      http.get('http://localhost/v1/plugins', () =>
+        HttpResponse.json({ items: [installableHttpPlugin] }),
+      ),
+      http.get('http://localhost/v1/plugin-installations', () => HttpResponse.json({ items: [] })),
+    );
     renderWithClient(<ConnectionsPage />, ['/connections']);
 
-    const analyticsCard = (
-      await screen.findByRole('heading', {
-        name: 'Analytics preview',
-      })
-    ).closest('article')!;
-    await user.click(within(analyticsCard).getByRole('button', { name: 'INSTALL PLUGIN' }));
-    const installDialog = screen.getByRole('dialog', { name: 'Analytics preview' });
-    await user.click(within(installDialog).getByRole('button', { name: 'INSTALL EXACT VERSION' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Analytics preview' })).not.toBeInTheDocument(),
+    const card = (await screen.findByRole('heading', { name: 'Planning API' })).closest('article')!;
+    expect(screen.getByText('CATALOG CARDS SHOWN').parentElement).toHaveTextContent('1');
+    expect(screen.getByText('INSTALLED SHOWN').parentElement).toHaveTextContent('0');
+    expect(screen.getByText('READY TO INSTALL').parentElement).toHaveTextContent('1');
+    expect(screen.getByText('RUNTIME UNAVAILABLE').parentElement).toHaveTextContent('0');
+    expect(within(card).getByText('1 typed capability is ready to install.')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'INSTALL PLUGIN' })).toBeEnabled();
+  });
+
+  it('names workstation placement as the unavailable runtime even for an HTTP connector', async () => {
+    server.use(
+      http.get('http://localhost/v1/plugins', () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...installableHttpPlugin,
+              executionPlacement: 'workstation',
+              name: 'Workstation planning bridge',
+            },
+          ],
+        }),
+      ),
+      http.get('http://localhost/v1/plugin-installations', () => HttpResponse.json({ items: [] })),
     );
+    renderWithClient(<ConnectionsPage />, ['/connections']);
+
+    const card = (
+      await screen.findByRole('heading', { name: 'Workstation planning bridge' })
+    ).closest('article')!;
     expect(
-      await within(analyticsCard).findByRole('button', { name: 'MANAGE PLUGIN' }),
-    ).toBeInTheDocument();
+      within(card).getByRole('button', { name: 'WORKSTATION BROKER UNAVAILABLE' }),
+    ).toBeDisabled();
+    expect(within(card).getByText(/workstation broker is unavailable/i)).toBeInTheDocument();
+    expect(card).not.toHaveTextContent(/HTTP installation and invocation/i);
   });
 
   it('keeps opaque secret references replace-only and protects certified dependants', async () => {
@@ -100,7 +171,10 @@ describe('ConnectionsPage', () => {
     renderWithClient(<ConnectionsPage />, ['/connections']);
 
     expect(await screen.findByText('No Plugin definitions are available.')).toBeInTheDocument();
+    expect(screen.getByText('CATALOG CARDS SHOWN').parentElement).toHaveTextContent('0');
     expect(screen.getByText('INSTALLED SHOWN').parentElement).toHaveTextContent('0');
+    expect(screen.getByText('READY TO INSTALL').parentElement).toHaveTextContent('0');
+    expect(screen.getByText('RUNTIME UNAVAILABLE').parentElement).toHaveTextContent('0');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(document.querySelectorAll('.plugin-card')).toHaveLength(0);
   });
@@ -130,10 +204,10 @@ describe('ConnectionsPage', () => {
     expect(screen.queryByRole('heading', { name: 'Calendar API' })).not.toBeInTheDocument();
     expect(screen.queryByText('No Plugin definitions are available.')).not.toBeInTheDocument();
     for (const label of [
+      'CATALOG CARDS SHOWN',
       'INSTALLED SHOWN',
-      'HEALTHY SHOWN',
-      'DEGRADED SHOWN',
-      'MISSING SECRET REFS SHOWN',
+      'READY TO INSTALL',
+      'RUNTIME UNAVAILABLE',
     ]) {
       expect(screen.getByText(label).parentElement).toHaveTextContent('—');
     }

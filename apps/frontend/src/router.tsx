@@ -1,125 +1,200 @@
 import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import { NotFoundPage } from './components/NotFoundPage';
 import { PlatformShell } from './components/PlatformShell';
-import { featureFlags } from './config/feature-flags';
+import { featureFlags, type FrontendFeatureFlags } from './config/feature-flags';
 
-const aimRoutes: RouteObject[] = featureFlags.aimEnabled
-  ? [
-      {
-        path: 'aim',
-        lazy: async () => {
-          const { AimRoute } = await import('./features/aim/AimRoute');
-          return { Component: AimRoute };
+function createAimRoutes(flags: FrontendFeatureFlags): RouteObject[] {
+  return flags.aimEnabled
+    ? [
+        {
+          path: 'aim',
+          lazy: async () => {
+            const { AimRoute } = await import('./features/aim/AimRoute');
+            return { Component: AimRoute };
+          },
         },
-      },
-    ]
-  : [];
+      ]
+    : [];
+}
 
-export const router = createBrowserRouter([
-  {
-    path: '/',
-    Component: PlatformShell,
-    children: [
-      {
-        index: true,
-        lazy: async () => {
-          const { HomePage } = await import('./features/home/HomePage');
-          return { Component: HomePage };
+function createVisualRoutes(flags: FrontendFeatureFlags): RouteObject[] {
+  return flags.visualSurfacesEnabled
+    ? [
+        {
+          path: 'observatory',
+          lazy: async () => {
+            const { ObservatoryPage } = await import(
+              './features/visual/observatory/ObservatoryPage'
+            );
+            return { Component: ObservatoryPage };
+          },
         },
-      },
-      {
-        path: 'attention',
-        lazy: async () => {
-          const { AttentionPage } = await import('./features/attention/AttentionPage');
-          return { Component: AttentionPage };
+        {
+          path: 'history',
+          lazy: async () => {
+            const { HistoryTerrainRoute } = await import(
+              './features/visual/terrain/HistoryTerrain'
+            );
+            return { Component: HistoryTerrainRoute };
+          },
         },
-      },
-      {
-        path: 'knowledge',
-        lazy: async () => {
-          const { KnowledgePage } = await import('./features/knowledge/KnowledgePage');
-          return { Component: KnowledgePage };
+        {
+          path: 'bench/:agentId',
+          lazy: async () => {
+            const { AssemblyBenchRoute } = await import('./features/visual/bench/AssemblyBench');
+            return { Component: AssemblyBenchRoute };
+          },
         },
-      },
-      {
-        path: 'build',
-        lazy: async () => {
-          const { App } = await import('./App');
-          return { Component: App };
+      ]
+    : [];
+}
+
+function createFullscreenVisualRoutes(flags: FrontendFeatureFlags): RouteObject[] {
+  return flags.visualSurfacesEnabled
+    ? [
+        {
+          path: '/wall',
+          hydrateFallbackElement: (
+            <main className="platform-hydrate-fallback" tabIndex={-1}>
+              <p role="status">Loading signal wall…</p>
+            </main>
+          ),
+          lazy: async () => {
+            const { SignalWallPage } = await import('./features/visual/wall/SignalWallPage');
+            return { Component: SignalWallPage };
+          },
         },
-      },
-      {
-        path: 'catalog',
-        lazy: async () => {
-          const { CatalogPage } = await import('./features/platform/CatalogPage');
-          return { Component: CatalogPage };
+      ]
+    : [];
+}
+
+export function createPaulOsRouteObjects(
+  flags: FrontendFeatureFlags = featureFlags,
+): RouteObject[] {
+  return [
+    {
+      path: '/',
+      Component: PlatformShell,
+      hydrateFallbackElement: (
+        <main className="platform-hydrate-fallback" id="platform-main" tabIndex={-1}>
+          <p role="status">Loading Paul OS…</p>
+        </main>
+      ),
+      children: [
+        {
+          index: true,
+          lazy: async () => {
+            const { HomePage } = await import('./features/home/HomePage');
+            return { Component: HomePage };
+          },
         },
-      },
-      {
-        path: 'library',
-        lazy: async () => {
-          const { LibraryPage } = await import('./features/library/LibraryPage');
-          return { Component: LibraryPage };
+        {
+          path: 'attention',
+          lazy: async () => {
+            const { AttentionPage } = await import('./features/attention/AttentionPage');
+            return { Component: AttentionPage };
+          },
         },
-      },
-      {
-        path: 'registry',
-        lazy: async () => {
-          const { RegistryPage } = await import('./features/platform/RegistryPage');
-          return { Component: RegistryPage };
+        {
+          path: 'knowledge',
+          lazy: async () => {
+            const { KnowledgePage } = await import('./features/knowledge/KnowledgePage');
+            return { Component: KnowledgePage };
+          },
         },
-      },
-      {
-        path: 'operate',
-        lazy: async () => {
-          const { RunsPage } = await import('./features/platform/RunsPage');
-          return { Component: RunsPage };
+        {
+          path: 'build',
+          lazy: async () => {
+            const { App } = await import('./App');
+            return { Component: App };
+          },
         },
-      },
-      {
-        path: 'runs',
-        lazy: async () => {
-          const { RunsPage } = await import('./features/platform/RunsPage');
-          return { Component: RunsPage };
+        {
+          path: 'catalog',
+          lazy: async () => {
+            const { CatalogPage } = await import('./features/platform/CatalogPage');
+            return { Component: CatalogPage };
+          },
         },
-      },
-      {
-        path: 'connections',
-        lazy: async () => {
-          const { ConnectionsPage } = await import('./features/platform/ConnectionsPage');
-          return { Component: ConnectionsPage };
+        {
+          path: 'library',
+          lazy: async () => {
+            const { LibraryPage } = await import('./features/library/LibraryPage');
+            return { Component: LibraryPage };
+          },
         },
-      },
-      {
-        path: 'evidence',
-        lazy: async () => {
-          const { EvidencePage } = await import('./features/platform/EvidencePage');
-          return { Component: EvidencePage };
+        {
+          path: 'registry',
+          lazy: async () => {
+            const { RegistryPage } = await import('./features/platform/RegistryPage');
+            return { Component: RegistryPage };
+          },
         },
-      },
-      {
-        path: 'incubator',
-        lazy: async () => {
-          const { IncubatorPage } = await import('./features/platform/IncubatorPage');
-          return { Component: IncubatorPage };
+        {
+          path: 'operate',
+          lazy: async () => {
+            const { RunsPage } = await import('./features/platform/RunsPage');
+            return { Component: RunsPage };
+          },
         },
-      },
-      {
-        path: 'settings',
-        lazy: async () => {
-          const { SettingsPage } = await import('./features/settings/SettingsPage');
-          return { Component: SettingsPage };
+        {
+          path: 'runs',
+          lazy: async () => {
+            const { RunsPage } = await import('./features/platform/RunsPage');
+            return { Component: RunsPage };
+          },
         },
-      },
-      ...aimRoutes,
-      {
-        path: 'certification/:agentId',
-        lazy: async () => {
-          const { CertificationPage } = await import('./features/certification/CertificationPage');
-          return { Component: CertificationPage };
+        {
+          path: 'connections',
+          lazy: async () => {
+            const { ConnectionsPage } = await import('./features/platform/ConnectionsPage');
+            return { Component: ConnectionsPage };
+          },
         },
-      },
-      { path: '*', Component: NotFoundPage },
-    ],
-  },
-]);
+        {
+          path: 'evidence',
+          lazy: async () => {
+            const { EvidencePage } = await import('./features/platform/EvidencePage');
+            return { Component: EvidencePage };
+          },
+        },
+        {
+          path: 'incubator',
+          lazy: async () => {
+            const { IncubatorPage } = await import('./features/platform/IncubatorPage');
+            return { Component: IncubatorPage };
+          },
+        },
+        {
+          path: 'roadmaps',
+          lazy: async () => {
+            const { RoadmapsPage } = await import('./features/roadmaps/RoadmapsPage');
+            return { Component: RoadmapsPage };
+          },
+        },
+        {
+          path: 'settings',
+          lazy: async () => {
+            const { SettingsPage } = await import('./features/settings/SettingsPage');
+            return { Component: SettingsPage };
+          },
+        },
+        ...createAimRoutes(flags),
+        ...createVisualRoutes(flags),
+        {
+          path: 'certification/:agentId',
+          lazy: async () => {
+            const { CertificationPage } = await import(
+              './features/certification/CertificationPage'
+            );
+            return { Component: CertificationPage };
+          },
+        },
+        { path: '*', Component: NotFoundPage },
+      ],
+    },
+    ...createFullscreenVisualRoutes(flags),
+  ];
+}
+
+export const router = createBrowserRouter(createPaulOsRouteObjects());

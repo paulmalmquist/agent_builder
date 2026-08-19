@@ -3,11 +3,13 @@ import path from 'node:path';
 import type { Request, Response } from 'express';
 import {
   ApprovalRequestState,
+  AutomationBackoff,
   AuthorityGrantState,
   ContextClassification,
   ExecutionRunState,
   ModelProviderKind,
   Prisma,
+  ResourceKind,
   type AuthorityGrant as DatabaseAuthorityGrant,
   type ExecutionRun as DatabaseExecutionRun,
   type PrismaClient,
@@ -18,6 +20,10 @@ import { loadConfig, type AppConfig } from '../src/config.js';
 import { requestContextMiddleware } from '../src/request-context.js';
 import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 import { ExecutionService } from '../src/services/execution-service.js';
+import {
+  userFacingExecutionRunWhere,
+  userFacingResourceVersionWhere,
+} from '../src/services/user-facing-records.js';
 
 const RELEASE_ID = '10000000-0000-4000-8000-000000000001';
 const OTHER_RELEASE_ID = '10000000-0000-4000-8000-000000000002';
@@ -34,6 +40,14 @@ const NOW = new Date('2026-08-16T12:00:00.000Z');
 const VISIBLE_SCOPE = {
   workspaceId: LOCAL_WORKSPACE_ID,
   OR: [{ departmentId: null }, { departmentId: LOCAL_DEPARTMENT_ID }],
+};
+const USER_FACING_RUN_INDEX = {
+  ...VISIBLE_SCOPE,
+  AND: [userFacingExecutionRunWhere],
+};
+const USER_FACING_GRANT_INDEX = {
+  ...VISIBLE_SCOPE,
+  entryResourceVersion: userFacingResourceVersionWhere,
 };
 const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
   ? path.resolve(process.cwd(), '..', '..')
@@ -163,9 +177,13 @@ function grantRecord(overrides: Partial<DatabaseAuthorityGrant> = {}): DatabaseA
   };
 }
 
-function runRecord(
-  overrides: Partial<DatabaseExecutionRun> = {},
-): DatabaseExecutionRun & { pluginCallPlans: [] } {
+function runRecord(overrides: Partial<DatabaseExecutionRun> = {}): DatabaseExecutionRun & {
+  pluginCallPlans: [];
+  entryResourceVersion: {
+    version: string;
+    family: { id: string; name: string; kind: ResourceKind };
+  };
+} {
   return {
     id: RUN_ID,
     workspaceId: LOCAL_WORKSPACE_ID,
@@ -203,6 +221,7 @@ function runRecord(
     requestedBy: 'human:test',
     attempts: 0,
     maxAttempts: 3,
+    retryBackoff: AutomationBackoff.EXPONENTIAL,
     leaseOwner: null,
     leaseExpiresAt: null,
     heartbeatAt: null,
@@ -213,6 +232,10 @@ function runRecord(
     createdAt: NOW,
     updatedAt: NOW,
     pluginCallPlans: [],
+    entryResourceVersion: {
+      version: '1.0.0',
+      family: { id: FAMILY_ID, name: 'Daily Brief', kind: ResourceKind.SKILL },
+    },
     ...overrides,
   };
 }
@@ -266,6 +289,7 @@ function database() {
     create: asyncMock(runRecord()),
     update: asyncMock(runRecord()),
     updateMany: asyncMock({ count: 1 }),
+    findUniqueOrThrow: asyncMock(runRecord()),
   };
   const approvalRequest = {
     findFirst: asyncMock({ id: 'approved-epoch-request' }),
@@ -426,6 +450,8 @@ describe('ExecutionService idempotency and run admission', () => {
     ['input tokens', { maxInputTokens: 999 }],
     ['output tokens', { maxOutputTokens: 199 }],
     ['cost ceiling', { maxEstimatedCostUsd: 0.5 }],
+    ['maximum attempts', { maxAttempts: 1 }],
+    ['retry backoff', { retryBackoff: 'fixed' }],
     ['development mode', { developmentDraft: true }],
   ])('rejects reuse of an idempotency key with different %s', async (_name, change) => {
     const db = database();
@@ -699,7 +725,17 @@ describe('ExecutionService authority and read operations', () => {
   it('lists grants with and without a state filter and expires stale active grants first', async () => {
     const db = database();
     db.authorityGrant.findMany.mockResolvedValue([
-      grantRecord({ state: AuthorityGrantState.REVOKED, revokedAt: NOW }),
+      {
+        ...grantRecord({ state: AuthorityGrantState.REVOKED, revokedAt: NOW }),
+        entryResourceVersion: {
+          version: '1.0.0',
+          family: {
+            id: FAMILY_ID,
+            name: 'Daily Brief',
+            kind: ResourceKind.SKILL,
+          },
+        },
+      },
     ]);
     db.authorityGrant.groupBy.mockResolvedValue([
       { state: AuthorityGrantState.ACTIVE, _count: { _all: 7 } },
@@ -708,17 +744,25 @@ describe('ExecutionService authority and read operations', () => {
     const service = new ExecutionService(db.prisma, config(), modelProvider());
     const unfiltered = await service.listGrants({ limit: 10 });
     expect(unfiltered.items[0]?.revokedAt).toBe(NOW.toISOString());
+    expect(unfiltered.items[0]?.entrySubject).toEqual({
+      name: 'Daily Brief',
+      kind: 'skill',
+      version: '1.0.0',
+    });
     expect(unfiltered).toMatchObject({ total: 10, activeTotal: 7 });
     await service.listGrants({ state: 'revoked', limit: 2 });
-    expect(callArgument(db.authorityGrant.findMany)['where']).toEqual(VISIBLE_SCOPE);
+    expect(callArgument(db.authorityGrant.findMany)['where']).toEqual(USER_FACING_GRANT_INDEX);
     expect(callArgument(db.authorityGrant.findMany, 1)['where']).toEqual({
-      ...VISIBLE_SCOPE,
+      ...USER_FACING_GRANT_INDEX,
       state: AuthorityGrantState.REVOKED,
     });
     expect(callArgument(db.authorityGrant.groupBy)).toEqual({
       by: ['state'],
-      where: VISIBLE_SCOPE,
+      where: USER_FACING_GRANT_INDEX,
       _count: { _all: true },
+    });
+    expect(callArgument(db.authorityGrant.findMany)['include']).toEqual({
+      entryResourceVersion: { include: { family: true } },
     });
     expect(db.authorityGrant.updateMany).toHaveBeenCalledTimes(2);
   });
@@ -878,6 +922,7 @@ describe('ExecutionService authority and read operations', () => {
     const unfiltered = await service.listRuns({ limit: 5 });
     expect(unfiltered.items[0]).toMatchObject({
       state: 'failed',
+      entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
       actualCostUsd: 0.002,
       error: { code: 'FIXTURE_FAILURE' },
     });
@@ -892,15 +937,25 @@ describe('ExecutionService authority and read operations', () => {
     });
     await service.listRuns({ state: 'failed', limit: 1 });
     expect(callArgument(db.executionRun.findMany, 1)['where']).toEqual({
-      ...VISIBLE_SCOPE,
+      ...USER_FACING_RUN_INDEX,
       state: ExecutionRunState.FAILED,
+    });
+    expect(callArgument(db.executionRun.findMany)['include']).toEqual({
+      entryResourceVersion: { include: { family: true } },
     });
     expect(callArgument(db.executionRun.groupBy)).toEqual({
       by: ['state'],
-      where: VISIBLE_SCOPE,
+      where: USER_FACING_RUN_INDEX,
       _count: { _all: true },
     });
-    expect((await service.getRun(RUN_ID)).finishedAt).toBe(NOW.toISOString());
+    expect(await service.getRun(RUN_ID)).toMatchObject({
+      entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
+      finishedAt: NOW.toISOString(),
+    });
+    expect(callArgument(db.executionRun.findFirst)['where']).toEqual({
+      id: RUN_ID,
+      ...VISIBLE_SCOPE,
+    });
   });
 
   it('returns a typed not-found error for an unknown run', async () => {
@@ -908,6 +963,32 @@ describe('ExecutionService authority and read operations', () => {
     await expect(
       new ExecutionService(db.prisma, config(), modelProvider()).getRun(RUN_ID),
     ).rejects.toMatchObject({ code: 'EXECUTION_RUN_NOT_FOUND' });
+  });
+
+  it('fails the projected subject closed when the pinned family label is identifier-shaped', async () => {
+    const db = database();
+    db.executionRun.findMany.mockResolvedValue([
+      {
+        ...runRecord(),
+        entryResourceVersion: {
+          version: '1.0.0',
+          family: {
+            id: FAMILY_ID,
+            name: 'worker-test:daily-brief',
+            kind: ResourceKind.SKILL,
+          },
+        },
+      },
+    ]);
+    db.executionRun.groupBy.mockResolvedValue([
+      { state: ExecutionRunState.QUEUED, _count: { _all: 1 } },
+    ]);
+
+    const response = await new ExecutionService(db.prisma, config(), modelProvider()).listRuns({
+      limit: 5,
+    });
+
+    expect(response.items[0]?.entrySubject).toBeNull();
   });
 
   it.each([ExecutionRunState.SUCCEEDED, ExecutionRunState.FAILED, ExecutionRunState.CANCELLED])(
@@ -938,6 +1019,9 @@ describe('ExecutionService authority and read operations', () => {
       }),
     );
     db.executionRun.update.mockResolvedValueOnce(
+      runRecord({ state: ExecutionRunState.CANCELLED, authorityGrantId: null, finishedAt: NOW }),
+    );
+    db.executionRun.findUniqueOrThrow.mockResolvedValueOnce(
       runRecord({ state: ExecutionRunState.CANCELLED, authorityGrantId: null, finishedAt: NOW }),
     );
     db.digestSnapshot.findUnique.mockResolvedValueOnce({
@@ -982,6 +1066,14 @@ describe('ExecutionService authority and read operations', () => {
       runRecord({ state: ExecutionRunState.RUNNING, leaseOwner: 'worker-1' }),
     );
     db.executionRun.update.mockResolvedValueOnce(
+      runRecord({
+        state: ExecutionRunState.RUNNING,
+        leaseOwner: 'worker-1',
+        cancelRequestedAt: NOW,
+        message: 'Cancellation requested',
+      }),
+    );
+    db.executionRun.findUniqueOrThrow.mockResolvedValueOnce(
       runRecord({
         state: ExecutionRunState.RUNNING,
         leaseOwner: 'worker-1',
@@ -1057,12 +1149,15 @@ describe('ExecutionService approval, recovery, and worker guards', () => {
     db.executionRun.update.mockResolvedValueOnce(
       runRecord({ state: ExecutionRunState.QUEUED, authorityGrantId: GRANT_ID }),
     );
+    db.executionRun.findUniqueOrThrow.mockResolvedValueOnce(
+      runRecord({ state: ExecutionRunState.QUEUED, authorityGrantId: GRANT_ID }),
+    );
     const result = await runAsHuman(() =>
       new ExecutionService(db.prisma, config(), modelProvider()).approveRun(RUN_ID, approval()),
     );
     expect(result.run.state).toBe('queued');
     expect(result.grant.id).toBe(GRANT_ID);
-    expect(db.approvalRequest.update).toHaveBeenCalledWith(
+    expect(db.approvalRequest.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ state: ApprovalRequestState.APPROVED }),
       }),
@@ -1424,13 +1519,25 @@ describe('ExecutionService evidence collection reads', () => {
     expect((await service.listOutcomes()).items[0]?.confidence).toBeNull();
     await service.listOutcomes(RUN_ID);
     expect(callArgument(db.outcomeRecord.findMany, 1)['where']).toEqual({
-      run: VISIBLE_SCOPE,
+      run: USER_FACING_RUN_INDEX,
       runId: RUN_ID,
     });
     expect((await service.listMetrics()).items[0]?.runId).toBeNull();
     await service.listMetrics(RUN_ID);
     expect(callArgument(db.metricSample.findMany, 1)['where']).toEqual({
       ...VISIBLE_SCOPE,
+      AND: [
+        {
+          OR: [
+            { runId: null },
+            {
+              run: {
+                is: userFacingExecutionRunWhere,
+              },
+            },
+          ],
+        },
+      ],
       runId: RUN_ID,
     });
   });

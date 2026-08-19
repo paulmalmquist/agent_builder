@@ -52,6 +52,19 @@ export const surfaceProvenanceSchema = z.object({
   explanation: z.string().trim().min(1).max(500),
 });
 
+export const attentionSubjectSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160),
+    kind: z.string().trim().min(1).max(80),
+    version: z.string().trim().min(1).max(80),
+  })
+  .strict();
+
+export const attentionReviewFactSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  value: z.string().trim().min(1).max(500),
+});
+
 export const surfaceEnvelopeBaseSchema = z.object({
   headline: z.string().trim().min(1).max(160),
   delta: z.string().trim().min(1).max(300),
@@ -79,14 +92,19 @@ export const attentionItemPayloadSchema = z.object({
   releaseId: uuidSchema.nullable(),
   evaluationId: uuidSchema.nullable(),
   expiresAt: isoDateTimeSchema.nullable(),
-  reviewFacts: z
-    .array(
-      z.object({
-        label: z.string().trim().min(1).max(80),
-        value: z.string().trim().min(1).max(500),
-      }),
-    )
-    .max(12),
+  approvalGroupKey: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable()
+    .default(null),
+  decisionGroupKey: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable()
+    .optional(),
+  requestCount: z.number().int().positive().default(1),
+  subject: attentionSubjectSchema.nullable().default(null),
+  reviewFacts: z.array(attentionReviewFactSchema).max(12),
   metadata: jsonObjectSchema,
 });
 
@@ -110,6 +128,21 @@ export const attentionItemSchema = surfaceEnvelopeSchema(attentionItemPayloadSch
         path: ['status'],
         message: 'Degraded items must use degraded or safety_stop status',
       });
+    }
+    if (item.payload.subject === null) {
+      if (
+        item.kind !== 'safety_stop' ||
+        item.shelf !== 'degraded' ||
+        item.status !== 'safety_stop' ||
+        item.primaryAction?.kind !== 'open_details' ||
+        item.secondaryAction !== null
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['payload', 'subject'],
+          message: 'An unnamed Attention item must fail closed to read-only safety-stop details',
+        });
+      }
     }
     const expected =
       item.kind === 'execution_approval'
@@ -168,6 +201,16 @@ export const attentionItemSchema = surfaceEnvelopeSchema(attentionItemPayloadSch
           });
         }
       }
+      if (
+        item.kind === 'execution_approval' &&
+        (item.payload.approvalGroupKey === null || item.payload.subject === null)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['payload'],
+          message: 'Execution approval requires an exact group and named subject',
+        });
+      }
     } else if (item.shelf === 'degraded' && item.primaryAction?.kind !== 'open_details') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -202,6 +245,37 @@ export const attentionResponseSchema = z.object({
   lastDeliveredBriefingAt: isoDateTimeSchema.nullable(),
 });
 
+export const attentionMembershipSchema = z
+  .object({
+    exactCount: z.number().int().positive(),
+    records: z.array(
+      z.object({
+        label: z.string().trim().min(1).max(120),
+        subject: attentionSubjectSchema.nullable(),
+        occurredAt: isoDateTimeSchema,
+        evidence: z.array(attentionReviewFactSchema).min(1).max(8),
+        technicalReferences: z
+          .array(
+            z.object({
+              label: z.string().trim().min(1).max(80),
+              value: uuidSchema,
+            }),
+          )
+          .min(1)
+          .max(4),
+      }),
+    ),
+  })
+  .superRefine((membership, context) => {
+    if (membership.records.length !== membership.exactCount) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['records'],
+        message: 'Exact membership count must equal the number of records',
+      });
+    }
+  });
+
 export const attentionItemDetailSchema = z.object({
   item: attentionItemSchema,
   timeline: z.array(
@@ -216,10 +290,15 @@ export const attentionItemDetailSchema = z.object({
     }),
   ),
   details: jsonObjectSchema,
+  membership: attentionMembershipSchema.nullable().default(null),
 });
 
 export const attentionItemParamsSchema = z.object({
   itemId: z.string().trim().min(3).max(320),
+});
+
+export const executionApprovalGroupParamsSchema = z.object({
+  groupKey: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
 export const resolveAttentionItemRequestSchema = z.object({
@@ -274,6 +353,7 @@ export type SurfaceAction = z.infer<typeof surfaceActionSchema>;
 export type AttentionItem = z.infer<typeof attentionItemSchema>;
 export type AttentionResponse = z.infer<typeof attentionResponseSchema>;
 export type AttentionItemDetail = z.infer<typeof attentionItemDetailSchema>;
+export type AttentionMembership = z.infer<typeof attentionMembershipSchema>;
 export type DigestSnapshot = z.infer<typeof digestSnapshotSchema>;
 export type ExecutionRunEvent = z.infer<typeof executionRunEventSchema>;
 export type SurfaceEnvelope<TPayload> = z.infer<typeof surfaceEnvelopeBaseSchema> & {

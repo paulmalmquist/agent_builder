@@ -11,6 +11,26 @@ function displayKind(kind: ResourceVersion['kind']) {
   return kind.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
+function principalLabel(authentication: string) {
+  if (authentication === 'local') return 'Local operator';
+  if (authentication === 'system') return 'Background service';
+  if (authentication === 'fixture_oidc') return 'Fixture-authenticated operator';
+  return 'Authenticated operator';
+}
+
+function workspaceLabel(authentication: string) {
+  return authentication === 'local' || authentication === 'system'
+    ? 'Local workspace'
+    : 'Authenticated workspace';
+}
+
+function departmentLabel(authentication: string, departmentId: string | null) {
+  if (departmentId === null) return 'Workspace-wide scope';
+  return authentication === 'local' || authentication === 'system'
+    ? 'Local department'
+    : 'Current department';
+}
+
 export function SettingsPage() {
   const session = useSession();
   const protocols = usePlatformResources({ kind: 'Protocol', limit: 100 });
@@ -68,29 +88,30 @@ export function SettingsPage() {
           <div className="settings-principal-layout">
             <dl className="settings-fact-grid">
               <div>
-                <dt>PRINCIPAL ID</dt>
+                <dt>PRINCIPAL</dt>
                 <dd>
-                  <code>{principal.principalId}</code>
+                  <strong>{principalLabel(principal.authentication)}</strong>
+                  <small>Resolved for this request</small>
                 </dd>
               </div>
               <div>
-                <dt>ACTOR ID</dt>
-                <dd>{principal.actorId}</dd>
-              </div>
-              <div>
-                <dt>WORKSPACE ID</dt>
+                <dt>WORKSPACE</dt>
                 <dd>
-                  <code>{principal.workspaceId}</code>
+                  <strong>{workspaceLabel(principal.authentication)}</strong>
+                  <small>Exact scope retained below</small>
                 </dd>
               </div>
               <div>
-                <dt>DEPARTMENT ID</dt>
+                <dt>DEPARTMENT</dt>
                 <dd>
-                  {principal.departmentId ? (
-                    <code>{principal.departmentId}</code>
-                  ) : (
-                    'WORKSPACE SCOPE'
-                  )}
+                  <strong>
+                    {departmentLabel(principal.authentication, principal.departmentId)}
+                  </strong>
+                  <small>
+                    {principal.departmentId === null
+                      ? 'No department restriction'
+                      : 'Department-bounded request'}
+                  </small>
                 </dd>
               </div>
               <div>
@@ -126,6 +147,39 @@ export function SettingsPage() {
                 </ul>
               </div>
             </div>
+            <details className="settings-technical-identifiers">
+              <summary>Technical identifiers</summary>
+              <dl>
+                <div>
+                  <dt>PRINCIPAL ID</dt>
+                  <dd>
+                    <code>{principal.principalId}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>ACTOR ID</dt>
+                  <dd>
+                    <code>{principal.actorId}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>WORKSPACE ID</dt>
+                  <dd>
+                    <code>{principal.workspaceId}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>DEPARTMENT ID</dt>
+                  <dd>
+                    {principal.departmentId ? <code>{principal.departmentId}</code> : 'NOT SET'}
+                  </dd>
+                </div>
+              </dl>
+              <p>
+                These immutable references support audit and troubleshooting. They are not display
+                names or directory records.
+              </p>
+            </details>
           </div>
         ) : null}
       </section>

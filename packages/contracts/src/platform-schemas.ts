@@ -505,10 +505,18 @@ export const createAuthorityGrantRequestSchema = authorityGrantRequestObjectSche
   validGrantBudget,
   'Total cost budget must cover at least one maximum-cost run',
 );
+const governedEntrySubjectSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160),
+    kind: z.string().trim().min(1).max(80),
+    version: z.string().trim().min(1).max(80),
+  })
+  .strict();
 export const authorityGrantSchema = z.object({
   id: uuidSchema,
   releaseId: uuidSchema,
   entryResourceVersionId: uuidSchema,
+  entrySubject: governedEntrySubjectSchema.nullable().default(null),
   releaseDigest: z.string().regex(/^[a-f0-9]{64}$/),
   contextDigest: z.string().regex(/^[a-f0-9]{64}$/),
   projectId: z.string().nullable(),
@@ -573,16 +581,20 @@ export const createExecutionRunRequestSchema = z.object({
   maxInputTokens: z.number().int().min(1).max(1_000_000).default(8_000),
   maxOutputTokens: z.number().int().min(1).max(1_000_000).default(2_000),
   maxEstimatedCostUsd: z.number().nonnegative().max(100_000),
+  maxAttempts: z.number().int().min(1).max(100).default(3),
+  retryBackoff: z.enum(['fixed', 'exponential']).default('exponential'),
   idempotencyKey: z.string().trim().min(8).max(200),
   developmentDraft: z.boolean().default(false),
 });
 export const approveExecutionRunRequestSchema = authorityGrantRequestObjectSchema
   .omit({ releaseId: true, contextDigest: true })
   .refine(validGrantBudget, 'Total cost budget must cover at least one maximum-cost run');
+export const executionRunEntrySubjectSchema = governedEntrySubjectSchema;
 const currentExecutionRunSchema = z.object({
   id: uuidSchema,
   releaseId: uuidSchema,
   entryResourceVersionId: uuidSchema,
+  entrySubject: executionRunEntrySubjectSchema.nullable(),
   legacyEntrypointUnresolved: z.literal(false),
   releaseDigest: z.string().regex(/^[a-f0-9]{64}$/),
   contextDigest: z.string().regex(/^[a-f0-9]{64}$/),
@@ -611,6 +623,8 @@ const currentExecutionRunSchema = z.object({
   progress: z.number().int().min(0).max(100),
   message: z.string(),
   attempts: z.number().int().nonnegative(),
+  maxAttempts: z.number().int().positive(),
+  retryBackoff: z.enum(['fixed', 'exponential']),
   error: jsonObjectSchema.nullable(),
   requestedBy: z.string(),
   startedAt: isoDateTimeSchema.nullable(),
@@ -620,6 +634,7 @@ const currentExecutionRunSchema = z.object({
 });
 const legacyExecutionRunSchema = currentExecutionRunSchema.extend({
   entryResourceVersionId: z.null(),
+  entrySubject: z.null(),
   legacyEntrypointUnresolved: z.literal(true),
 });
 export const executionRunSchema = z.discriminatedUnion('legacyEntrypointUnresolved', [
@@ -664,6 +679,19 @@ export const approveExecutionRunResponseSchema = z.object({
   grant: authorityGrantSchema,
   run: executionRunSchema,
 });
+export const approveExecutionRunGroupResponseSchema = z
+  .object({
+    groupKey: z.string().regex(/^[a-f0-9]{64}$/),
+    grant: authorityGrantSchema,
+    runs: z.array(executionRunSchema).min(1),
+  })
+  .strict();
+export const rejectExecutionRunGroupResponseSchema = z
+  .object({
+    groupKey: z.string().regex(/^[a-f0-9]{64}$/),
+    runs: z.array(executionRunSchema).min(1),
+  })
+  .strict();
 
 export const dailyBriefInputSchema = z.object({
   date: z.string().date(),

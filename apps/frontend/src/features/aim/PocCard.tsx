@@ -1,8 +1,8 @@
 import { Modal } from '../../components/Modal';
-import type { AimScenePart } from './scene/scene-types';
+import type { AimPartView } from './aim-view-model';
 
 interface PocCardProps {
-  part: AimScenePart;
+  part: AimPartView;
   onClose: () => void;
 }
 
@@ -21,7 +21,7 @@ export function PocCard({ part, onClose }: PocCardProps) {
   const evidenceWarning = part.evidenceState === 'missing' || part.evidenceState === 'stale';
 
   return (
-    <Modal kicker="MANIFEST-DRIVEN POC CARD" onClose={onClose} size="wide" title={part.label}>
+    <Modal kicker="MANIFEST EVIDENCE" onClose={onClose} size="wide" title={part.label}>
       <div className="aim-poc-card">
         <div className="aim-poc-verdict">
           <span className="os-status-chip" data-state={part.lifecycle}>
@@ -42,8 +42,8 @@ export function PocCard({ part, onClose }: PocCardProps) {
             <ReadoutList empty="No participating group is declared." values={part.groupLabels} />
           </section>
           <section>
-            <span>PRIMARY OWNER</span>
-            <p>{part.primaryOwner ?? 'Hidden by the current display policy.'}</p>
+            <span>HARDWARE OWNER</span>
+            <p>{part.ownerGroupLabel}</p>
           </section>
           <section>
             <span>CAPABILITY LAYER</span>

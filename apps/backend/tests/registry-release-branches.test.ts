@@ -14,6 +14,7 @@ import { requestContextMiddleware } from '../src/request-context.js';
 import { RegistryService } from '../src/services/registry-service.js';
 import { ReleaseGovernanceService } from '../src/services/release-governance-service.js';
 import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
+import { userFacingResourceVersionWhere } from '../src/services/user-facing-records.js';
 
 const FAMILY_ID = '10000000-0000-4000-8000-000000000001';
 const DEPENDENCY_ID = '20000000-0000-4000-8000-000000000002';
@@ -683,17 +684,26 @@ describe('RegistryService release and import guard branches', () => {
       total: 15,
       countsByLifecycle: { candidate: 11, production: 4, experimental: 0 },
     });
-    expect(listAndGetPrisma.resourceVersion.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ OR: expect.any(Array) }) }),
+    const listQuery = (listAndGetPrisma.resourceVersion.findMany as jest.Mock).mock
+      .calls[0]?.[0] as {
+      where: { AND: unknown[] };
+    };
+    expect(listQuery.where.AND).toContainEqual(userFacingResourceVersionWhere);
+    expect(listQuery.where.AND).toEqual(
+      expect.arrayContaining([expect.objectContaining({ OR: expect.any(Array) })]),
     );
     expect(listAndGetPrisma.resourceVersion.groupBy).toHaveBeenCalledWith({
       by: ['lifecycle'],
-      where: { family: VISIBLE_SCOPE },
+      where: {
+        AND: [userFacingResourceVersionWhere, { family: VISIBLE_SCOPE }],
+      },
       _count: { _all: true },
     });
     expect((await queryService.getResource(first.id)).id).toBe(first.id);
     expect(listAndGetPrisma.resourceVersion.findFirst).toHaveBeenCalledWith({
-      where: { id: first.id, family: VISIBLE_SCOPE },
+      where: {
+        AND: [userFacingResourceVersionWhere, { id: first.id, family: VISIBLE_SCOPE }],
+      },
       include: { family: true },
     });
     await expect(queryService.getResource(SECOND_VERSION_ID)).rejects.toMatchObject({
@@ -1003,11 +1013,11 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
     } as unknown as PrismaClient;
     const service = new ReleaseGovernanceService(prisma);
     const empty = await service.getChannel('default');
+    expect(empty).not.toBeNull();
+    if (empty === null) throw new Error('Expected the existing production channel');
     expect(empty.currentReleaseDigest).toBeNull();
     expect(empty.promotedAt).toBeNull();
-    await expect(service.getChannel('missing')).rejects.toMatchObject({
-      code: 'PRODUCTION_CHANNEL_NOT_FOUND',
-    });
+    await expect(service.getChannel('missing')).resolves.toBeNull();
   });
 
   it.each([
@@ -1073,6 +1083,7 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
   ])('rejects promotion for $name', async ({ release, evidence, code, key }) => {
     const transaction = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       releaseBundle: { findUnique: jest.fn().mockResolvedValue(release) },
       releaseEvaluation: { findUnique: jest.fn().mockResolvedValue(evidence) },
     };
@@ -1092,6 +1103,7 @@ describe('ReleaseGovernanceService evaluation, promotion, and rollback guards', 
     const release = releaseForEvaluation({ lifecycle: ResourceLifecycle.CERTIFIED });
     const transaction = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       releaseBundle: { findUnique: jest.fn().mockResolvedValue(release) },
       releaseEvaluation: { findUnique: jest.fn().mockResolvedValue(evaluationRecord()) },
       productionChannel: { findUnique: jest.fn().mockResolvedValue(channel(RELEASE_ID)) },

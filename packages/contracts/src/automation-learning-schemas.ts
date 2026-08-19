@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { executionRunEntrySubjectSchema } from './platform-schemas.js';
 import { isoDateTimeSchema, jsonObjectSchema, uuidSchema } from './schemas.js';
 
 export const automationScheduleStateSchema = z.enum(['active', 'paused']);
@@ -55,6 +56,7 @@ export const createAutomationScheduleRequestSchema =
 export const automationScheduleSchema = automationScheduleInputSchema
   .extend({
     id: uuidSchema,
+    entrySubject: executionRunEntrySubjectSchema.nullable().default(null),
     releaseDigest: z.string().regex(/^[a-f0-9]{64}$/),
     projectId: z.string().nullable(),
     state: automationScheduleStateSchema,
@@ -160,10 +162,37 @@ export const improvementCandidateListQuerySchema = z.object({
 export const improvementCandidateListResponseSchema = z.object({
   items: z.array(improvementCandidateSchema),
 });
-export const reviewImprovementCandidateRequestSchema = z.object({
-  decision: z.enum(['incubate', 'reject']),
-  rationale: z.string().trim().min(10).max(2000),
-});
+const learningDecisionGroupBinding = {
+  decisionGroupKey: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  expectedRequestCount: z.number().int().min(1).max(250).optional(),
+};
+
+function requireCompleteDecisionGroupBinding(
+  value: {
+    decisionGroupKey?: string | undefined;
+    expectedRequestCount?: number | undefined;
+  },
+  context: z.RefinementCtx,
+): void {
+  if ((value.decisionGroupKey === undefined) !== (value.expectedRequestCount === undefined)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['decisionGroupKey'],
+      message: 'decisionGroupKey and expectedRequestCount must be supplied together',
+    });
+  }
+}
+
+export const reviewImprovementCandidateRequestSchema = z
+  .object({
+    decision: z.enum(['incubate', 'reject']),
+    rationale: z.string().trim().min(10).max(2000),
+    ...learningDecisionGroupBinding,
+  })
+  .superRefine(requireCompleteDecisionGroupBinding);
 
 export const memoryCandidateStateSchema = z.enum(['staged', 'accepted', 'rejected']);
 export const memoryCandidateSchema = z.object({
@@ -203,8 +232,10 @@ export const reviewMemoryCandidateRequestSchema = z
     decision: z.enum(['accept', 'edit_accept', 'reject']),
     editedValue: jsonObjectSchema.optional(),
     rationale: z.string().trim().min(10).max(2000),
+    ...learningDecisionGroupBinding,
   })
   .superRefine((value, context) => {
+    requireCompleteDecisionGroupBinding(value, context);
     if (value.decision === 'edit_accept' && value.editedValue === undefined) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

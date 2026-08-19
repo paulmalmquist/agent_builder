@@ -2,37 +2,57 @@
 
 ## Purpose
 
-AIM is a manifest-driven program visualization inside Paul OS. A synthetic two-stage capability vehicle represents incremental, evidence-gated capability delivery. It is a conceptual interface, not a technical vehicle model.
+AIM is a manifest-driven manufacturing capability map inside Paul OS. It starts with the operating
+group, then shows the literal hardware that group owns, how each part is made, and which governed
+agent examples cover it. Certification, connector reach, and evidence remain visible as separate
+claims so the interface never turns a modeled relationship into a live deployment claim.
 
-> CONCEPTUAL GEOMETRY — NOT VEHICLE CAD
+The checked-in implementation is employer-neutral. It contains no protected design data,
+proprietary subsystem detail, organizational scorecard, operational source identifier, or live
+connection.
 
-The checked-in implementation is employer-neutral. It contains no authentic geometry, proprietary subsystem design, organizational scorecard, operational source identifier, or live connection.
+## Contract baseline
 
-## Phase 0–1 baseline
+The baseline establishes one source of truth before presentation:
 
-The baseline establishes one source of truth before rendering:
-
-- a strict `aim.program/v1` contract and portable JSON Schema;
-- a sanitized seed containing the complete named vehicle and ground anchor cast;
+- a strict `aim.program/v2` contract and portable JSON Schema;
+- a sanitized seed containing the complete declared hardware, group, and agent relationships;
+- literal hardware labels with manufacturing method, process, canonical owner, and coverage
+  references;
+- six ordered primary groups plus supporting groups, with Quality and Avionics and safety
+  first-class;
+- explicitly synthetic agent examples using the accepted R0–R4 authority ladder and neutral
+  offline connector marks;
 - deterministic validation and normalization;
 - evidence freshness and GO eligibility policy;
-- pure historical/forecast projection through `stateAt(manifest, time)`;
-- derived visual state and date-to-date program diff;
+- pure historical and forecast projection through `stateAt(manifest, time)`;
+- derived coverage and date-to-date program diff;
 - static and caller-supplied local-text adapters only;
 - package-level contract and state-engine tests.
 
-The source lifecycle remains visible even when evidence is incomplete. Visual material, readiness treatment, tank fill, print speed, heartbeat, seams, and changes are derived rather than duplicated in the manifest.
+The source lifecycle remains visible even when evidence is incomplete. Agent counts, certification
+coverage, evidence age, readiness, and changes are derived rather than duplicated in the manifest.
+A certified label counts toward group coverage only while its declared evidence remains current and
+non-conflicting.
 
-## Phase 2 consumption contract
+## Frontend consumption contract
 
-The renderer imports `loadAimProgram` and `stateAt` from the browser-safe `@paul-os/runtime/aim` subpath. It receives `AimProgramViewModel`, resolves each part's `anchorId`, and maps the supplied `visual` object to scene presentation. It must provide exact-anchor, alias, region, and clickable-fallback resolution; resource disposal; reduced motion; capped device pixel ratio; WebGL failure handling; and an accessible two-dimensional summary.
+The frontend imports `loadAimProgram` and `stateAt` from the browser-safe
+`@paul-os/runtime/aim` subpath. It receives `AimProgramViewModel`, selects the six primary groups by
+`kind`, sorts them by `displayOrder`, and derives hardware from `ownerGroupId`.
 
-The renderer must not:
+The static interface keeps one clear progression:
 
-- infer program status from geometry;
-- fetch or open source/evidence locations;
+1. choose a primary owning group;
+2. inspect its hardware and declared manufacturing method;
+3. optionally select one part to filter modeled agents and connector reach;
+4. open evidence only through an explicit read-only action.
+
+The frontend must not:
+
+- fetch or open source and evidence locations;
 - write back to the program manifest;
-- present proxy geometry as authentic;
+- infer deployment, certification, or authority beyond the declared evidence;
 - hide validation or evidence warnings;
 - make a public runtime request.
 
@@ -40,9 +60,10 @@ The renderer must not:
 
 - Live system adapters, remote APIs, and event infrastructure.
 - CSV and work-item import converters with reconciliation reports.
-- Authentic or protected geometry.
+- Protected engineering data.
 - Production authorization, actuator control, or automated source writes.
 - Organization-level performance ranking.
 - Full guided presentation, roadmap controls, and QBR interaction beyond the pure diff contract.
 
-See [Repository Integration Notes](./REPO_INTEGRATION_NOTES.md) for actual package locations, commands, and editing rules.
+See [Repository Integration Notes](./REPO_INTEGRATION_NOTES.md) for actual package locations,
+commands, and editing rules.

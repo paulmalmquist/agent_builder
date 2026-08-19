@@ -24,8 +24,10 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
+          defaultProject: 'apps/backend/tsconfig.seed.json',
           allowDefaultProject: [
             'scripts/*.mjs',
+            'scripts/*.ts',
             'test-support/*.cjs',
             'apps/backend/tests/*.smoke.mjs',
             'apps/workstation-broker/scripts/*.mjs',
@@ -64,6 +66,7 @@ export default tseslint.config(
       'e2e/**/*.ts',
       'packages/contracts/**/*.ts',
       'packages/runtime/**/*.ts',
+      'scripts/**/*.ts',
       'scripts/**/*.mjs',
       'test-support/**/*.cjs',
       'apps/workstation-broker/scripts/**/*.mjs',

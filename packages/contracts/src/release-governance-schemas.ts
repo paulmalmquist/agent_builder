@@ -165,6 +165,11 @@ export const productionChannelSchema = z.object({
   updatedAt: isoDateTimeSchema,
 });
 
+// A named production slot can be valid before a release has ever been promoted into it.
+// Read-side lookup represents that normal, unassigned state as null; mutations continue
+// to return the persisted channel they create or update.
+export const productionChannelLookupSchema = productionChannelSchema.nullable();
+
 const rationaleSchema = z.string().trim().min(10).max(2000);
 
 export const promoteReleaseRequestSchema = z.object({

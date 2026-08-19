@@ -33,6 +33,7 @@ import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentActorId } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere, isInPrincipalScope } from '../scope.js';
+import { userFacingResourceVersionWhere } from './user-facing-records.js';
 
 const kindToDatabase = {
   CorePolicy: DatabaseResourceKind.CORE_POLICY,
@@ -580,22 +581,27 @@ export class RegistryService {
     const [records, lifecycleTotals] = await Promise.all([
       this.prisma.resourceVersion.findMany({
         where: {
-          family: {
-            ...scopeWhere,
-            ...(query.kind === undefined ? {} : { kind: kindToDatabase[query.kind] }),
-          },
-          ...(query.lifecycle === undefined
-            ? {}
-            : { lifecycle: lifecycleToDatabase[query.lifecycle] }),
-          ...(query.query === undefined || query.query.length === 0
-            ? {}
-            : {
-                OR: [
-                  { family: { name: { contains: query.query, mode: 'insensitive' } } },
-                  { family: { slug: { contains: query.query, mode: 'insensitive' } } },
-                  { purpose: { contains: query.query, mode: 'insensitive' } },
-                ],
-              }),
+          AND: [
+            userFacingResourceVersionWhere,
+            {
+              family: {
+                ...scopeWhere,
+                ...(query.kind === undefined ? {} : { kind: kindToDatabase[query.kind] }),
+              },
+              ...(query.lifecycle === undefined
+                ? {}
+                : { lifecycle: lifecycleToDatabase[query.lifecycle] }),
+              ...(query.query === undefined || query.query.length === 0
+                ? {}
+                : {
+                    OR: [
+                      { family: { name: { contains: query.query, mode: 'insensitive' } } },
+                      { family: { slug: { contains: query.query, mode: 'insensitive' } } },
+                      { purpose: { contains: query.query, mode: 'insensitive' } },
+                    ],
+                  }),
+            },
+          ],
         },
         include: { family: true },
         orderBy: [{ updatedAt: 'desc' }],
@@ -603,7 +609,9 @@ export class RegistryService {
       }),
       this.prisma.resourceVersion.groupBy({
         by: ['lifecycle'],
-        where: { family: scopeWhere },
+        where: {
+          AND: [userFacingResourceVersionWhere, { family: scopeWhere }],
+        },
         _count: { _all: true },
       }),
     ]);
@@ -630,8 +638,10 @@ export class RegistryService {
   async getResource(resourceVersionId: string): Promise<ResourceVersion> {
     const record = await this.prisma.resourceVersion.findFirst({
       where: {
-        id: resourceVersionId,
-        family: aggregateScopeWhere(),
+        AND: [
+          userFacingResourceVersionWhere,
+          { id: resourceVersionId, family: aggregateScopeWhere() },
+        ],
       },
       include: { family: true },
     });

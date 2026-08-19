@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:paul-os:aim:program:v1",
-  "title": "AIM Program Manifest v1",
+  "$id": "urn:paul-os:aim:program:v2",
+  "title": "AIM Program Manifest v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,9 +11,11 @@
     "timeline",
     "anchors",
     "groups",
+    "agents",
     "capabilities",
     "parts",
     "milestones",
+    "workstreams",
     "decisionLoops",
     "interfaces",
     "evidence",
@@ -21,7 +23,7 @@
     "metrics"
   ],
   "properties": {
-    "schemaVersion": { "const": "aim.program/v1" },
+    "schemaVersion": { "const": "aim.program/v2" },
     "program": { "$ref": "#/$defs/program" },
     "displayPolicy": { "$ref": "#/$defs/displayPolicy" },
     "timeline": { "$ref": "#/$defs/timeline" },
@@ -37,6 +39,11 @@
       "maxItems": 500,
       "items": { "$ref": "#/$defs/group" }
     },
+    "agents": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/agent" }
+    },
     "capabilities": {
       "type": "array",
       "minItems": 1,
@@ -50,6 +57,11 @@
       "items": { "$ref": "#/$defs/part" }
     },
     "milestones": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/milestone" } },
+    "workstreams": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/workstream" }
+    },
     "decisionLoops": {
       "type": "array",
       "maxItems": 500,
@@ -157,6 +169,8 @@
       "required": [
         "id",
         "label",
+        "kind",
+        "displayOrder",
         "ownedAnchorIds",
         "participatingCapabilityIds",
         "decisionLoopIds",
@@ -166,12 +180,69 @@
         "id": { "$ref": "#/$defs/id" },
         "label": { "$ref": "#/$defs/label" },
         "description": { "$ref": "#/$defs/description" },
+        "kind": { "enum": ["primary", "supporting"] },
+        "displayOrder": { "type": "integer", "minimum": 0, "maximum": 999 },
         "lead": { "type": "string", "minLength": 2, "maxLength": 160 },
         "ownedAnchorIds": { "$ref": "#/$defs/idList" },
         "participatingCapabilityIds": { "$ref": "#/$defs/idList" },
         "decisionLoopIds": { "$ref": "#/$defs/idList" },
         "agentBuilderQuery": { "type": "string", "minLength": 2, "maxLength": 500 },
         "sourceRefs": { "$ref": "#/$defs/idList" }
+      }
+    },
+    "agentConnector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "monogram", "accent", "access"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "monogram": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "accent": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "assetSrc": {
+          "type": "string",
+          "pattern": "^/v1/plugins/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/mark/[a-f0-9]{64}\\.svg$"
+        },
+        "access": { "enum": ["read", "write"] }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "description",
+        "tier",
+        "certificationStatus",
+        "synthetic",
+        "groupIds",
+        "partIds",
+        "connectors",
+        "certificationEvidenceRefs",
+        "sourceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "description": { "$ref": "#/$defs/description" },
+        "tier": { "enum": [0, 1, 2, 3, 4] },
+        "certificationStatus": { "enum": ["candidate", "certified"] },
+        "synthetic": { "type": "boolean" },
+        "groupIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "partIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "connectors": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/agentConnector" }
+        },
+        "certificationEvidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRefs": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 }
       }
     },
     "capability": {
@@ -216,6 +287,10 @@
         "id",
         "label",
         "anchorId",
+        "makeMethod",
+        "process",
+        "ownerGroupId",
+        "coverage",
         "capabilityIds",
         "participatingGroupIds",
         "problem",
@@ -231,9 +306,20 @@
         "label": { "$ref": "#/$defs/label" },
         "anchorId": { "$ref": "#/$defs/id" },
         "fallbackRegion": { "$ref": "#/$defs/id" },
+        "makeMethod": { "enum": ["printed", "purchased", "facility"] },
+        "process": { "$ref": "#/$defs/description" },
+        "ownerGroupId": { "$ref": "#/$defs/id" },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["agentIds", "evidenceRefs"],
+          "properties": {
+            "agentIds": { "$ref": "#/$defs/idList" },
+            "evidenceRefs": { "$ref": "#/$defs/idList" }
+          }
+        },
         "capabilityIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
         "participatingGroupIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
-        "primaryGroupId": { "$ref": "#/$defs/id" },
         "problem": { "type": "string", "minLength": 10, "maxLength": 2000 },
         "decisionLoopIds": { "$ref": "#/$defs/idList" },
         "unlocksPartIds": { "$ref": "#/$defs/idList" },
@@ -318,6 +404,32 @@
         },
         "evidenceRefs": { "$ref": "#/$defs/idList" },
         "sourceRefs": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 }
+      }
+    },
+    "workstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "ownerGroupId",
+        "affectedPartIds",
+        "startAt",
+        "endAt",
+        "state",
+        "sourceRefs",
+        "milestoneIds"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "ownerGroupId": { "$ref": "#/$defs/id" },
+        "affectedPartIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "startAt": { "$ref": "#/$defs/timestamp" },
+        "endAt": { "$ref": "#/$defs/timestamp" },
+        "state": { "enum": ["complete", "in_work", "planned", "at_risk"] },
+        "sourceRefs": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "milestoneIds": { "$ref": "#/$defs/idList" }
       }
     },
     "decisionStep": {

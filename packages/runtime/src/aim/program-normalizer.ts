@@ -18,12 +18,22 @@ export function normalizeAimProgram(input: AimProgramManifest): AimProgramManife
     anchors: [...manifest.anchors]
       .sort(byId)
       .map((anchor) => ({ ...anchor, aliases: sortedIds(anchor.aliases) })),
-    groups: [...manifest.groups].sort(byId).map((group) => ({
-      ...group,
-      ownedAnchorIds: sortedIds(group.ownedAnchorIds),
-      participatingCapabilityIds: sortedIds(group.participatingCapabilityIds),
-      decisionLoopIds: sortedIds(group.decisionLoopIds),
-      sourceRefs: sortedIds(group.sourceRefs),
+    groups: [...manifest.groups]
+      .sort((left, right) => left.displayOrder - right.displayOrder || byId(left, right))
+      .map((group) => ({
+        ...group,
+        ownedAnchorIds: sortedIds(group.ownedAnchorIds),
+        participatingCapabilityIds: sortedIds(group.participatingCapabilityIds),
+        decisionLoopIds: sortedIds(group.decisionLoopIds),
+        sourceRefs: sortedIds(group.sourceRefs),
+      })),
+    agents: [...manifest.agents].sort(byId).map((agent) => ({
+      ...agent,
+      groupIds: sortedIds(agent.groupIds),
+      partIds: sortedIds(agent.partIds),
+      connectors: [...agent.connectors].sort(byId),
+      certificationEvidenceRefs: sortedIds(agent.certificationEvidenceRefs),
+      sourceRefs: sortedIds(agent.sourceRefs),
     })),
     capabilities: [...manifest.capabilities].sort(byId).map((capability) => ({
       ...capability,
@@ -36,6 +46,10 @@ export function normalizeAimProgram(input: AimProgramManifest): AimProgramManife
       decisionLoopIds: sortedIds(part.decisionLoopIds),
       unlocksPartIds: sortedIds(part.unlocksPartIds),
       dependencyPartIds: sortedIds(part.dependencyPartIds),
+      coverage: {
+        agentIds: sortedIds(part.coverage.agentIds),
+        evidenceRefs: sortedIds(part.coverage.evidenceRefs),
+      },
       evidenceRefs: sortedIds(part.evidenceRefs),
       sourceRefs: sortedIds(part.sourceRefs),
       statusHistory: part.statusHistory.map((event) => ({
@@ -59,6 +73,12 @@ export function normalizeAimProgram(input: AimProgramManifest): AimProgramManife
           evidenceRefs: sortedIds(result.evidenceRefs),
         })),
       })),
+    })),
+    workstreams: [...manifest.workstreams].sort(byId).map((workstream) => ({
+      ...workstream,
+      affectedPartIds: sortedIds(workstream.affectedPartIds),
+      sourceRefs: sortedIds(workstream.sourceRefs),
+      milestoneIds: sortedIds(workstream.milestoneIds),
     })),
     decisionLoops: [...manifest.decisionLoops].sort(byId).map((loop) => ({
       ...loop,

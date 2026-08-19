@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Paul OS — AIM Executive Board</title>
+    <style>
+      :root {
+        --bg: #05070a;
+        --panel: #0b0e14;
+        --p2: #0e1219;
+        --bd: rgba(255, 255, 255, 0.09);
+        --bdb: rgba(255, 255, 255, 0.18);
+        --ink: #f5f6f8;
+        --i2: #aeb4bf;
+        --mut: #8f96a3;
+        --dim: #5c6270;
+        --faint: #333944;
+        --pur: #9578ff;
+        --purs: #b9aaff;
+        --teal: #2f9d82;
+        --amb: #e8b34b;
+        --red: #e0645f;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          400 14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Inter,
+          Roboto,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        padding: 24px 30px 60px;
+        max-width: 1520px;
+        margin: 0 auto;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+      }
+      .top {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      h1 {
+        font-size: 23px;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+      }
+      .top .d {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--dim);
+      }
+      .lede {
+        font-size: 13px;
+        color: var(--mut);
+        margin: 5px 0 16px;
+        max-width: 96ch;
+      }
+      .filt {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--bd);
+      }
+      .filt .lb {
+        font-size: 9.5px;
+        letter-spacing: 0.19em;
+        color: var(--dim);
+        margin-right: 4px;
+      }
+      .chip {
+        font-size: 11.5px;
+        color: var(--mut);
+        background: var(--panel);
+        border: 1px solid var(--bd);
+        border-radius: 7px;
+        padding: 5px 11px;
+        cursor: pointer;
+        transition: all 170ms var(--ease);
+      }
+      .chip:hover {
+        border-color: var(--bdb);
+        color: var(--i2);
+      }
+      .chip.on {
+        border-color: var(--pur);
+        color: var(--ink);
+        background: rgba(149, 120, 255, 0.12);
+      }
+      .filt .prov {
+        margin-left: auto;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr;
+        gap: 14px;
+        align-items: start;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--bd);
+        border-radius: 12px;
+        padding: 14px 16px 12px;
+      }
+      .card h2 {
+        font-size: 10px;
+        letter-spacing: 0.19em;
+        color: var(--mut);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 3px;
+      }
+      .card h2::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--bd);
+      }
+      .q {
+        font-size: 12.5px;
+        color: var(--i2);
+        margin-bottom: 11px;
+      }
+      .q b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .cov {
+        font-size: 9.5px;
+        letter-spacing: 0.11em;
+        color: var(--dim);
+        margin-top: 9px;
+        padding-top: 8px;
+        border-top: 1px solid var(--bd);
+      }
+      .cov b {
+        color: var(--amb);
+        font-weight: 600;
+      }
+      .full {
+        grid-column: 1/-1;
+      }
+      .lg {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        color: var(--mut);
+        margin-bottom: 8px;
+      }
+      .lg span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .lg i {
+        width: 11px;
+        height: 3px;
+        border-radius: 2px;
+        display: block;
+      }
+      .lg i.dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        overflow: visible;
+      }
+      text {
+        font-family: inherit;
+      }
+      .ms {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 11px;
+        margin-top: 2px;
+      }
+      .msc {
+        background: var(--p2);
+        border: 1px solid var(--bd);
+        border-radius: 9px;
+        padding: 10px 11px;
+      }
+      .msc .n {
+        font-size: 11.5px;
+        font-weight: 560;
+      }
+      .msc .v {
+        font-size: 10.5px;
+        color: var(--mut);
+        margin-top: 2px;
+        font-variant-numeric: tabular-nums;
+      }
+      .msc .v b {
+        font-weight: 600;
+      }
+      .drift-r {
+        color: var(--red);
+      }
+      .drift-a {
+        color: var(--amb);
+      }
+      .drift-g {
+        color: var(--teal);
+      }
+      .foot {
+        margin-top: 24px;
+        padding-top: 12px;
+        border-top: 1px solid var(--bd);
+        font-size: 9px;
+        letter-spacing: 0.18em;
+        color: var(--faint);
+      }
+      @media (max-width: 1180px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .ms {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <h1>AIM · Program review</h1>
+      <span class="d">WEEK 34 · SOURCE: JIRA + PROGRAM PLAN</span>
+    </div>
+    <p class="lede">
+      Five questions, five panels. Every number is computed from issue history, not from status
+      fields anyone types by hand — and every panel states how much of the backlog it could actually
+      see.
+    </p>
+
+    <div class="filt">
+      <span class="lb">VERTICAL</span>
+      <button class="chip on" data-v="all">All</button
+      ><button class="chip" data-v="str">Structures</button>
+      <button class="chip" data-v="pro">Propulsion</button
+      ><button class="chip" data-v="fac">Factory ops</button>
+      <button class="chip" data-v="int">Integration &amp; test</button
+      ><button class="chip" data-v="qua">Quality</button>
+      <button class="chip" data-v="avi">Avionics</button>
+      <span class="prov" id="prov">1,204 ISSUES · CHANGELOG THROUGH 18 AUG</span>
+    </div>
+
+    <!-- milestone confidence strip -->
+    <div class="card full" style="margin-bottom: 14px">
+      <h2>MILESTONE CONFIDENCE — FORECAST DATE, RECOMPUTED WEEKLY</h2>
+      <div class="q">
+        Not "are we green" — <b>which direction is the forecast moving.</b> A date drifting right
+        for three weeks is slipping whether or not anyone has said so.
+      </div>
+      <div class="ms" id="msrow"></div>
+    </div>
+
+    <div class="grid">
+      <!-- monte carlo -->
+      <div class="card">
+        <h2>WILL WE MAKE THE DATE</h2>
+        <div class="q">
+          10,000 simulations sampling <b>actual weekly throughput</b> against remaining scope.
+          Replaces one confident date with a distribution.
+        </div>
+        <div class="lg">
+          <span><i style="background: var(--teal)"></i>50% by 4 Feb</span
+          ><span><i style="background: var(--pur)"></i>85% by 27 Feb</span
+          ><span><i style="background: var(--amb)"></i>95% by 14 Mar</span
+          ><span
+            ><i
+              class="dot"
+              style="background: var(--red); border-radius: 0; width: 2px; height: 11px"
+            ></i
+            >Committed 1 Mar</span
+          >
+        </div>
+        <svg id="mc" viewBox="0 0 620 200" height="200"></svg>
+        <div class="cov">
+          COMPUTED FROM <b>26 WEEKS</b> OF THROUGHPUT · 142 ITEMS REMAINING · COMMITTED DATE SITS AT
+          <b>88%</b> CONFIDENCE
+        </div>
+      </div>
+
+      <!-- aging WIP -->
+      <div class="card">
+        <h2>WHAT NEEDS ATTENTION TODAY</h2>
+        <div class="q">
+          Every in-flight item by age, against the percentiles of everything this program has ever
+          finished. Dots above the 85th line are <b>already abnormal</b>.
+        </div>
+        <div class="lg">
+          <span><i class="dot" style="background: var(--teal)"></i>Normal</span
+          ><span><i class="dot" style="background: var(--amb)"></i>Past 85th</span
+          ><span><i class="dot" style="background: var(--red)"></i>Past 95th</span>
+        </div>
+        <svg id="aging" viewBox="0 0 500 210" height="210"></svg>
+        <div class="cov">
+          PERCENTILES FROM <b>612</b> COMPLETED ITEMS · 5 ITEMS ARE OLDER THAN 95% OF ALL PRIOR WORK
+        </div>
+      </div>
+
+      <!-- dependency matrix -->
+      <div class="card">
+        <h2>WHO IS BLOCKING WHOM</h2>
+        <div class="q">
+          Open <b>"is blocked by"</b> links between verticals. Read a row as "this group is waiting
+          on…". Computed from links, not from anyone's opinion.
+        </div>
+        <svg id="dep" viewBox="0 0 500 250" height="250"></svg>
+        <div class="cov">
+          INTEGRATION IS WAITING ON STRUCTURES <b>14 TIMES</b> — THE LARGEST SINGLE CROSS-GROUP
+          QUEUE
+        </div>
+      </div>
+
+      <!-- scope waterfall -->
+      <div class="card">
+        <h2>WHY THE DATE MOVED</h2>
+        <div class="q">
+          Scope change on the current milestone since baseline. The honest answer to
+          <b>"I thought we were nearly done"</b>.
+        </div>
+        <svg id="wf" viewBox="0 0 620 200" height="200"></svg>
+        <div class="cov">
+          DISCOVERED WORK IS <b>2.4×</b> PLANNED ADDITIONS — THE DOMINANT DRIVER, NOT SCOPE CREEP
+        </div>
+      </div>
+
+      <!-- cfd -->
+      <div class="card full">
+        <h2>WHERE WORK IS PILING UP</h2>
+        <div class="q">
+          Cumulative flow. <b>The width of a band is how much work is sitting in that state</b> — a
+          widening band is a bottleneck forming, weeks before it shows up as a missed date.
+        </div>
+        <div class="lg">
+          <span><i style="background: #3a3f4a"></i>Backlog</span
+          ><span><i style="background: var(--pur)"></i>In progress</span
+          ><span><i style="background: var(--amb)"></i>In review</span
+          ><span><i style="background: var(--teal)"></i>Done</span>
+        </div>
+        <svg id="cfd" viewBox="0 0 1200 230" height="230"></svg>
+        <div class="cov">
+          IN-REVIEW BAND HAS WIDENED <b>3.1×</b> SINCE WEEK 28 · REVIEW CAPACITY IS THE CONSTRAINT,
+          NOT BUILD CAPACITY
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      CONCEPT · SYNTHETIC DATA IN THE SHAPE OF JIRA CHANGELOG EXPORTS · EVERY PANEL DISCLOSES ITS
+      COVERAGE
+    </div>
+
+    <script>
+      const NS = 'http://www.w3.org/2000/svg';
+      const el = (t, a = {}) => {
+        const e = document.createElementNS(NS, t);
+        for (const k in a) e.setAttribute(k, a[k]);
+        return e;
+      };
+      const txt = (x, y, s, a = {}) => {
+        const e = el('text', { x, y, fill: '#5c6270', 'font-size': 9, ...a });
+        e.textContent = s;
+        return e;
+      };
+
+      /* ---------- 1 · milestone confidence ---------- */
+      const MS = [
+        { n: 'Stage 1 proof', base: '12 Oct', now: '19 Oct', drift: +7, cls: 'a' },
+        { n: 'Hot fire complete', base: '02 Dec', now: '02 Dec', drift: 0, cls: 'g' },
+        { n: 'Stage mate', base: '18 Jan', now: '02 Feb', drift: +15, cls: 'r' },
+        { n: 'Vehicle integrated', base: '01 Mar', now: '27 Feb', drift: -2, cls: 'g' },
+      ];
+      document.getElementById('msrow').innerHTML = MS.map((m) => {
+        const d = m.drift > 0 ? `+${m.drift}d` : m.drift < 0 ? `${m.drift}d` : 'held';
+        return `<div class="msc"><div class="n">${m.n}</div>
+   <div class="v">${m.base} → <b>${m.now}</b> <span class="drift-${m.cls}">${d}</span></div>
+   <svg viewBox="0 0 120 26" height="26" style="margin-top:6px">
+     <polyline fill="none" stroke="${m.cls === 'r' ? '#e0645f' : m.cls === 'a' ? '#e8b34b' : '#2f9d82'}" stroke-width="1.8"
+       stroke-linecap="round" points="${trend(m.drift)}"/>
+   </svg></div>`;
+      }).join('');
+      function trend(d) {
+        const pts = [];
+        for (let i = 0; i < 8; i++) {
+          const p = i / 7;
+          pts.push(`${4 + p * 112},${18 - p * d * 0.55 - Math.sin(i * 1.3) * 1.1}`);
+        }
+        return pts.join(' ');
+      }
+
+      /* ---------- 2 · monte carlo ---------- */
+      (() => {
+        const s = document.getElementById('mc'),
+          W = 620,
+          H = 200,
+          L = 34,
+          R = 12,
+          T = 10,
+          B = 30;
+        // synthetic completion-date distribution (right-skewed)
+        const bins = 44,
+          data = [];
+        for (let i = 0; i < bins; i++) {
+          const x = (i - 13) / 9;
+          data.push(Math.max(0, Math.exp((-x * x) / 1.5) * (1 - i / 95)));
+        }
+        const max = Math.max(...data),
+          bw = (W - L - R) / bins;
+        data.forEach((v, i) => {
+          const h = (v / max) * (H - T - B);
+          const p50 = 13,
+            p85 = 25,
+            p95 = 34;
+          const c = i <= p50 ? '#2f9d82' : i <= p85 ? '#9578ff' : i <= p95 ? '#e8b34b' : '#3a3f4a';
+          s.appendChild(
+            el('rect', {
+              x: L + i * bw,
+              y: H - B - h,
+              width: bw - 1.4,
+              height: h,
+              fill: c,
+              opacity: i <= p95 ? 0.92 : 0.35,
+              rx: 1,
+            }),
+          );
+        });
+        [
+          ['p50', 13, '#2f9d82', '50%'],
+          ['p85', 25, '#9578ff', '85%'],
+          ['p95', 34, '#e8b34b', '95%'],
+        ].forEach(([id, i, c, lab]) => {
+          const x = L + i * bw + bw / 2;
+          s.appendChild(
+            el('line', {
+              x1: x,
+              y1: T,
+              x2: x,
+              y2: H - B,
+              stroke: c,
+              'stroke-width': 1,
+              'stroke-dasharray': '3 3',
+              opacity: 0.75,
+            }),
+          );
+          s.appendChild(txt(x - 8, T + 8, lab, { fill: c, 'font-size': 9, 'font-weight': 700 }));
+        });
+        // committed date marker
+        const cx = L + 29 * bw;
+        s.appendChild(
+          el('line', {
+            x1: cx,
+            y1: T - 4,
+            x2: cx,
+            y2: H - B + 4,
+            stroke: '#e0645f',
+            'stroke-width': 2,
+          }),
+        );
+        s.appendChild(
+          txt(cx - 38, H - B + 22, 'COMMITTED 1 MAR', {
+            fill: '#e0645f',
+            'font-size': 8.5,
+            'font-weight': 700,
+            'letter-spacing': '.08em',
+          }),
+        );
+        s.appendChild(
+          el('line', { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: 'rgba(255,255,255,.12)' }),
+        );
+        s.appendChild(txt(L, H - B + 14, 'JAN'));
+        s.appendChild(txt(L + bw * 15, H - B + 14, 'FEB'));
+        s.appendChild(txt(L + bw * 32, H - B + 14, 'MAR'));
+        s.appendChild(txt(2, T + 6, 'RUNS'));
+      })();
+
+      /* ---------- 3 · aging WIP ---------- */
+      (() => {
+        const s = document.getElementById('aging'),
+          W = 500,
+          H = 210,
+          L = 40,
+          R = 14,
+          T = 12,
+          B = 30;
+        const maxAge = 70,
+          y = (a) => H - B - (a / maxAge) * (H - T - B);
+        [
+          [50, '50th · 9d', '#2f9d82'],
+          [85, '85th · 31d', '#e8b34b'],
+          [95, '95th · 48d', '#e0645f'],
+        ].forEach(([p, lab, c]) => {
+          const age = p === 50 ? 9 : p === 85 ? 31 : 48;
+          s.appendChild(
+            el('line', {
+              x1: L,
+              y1: y(age),
+              x2: W - R,
+              y2: y(age),
+              stroke: c,
+              'stroke-width': 1,
+              'stroke-dasharray': '4 4',
+              opacity: 0.65,
+            }),
+          );
+          s.appendChild(
+            txt(W - R + 2, y(age) + 3, lab, {
+              fill: c,
+              'font-size': 8.5,
+              'font-weight': 600,
+              'text-anchor': 'start',
+            }),
+          );
+        });
+        const G = ['STR', 'PRO', 'FAC', 'INT', 'QUA', 'AVI'],
+          colW = (W - L - R) / G.length;
+        const ages = [
+          [3, 6, 11, 14],
+          [2, 5, 8],
+          [4, 9, 12, 19, 44],
+          [7, 13, 22, 36, 52, 61],
+          [16, 38, 55],
+          [5, 9, 27],
+        ];
+        G.forEach((g, i) => {
+          const cx = L + i * colW + colW / 2;
+          s.appendChild(
+            txt(cx, H - B + 15, g, {
+              'text-anchor': 'middle',
+              'font-size': 9,
+              'letter-spacing': '.1em',
+            }),
+          );
+          ages[i].forEach((a, j) => {
+            const c = a > 48 ? '#e0645f' : a > 31 ? '#e8b34b' : '#2f9d82';
+            const jx = cx + ((j % 3) - 1) * 8.5;
+            s.appendChild(
+              el('circle', {
+                cx: jx,
+                cy: y(a),
+                r: a > 48 ? 4.6 : 3.6,
+                fill: c,
+                opacity: a > 31 ? 0.95 : 0.6,
+              }),
+            );
+          });
+        });
+        s.appendChild(
+          el('line', { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: 'rgba(255,255,255,.12)' }),
+        );
+        [0, 20, 40, 60].forEach((v) =>
+          s.appendChild(txt(L - 8, y(v) + 3, v + 'd', { 'text-anchor': 'end' })),
+        );
+      })();
+
+      /* ---------- 4 · dependency matrix ---------- */
+      (() => {
+        const s = document.getElementById('dep'),
+          G = ['STR', 'PRO', 'FAC', 'INT', 'QUA', 'AVI'];
+        const M = [
+          [0, 2, 5, 1, 0, 0],
+          [3, 0, 4, 2, 1, 0],
+          [1, 1, 0, 3, 2, 0],
+          [14, 6, 9, 0, 4, 3],
+          [2, 1, 3, 1, 0, 0],
+          [0, 0, 1, 2, 1, 0],
+        ];
+        const cell = 32,
+          L = 52,
+          T = 34;
+        G.forEach((g, i) => {
+          s.appendChild(
+            txt(L + i * cell + cell / 2, T - 9, g, {
+              'text-anchor': 'middle',
+              'font-size': 8.5,
+              'letter-spacing': '.1em',
+              fill: '#8f96a3',
+            }),
+          );
+          s.appendChild(
+            txt(L - 8, T + i * cell + cell / 2 + 3, g, {
+              'text-anchor': 'end',
+              'font-size': 8.5,
+              'letter-spacing': '.1em',
+              fill: '#8f96a3',
+            }),
+          );
+        });
+        const max = 14;
+        M.forEach((row, i) =>
+          row.forEach((v, j) => {
+            const t = v / max;
+            const fill =
+              i === j
+                ? 'rgba(255,255,255,.02)'
+                : v === 0
+                  ? 'rgba(255,255,255,.035)'
+                  : `rgba(149,120,255,${0.12 + t * 0.78})`;
+            s.appendChild(
+              el('rect', {
+                x: L + j * cell,
+                y: T + i * cell,
+                width: cell - 2,
+                height: cell - 2,
+                rx: 3,
+                fill,
+                stroke: v >= 9 ? '#b9aaff' : 'rgba(255,255,255,.06)',
+                'stroke-width': v >= 9 ? 1.3 : 1,
+              }),
+            );
+            if (v > 0 && i !== j)
+              s.appendChild(
+                txt(L + j * cell + cell / 2 - 1, T + i * cell + cell / 2 + 4, v, {
+                  'text-anchor': 'middle',
+                  'font-size': 11,
+                  'font-weight': 700,
+                  fill: t > 0.5 ? '#08090c' : '#aeb4bf',
+                }),
+              );
+          }),
+        );
+        s.appendChild(
+          txt(L, T + 6 * cell + 22, 'ROW = WAITING ON · COLUMN = BLOCKED BY', {
+            'font-size': 8.5,
+            'letter-spacing': '.13em',
+          }),
+        );
+      })();
+
+      /* ---------- 5 · scope waterfall ---------- */
+      (() => {
+        const s = document.getElementById('wf'),
+          W = 620,
+          H = 200,
+          L = 40,
+          R = 14,
+          T = 14,
+          B = 34;
+        const steps = [
+          ['Baseline', 86, 'base'],
+          ['Planned adds', +12, 'add'],
+          ['Removed', -9, 'rem'],
+          ['Discovered', +29, 'add'],
+          ['Completed', -71, 'done'],
+          ['Remaining', 47, 'base'],
+        ];
+        const maxV = 120,
+          h = (v) => (v / maxV) * (H - T - B),
+          bw = (W - L - R) / steps.length - 12;
+        let run = 0,
+          prevX = 0,
+          prevY = 0;
+        steps.forEach((st, i) => {
+          const [lab, v, kind] = st,
+            x = L + i * ((W - L - R) / steps.length) + 6;
+          let y0, hh, fill;
+          if (kind === 'base') {
+            y0 = H - B - h(Math.abs(v));
+            hh = h(Math.abs(v));
+            fill = 'rgba(149,120,255,.32)';
+            run = Math.abs(v);
+          } else {
+            const start = run,
+              end = run + v;
+            run = end;
+            y0 = H - B - h(Math.max(start, end));
+            hh = h(Math.abs(v));
+            fill =
+              v > 0
+                ? kind === 'add'
+                  ? '#e8b34b'
+                  : '#9578ff'
+                : kind === 'done'
+                  ? '#2f9d82'
+                  : '#5c6270';
+          }
+          s.appendChild(
+            el('rect', {
+              x,
+              y: y0,
+              width: bw,
+              height: Math.max(hh, 2),
+              rx: 2,
+              fill,
+              stroke: kind === 'base' ? 'rgba(149,120,255,.6)' : 'none',
+              'stroke-width': 1,
+            }),
+          );
+          s.appendChild(
+            txt(x + bw / 2, H - B + 15, lab.toUpperCase(), {
+              'text-anchor': 'middle',
+              'font-size': 8.5,
+              'letter-spacing': '.08em',
+            }),
+          );
+          if (i > 0)
+            s.appendChild(
+              el('line', {
+                x1: prevX,
+                y1: prevY,
+                x2: x,
+                y2: kind === 'base' && i === steps.length - 1 ? y0 : v > 0 ? y0 + hh : y0,
+                stroke: 'rgba(255,255,255,.22)',
+                'stroke-width': 1,
+                'stroke-dasharray': '2 2',
+              }),
+            );
+          prevX = x + bw;
+          prevY = v > 0 || kind === 'base' ? y0 : y0;
+          s.appendChild(
+            txt(x + bw / 2, y0 - 6, (v > 0 && kind !== 'base' ? '+' : '') + v, {
+              'text-anchor': 'middle',
+              'font-size': 11,
+              'font-weight': 700,
+              fill:
+                kind === 'base'
+                  ? '#b9aaff'
+                  : v > 0
+                    ? kind === 'add'
+                      ? '#e8b34b'
+                      : '#9578ff'
+                    : kind === 'done'
+                      ? '#2f9d82'
+                      : '#8f96a3',
+            }),
+          );
+        });
+        s.appendChild(
+          el('line', { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: 'rgba(255,255,255,.12)' }),
+        );
+        s.appendChild(txt(2, T + 4, 'ITEMS'));
+      })();
+
+      /* ---------- 6 · cumulative flow ---------- */
+      (() => {
+        const s = document.getElementById('cfd'),
+          W = 1200,
+          H = 230,
+          L = 42,
+          R = 16,
+          T = 12,
+          B = 28;
+        const N = 26,
+          xs = (i) => L + (i / (N - 1)) * (W - L - R);
+        const done = [],
+          rev = [],
+          prog = [],
+          back = [];
+        for (let i = 0; i < N; i++) {
+          done.push(12 + i * 9.5);
+          rev.push(5 + (i > 11 ? Math.pow(i - 11, 1.45) * 2.6 : 1.5));
+          prog.push(22 + Math.sin(i * 0.7) * 4 + i * 0.3);
+          back.push(Math.max(26, 132 - i * 3.4 + Math.sin(i * 0.9) * 9));
+        }
+        const total = (i) => done[i] + rev[i] + prog[i] + back[i];
+        const maxT = Math.max(...Array.from({ length: N }, (_, i) => total(i)));
+        const y = (v) => H - B - (v / maxT) * (H - T - B);
+        function band(getLow, getHigh, fill, op) {
+          let d = 'M';
+          for (let i = 0; i < N; i++) d += `${xs(i)},${y(getHigh(i))} `;
+          for (let i = N - 1; i >= 0; i--) d += `${xs(i)},${y(getLow(i))} `;
+          s.appendChild(el('path', { d: d + 'Z', fill, opacity: op }));
+        }
+        band(
+          () => 0,
+          (i) => done[i],
+          '#2f9d82',
+          0.85,
+        );
+        band(
+          (i) => done[i],
+          (i) => done[i] + rev[i],
+          '#e8b34b',
+          0.85,
+        );
+        band(
+          (i) => done[i] + rev[i],
+          (i) => done[i] + rev[i] + prog[i],
+          '#9578ff',
+          0.8,
+        );
+        band(
+          (i) => done[i] + rev[i] + prog[i],
+          (i) => total(i),
+          '#3a3f4a',
+          0.6,
+        );
+        // constraint callout on the widening review band
+        const ci = 22,
+          cyTop = y(done[ci] + rev[ci]),
+          cyBot = y(done[ci]);
+        s.appendChild(
+          el('line', {
+            x1: xs(ci),
+            y1: cyTop,
+            x2: xs(ci),
+            y2: cyBot,
+            stroke: '#f5f6f8',
+            'stroke-width': 1.6,
+          }),
+        );
+        s.appendChild(
+          el('line', {
+            x1: xs(ci) - 5,
+            y1: cyTop,
+            x2: xs(ci) + 5,
+            y2: cyTop,
+            stroke: '#f5f6f8',
+            'stroke-width': 1.6,
+          }),
+        );
+        s.appendChild(
+          el('line', {
+            x1: xs(ci) - 5,
+            y1: cyBot,
+            x2: xs(ci) + 5,
+            y2: cyBot,
+            stroke: '#f5f6f8',
+            'stroke-width': 1.6,
+          }),
+        );
+        s.appendChild(
+          txt(xs(ci) + 10, (cyTop + cyBot) / 2 + 4, 'IN REVIEW · 3.1× WIDER THAN WEEK 28', {
+            fill: '#f5f6f8',
+            'font-size': 10,
+            'font-weight': 600,
+            'letter-spacing': '.04em',
+          }),
+        );
+        s.appendChild(
+          el('line', { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: 'rgba(255,255,255,.12)' }),
+        );
+        ['WK 08', 'WK 14', 'WK 20', 'WK 26', 'WK 34'].forEach((l, i) =>
+          s.appendChild(txt(L + (i / 4) * (W - L - R), H - B + 15, l, { 'text-anchor': 'middle' })),
+        );
+        s.appendChild(txt(2, T + 4, 'ITEMS'));
+      })();
+
+      /* filter is presentational in the concept */
+      document.querySelector('.filt').addEventListener('click', (e) => {
+        const b = e.target.closest('.chip');
+        if (!b) return;
+        document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b));
+        document.getElementById('prov').textContent =
+          b.dataset.v === 'all'
+            ? '1,204 ISSUES · CHANGELOG THROUGH 18 AUG'
+            : `SCOPED · ${b.textContent.toUpperCase()} · COMPONENT + LABEL MATCH`;
+      });
+    </script>
+  </body>
+</html>

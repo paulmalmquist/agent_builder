@@ -7,6 +7,7 @@ import {
   automationScheduleListQuerySchema,
   automationScheduleListResponseSchema,
   automationScheduleSchema,
+  approveExecutionRunGroupResponseSchema,
   approveExecutionRunRequestSchema,
   approveExecutionRunResponseSchema,
   authorityGrantListQuerySchema,
@@ -24,6 +25,7 @@ import {
   executionRunListQuerySchema,
   executionRunListResponseSchema,
   executionRunSchema,
+  executionApprovalGroupParamsSchema,
   improvementCandidateListQuerySchema,
   improvementCandidateListResponseSchema,
   improvementCandidateSchema,
@@ -51,12 +53,13 @@ import {
   outcomeListQuerySchema,
   outcomeListResponseSchema,
   productionChannelKeySchema,
+  productionChannelLookupSchema,
   productionChannelMutationResponseSchema,
-  productionChannelSchema,
   promoteReleaseRequestSchema,
   releaseEvaluationSchema,
   releaseDeclineResponseSchema,
   rejectExecutionRunRequestSchema,
+  rejectExecutionRunGroupResponseSchema,
   resolveAttentionItemRequestSchema,
   rollbackReleaseRequestSchema,
   releaseBundleSchema,
@@ -541,7 +544,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
       send(
         response,
         200,
-        productionChannelSchema,
+        productionChannelLookupSchema,
         await services.releaseGovernance.getChannel(channelKey),
       );
     }),
@@ -705,6 +708,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/improvement-candidates/:candidateId/review',
     uuidParam('candidateId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = reviewImprovementCandidateRequestSchema.parse(request.body);
       send(
@@ -745,6 +749,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/memory-candidates/:candidateId/review',
     uuidParam('candidateId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = reviewMemoryCandidateRequestSchema.parse(request.body);
       send(
@@ -772,6 +777,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   );
   router.post(
     '/v1/authority-grants',
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = createAuthorityGrantRequestSchema.parse(request.body);
       send(response, 201, authorityGrantSchema, await services.execution.createGrant(input));
@@ -780,6 +786,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/authority-grants/:grantId/revoke',
     uuidParam('grantId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       send(
         response,
@@ -821,8 +828,38 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
     }),
   );
   router.post(
+    '/v1/execution-approval-groups/:groupKey/approve',
+    requireMinimumRole('owner'),
+    asyncRoute(async (request, response) => {
+      const { groupKey } = executionApprovalGroupParamsSchema.parse(request.params);
+      const input = approveExecutionRunRequestSchema.parse(request.body);
+      const result = await services.execution.approveRunGroup(groupKey, input);
+      if (services.dispatchMode === 'in_process') {
+        for (const run of result.runs) {
+          if (run.state === 'queued') services.executionDispatcher.enqueue(run.id);
+        }
+      }
+      send(response, 200, approveExecutionRunGroupResponseSchema, result);
+    }),
+  );
+  router.post(
+    '/v1/execution-approval-groups/:groupKey/reject',
+    requireMinimumRole('owner'),
+    asyncRoute(async (request, response) => {
+      const { groupKey } = executionApprovalGroupParamsSchema.parse(request.params);
+      const input = rejectExecutionRunRequestSchema.parse(request.body);
+      send(
+        response,
+        200,
+        rejectExecutionRunGroupResponseSchema,
+        await services.execution.rejectRunGroup(groupKey, input),
+      );
+    }),
+  );
+  router.post(
     '/v1/execution-runs/:runId/approve',
     uuidParam('runId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = approveExecutionRunRequestSchema.parse(request.body);
       const result = await services.execution.approveRun(request.params['runId'] as string, input);
@@ -834,6 +871,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
   router.post(
     '/v1/execution-runs/:runId/reject',
     uuidParam('runId'),
+    requireMinimumRole('owner'),
     asyncRoute(async (request, response) => {
       const input = rejectExecutionRunRequestSchema.parse(request.body);
       send(

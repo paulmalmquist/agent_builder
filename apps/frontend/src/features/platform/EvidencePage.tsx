@@ -34,6 +34,15 @@ const gateLabels: Record<ReleaseEvaluationGateResult['key'], string> = {
   mean_outcome_quality: 'MEAN OUTCOME QUALITY',
 };
 
+function humanizeLabel(value: string): string {
+  const label = value
+    .replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replaceAll(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase();
+  return label.length === 0 ? 'Unlabeled' : `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+}
+
 function formatGateValue(gate: ReleaseEvaluationGateResult, value: number): string {
   if (gate.key === 'mean_cost_usd') return `$${value.toFixed(value < 1 ? 4 : 2)}`;
   if (gate.key === 'p95_latency_ms') return `${Math.round(value)} ms`;
@@ -46,6 +55,29 @@ function formatGateValue(gate: ReleaseEvaluationGateResult, value: number): stri
     return `${Math.round(value * 100)}%`;
   }
   return value.toLocaleString();
+}
+
+function TechnicalProvenance({
+  references,
+}: {
+  references: ReadonlyArray<readonly [string, string]>;
+}) {
+  return (
+    <details className="run-release-binding evidence-provenance">
+      <summary>TECHNICAL PROVENANCE</summary>
+      <dl>
+        {references.map(([label, value]) => (
+          <div key={`${label}:${value}`}>
+            <dt>{label}</dt>
+            <dd>
+              <code>{value}</code>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p>Exact identifiers are subordinate audit references, not user-facing names.</p>
+    </details>
+  );
 }
 
 export function EvidencePage() {
@@ -61,6 +93,11 @@ export function EvidencePage() {
   const outcomeItems = outcomes.isError ? [] : (outcomes.data?.items ?? []);
   const metricItems = metrics.isError ? [] : (metrics.data?.items ?? []);
   const rollbackReleaseId = productionChannel.data?.priorReleaseId ?? null;
+  const channelLabel = humanizeLabel(channelKey);
+  const productionChannelUnavailable = productionChannel.isError;
+  const productionReleaseUnassigned =
+    !productionChannel.isError &&
+    (productionChannel.data === null || productionChannel.data?.currentReleaseId === null);
 
   return (
     <main className="os-surface">
@@ -96,7 +133,7 @@ export function EvidencePage() {
           },
         ]}
       />
-      {productionChannel.error ? (
+      {productionChannelUnavailable ? (
         <Notice tone="error">
           Production authority unavailable. {getErrorMessage(productionChannel.error)}
         </Notice>
@@ -122,7 +159,25 @@ export function EvidencePage() {
         {productionChannel.isLoading ? (
           <div className="os-empty-state">Resolving production pointer…</div>
         ) : null}
-        {productionChannel.data && !productionChannel.isError ? (
+        {productionReleaseUnassigned ? (
+          <div className="release-authority-grid">
+            <article className="evidence-card">
+              <header>
+                <div>
+                  <h2>No release is assigned to {channelLabel}.</h2>
+                  <p>
+                    This is a normal unassigned channel. No production authority or release evidence
+                    is implied.
+                  </p>
+                </div>
+                <span className="os-status-chip" data-state="not_started">
+                  unassigned
+                </span>
+              </header>
+            </article>
+          </div>
+        ) : null}
+        {!productionChannel.isError && productionChannel.data?.currentReleaseId ? (
           <div className="release-authority-grid">
             <article className="evidence-card">
               <header>
@@ -289,12 +344,21 @@ export function EvidencePage() {
           ) : null}
         </section>
       ) : (
-        <section className="os-panel release-evidence-panel">
+        <section aria-label="Evaluation selection" className="os-panel release-evidence-panel">
           <div className="os-empty-state">
             <strong>No release evaluation selected.</strong>
             <span>
-              Add an evaluation query parameter to inspect server-owned gates and case evidence.
+              Choose a governed evaluation from Agent Certification or open Attention when a release
+              is awaiting review.
             </span>
+            <div className="empty-state-actions">
+              <Link className="secondary-button" to="/library">
+                OPEN AGENT CERTIFICATION →
+              </Link>
+              <Link className="secondary-button" to="/attention">
+                OPEN ATTENTION →
+              </Link>
+            </div>
           </div>
         </section>
       )}
@@ -319,11 +383,8 @@ export function EvidencePage() {
               <article className="evidence-card" key={outcome.id}>
                 <header>
                   <div>
-                    <h2>Outcome {outcome.id.slice(0, 8)}</h2>
-                    <p>
-                      Run {outcome.runId.slice(0, 8)} ·{' '}
-                      {new Date(outcome.createdAt).toLocaleString()}
-                    </p>
+                    <h2>Recorded outcome</h2>
+                    <p>Execution evidence · {new Date(outcome.createdAt).toLocaleString()}</p>
                   </div>
                   <span
                     className="os-status-chip"
@@ -342,6 +403,12 @@ export function EvidencePage() {
                   <span>CITATIONS · {outcome.citations.length}</span>
                   <span>UNRESOLVED · {outcome.unresolvedItems.length}</span>
                 </div>
+                <TechnicalProvenance
+                  references={[
+                    ['OUTCOME RECORD', outcome.id],
+                    ['SOURCE RUN', outcome.runId],
+                  ]}
+                />
               </article>
             ))}
           </div>
@@ -366,15 +433,23 @@ export function EvidencePage() {
               <article className="evidence-card" key={metric.id}>
                 <header>
                   <div>
-                    <h2>{metric.name.replaceAll('_', ' ')}</h2>
+                    <h2>{humanizeLabel(metric.name)}</h2>
                     <p>{new Date(metric.observedAt).toLocaleString()}</p>
                   </div>
-                  <span className="resource-kind">{metric.unit}</span>
+                  <span className="resource-kind">{humanizeLabel(metric.unit)}</span>
                 </header>
                 <strong className="metric-value">{formatMetric(metric.value, metric.unit)}</strong>
                 <div className="run-metadata">
-                  <span>RUN · {metric.runId?.slice(0, 8) ?? 'platform'}</span>
+                  <span>
+                    SOURCE · {metric.runId === null ? 'PLATFORM MEASUREMENT' : 'EXECUTION RUN'}
+                  </span>
                 </div>
+                <TechnicalProvenance
+                  references={[
+                    ['METRIC RECORD', metric.id],
+                    ...(metric.runId === null ? [] : ([['SOURCE RUN', metric.runId]] as const)),
+                  ]}
+                />
               </article>
             ))}
           </div>

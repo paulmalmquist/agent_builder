@@ -423,11 +423,38 @@ export function useApproveExecutionRun() {
   });
 }
 
+export function useApproveExecutionApprovalGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupKey, value }: { groupKey: string; value: ApproveRunInput }) =>
+      platformApi.approveExecutionApprovalGroup(groupKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+        queryClient.invalidateQueries({ queryKey: ['authority-grants'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
+  });
+}
+
 export function useRejectExecutionRun() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ runId, rationale }: { runId: string; rationale: string }) =>
       platformApi.rejectExecutionRun(runId, rationale),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+      ]),
+  });
+}
+
+export function useRejectExecutionApprovalGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupKey, rationale }: { groupKey: string; rationale: string }) =>
+      platformApi.rejectExecutionApprovalGroup(groupKey, rationale),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.attention }),

@@ -51,7 +51,7 @@ async function fixture(options: { approvalRequired?: boolean } = {}) {
   const entryFamilyId = randomUUID();
   const principal: RequestPrincipal = {
     principalId: randomUUID(),
-    actorId: `human:plugin-service-${suffix}`,
+    actorId: `human:connector-spec-${suffix}`,
     workspaceId,
     departmentId,
     authentication: 'local',

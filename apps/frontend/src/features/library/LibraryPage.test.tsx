@@ -5,11 +5,12 @@ import { Route, Routes, useLocation } from 'react-router-dom';
 import { PlatformShell } from '../../components/PlatformShell';
 import { renderWithClient } from '../../test/render';
 import { catalogAgent, server } from '../../test/server';
+import { featureFlags } from '../../config/feature-flags';
 import { LibraryPage } from './LibraryPage';
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location-search">{location.search}</output>;
+  return <output data-testid="location-search">{`${location.pathname}${location.search}`}</output>;
 }
 
 describe('agent library', () => {
@@ -106,6 +107,40 @@ describe('agent library', () => {
       await screen.findByRole('button', { name: /Inventory Risk Analyst/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Supplier Risk Analyst/i })).toBeInTheDocument();
+  });
+
+  it('opens the exact assembly route without racing the drawer close navigation', async () => {
+    const user = userEvent.setup();
+    const visualSurfacesEnabled = featureFlags.visualSurfacesEnabled;
+    Object.defineProperty(featureFlags, 'visualSurfacesEnabled', {
+      configurable: true,
+      value: true,
+    });
+    try {
+      renderWithClient(
+        <Routes>
+          <Route element={<PlatformShell />} path="/">
+            <Route element={<LibraryPage />} path="library" />
+            <Route element={<LocationProbe />} path="bench/:agentId" />
+          </Route>
+        </Routes>,
+        ['/library'],
+      );
+
+      await user.click(await screen.findByRole('button', { name: /Supplier Risk Analyst/i }));
+      const drawer = await screen.findByRole('dialog', { name: 'Agent details' });
+      await user.click(within(drawer).getByRole('button', { name: 'Inspect assembly' }));
+
+      expect(await screen.findByTestId('location-search')).toHaveTextContent(
+        `/bench/${catalogAgent.id}`,
+      );
+      expect(screen.queryByRole('dialog', { name: 'Agent details' })).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(featureFlags, 'visualSurfacesEnabled', {
+        configurable: true,
+        value: visualSurfacesEnabled,
+      });
+    }
   });
 
   it('hides cached agents and the empty state when the legacy catalog fails', async () => {

@@ -21,6 +21,7 @@ import { AppError } from '../errors.js';
 import { toAgent } from '../mappers.js';
 import { aggregateScopeWhere } from '../scope.js';
 import type { CatalogApi } from './types.js';
+import { userFacingAgentFamilyWhere, userFacingAgentWhere } from './user-facing-records.js';
 
 const tokens = (value: string): string[] =>
   value
@@ -117,6 +118,7 @@ export class CatalogService implements CatalogApi {
 
     const normalizedQuery = query.query?.trim() ?? '';
     const where: Prisma.AgentWhereInput = {
+      AND: [userFacingAgentWhere],
       family: aggregateScopeWhere(),
       ...(query.department === undefined ? {} : { department: query.department }),
       ...(query.status === undefined
@@ -186,10 +188,15 @@ export class CatalogService implements CatalogApi {
       where:
         request.candidateIds === undefined
           ? {
+              AND: [userFacingAgentWhere],
               family: aggregateScopeWhere(),
               status: { not: DatabaseAgentStatus.RETIRED },
             }
-          : { id: { in: request.candidateIds }, family: aggregateScopeWhere() },
+          : {
+              AND: [userFacingAgentWhere],
+              id: { in: request.candidateIds },
+              family: aggregateScopeWhere(),
+            },
       include: { family: true, knowledgeSources: { include: { source: true } } },
       orderBy: [{ familyId: 'asc' }, { versionNumber: 'desc' }],
     });
@@ -238,12 +245,13 @@ export class CatalogService implements CatalogApi {
   private async familyVersions(query: AgentCatalogQuery): Promise<AgentCatalogResponse> {
     const familyId = query.familyId as string;
     const family = await this.prisma.agentFamily.findFirst({
-      where: { id: familyId, ...aggregateScopeWhere() },
+      where: { AND: [userFacingAgentFamilyWhere], id: familyId, ...aggregateScopeWhere() },
     });
     if (!family)
       throw new AppError(404, 'AGENT_FAMILY_NOT_FOUND', 'Agent family was not found', { familyId });
     const records = await this.prisma.agent.findMany({
       where: {
+        AND: [userFacingAgentWhere],
         familyId,
         ...(query.includeRetired === 'true'
           ? {}

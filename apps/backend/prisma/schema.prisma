@@ -1435,6 +1435,7 @@ model ExecutionRun {
   requestedBy                String                  @db.VarChar(200)
   attempts                   Int                     @default(0)
   maxAttempts                Int                     @default(3)
+  retryBackoff               AutomationBackoff       @default(EXPONENTIAL)
   leaseOwner                 String?                 @db.VarChar(200)
   leaseExpiresAt             DateTime?               @db.Timestamptz(3)
   heartbeatAt                DateTime?               @db.Timestamptz(3)
@@ -1496,18 +1497,22 @@ model ExecutionRunEvent {
 }
 
 model ApprovalRequest {
-  id          String               @id @default(uuid()) @db.Uuid
-  runId       String               @unique @db.Uuid
-  state       ApprovalRequestState @default(PENDING)
-  reasons     Json                 @default("[]")
-  requestedBy String               @db.VarChar(200)
-  decidedBy   String?              @db.VarChar(200)
-  rationale   String?              @db.Text
-  decidedAt   DateTime?            @db.Timestamptz(3)
-  createdAt   DateTime             @default(now()) @db.Timestamptz(3)
-  run         ExecutionRun         @relation(fields: [runId], references: [id], onDelete: Restrict)
+  id                String               @id @default(uuid()) @db.Uuid
+  runId             String               @unique @db.Uuid
+  state             ApprovalRequestState @default(PENDING)
+  requestVersion    Int                  @default(1)
+  decisionGroupKey  String?              @db.VarChar(64)
+  decisionGroupSize Int?
+  reasons           Json                 @default("[]")
+  requestedBy       String               @db.VarChar(200)
+  decidedBy         String?              @db.VarChar(200)
+  rationale         String?              @db.Text
+  decidedAt         DateTime?            @db.Timestamptz(3)
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  run               ExecutionRun         @relation(fields: [runId], references: [id], onDelete: Restrict)
 
   @@index([state, createdAt])
+  @@index([decisionGroupKey])
 }
 
 model RunStep {

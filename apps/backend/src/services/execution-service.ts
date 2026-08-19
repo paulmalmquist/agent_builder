@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   ApprovalRequestState,
+  AutomationBackoff,
   AuthorityGrantState,
   ContextClassification,
   ExecutionRunState,
@@ -15,6 +16,7 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import {
+  approveExecutionRunGroupResponseSchema,
   approveExecutionRunRequestSchema,
   agentResourceSpecSchema,
   authorityGrantListResponseSchema,
@@ -35,6 +37,7 @@ import {
   pluginAuthorityScopeSchema,
   pluginCallInputPathSchema,
   pluginResourceSpecSchema,
+  rejectExecutionRunGroupResponseSchema,
   rejectExecutionRunRequestSchema,
   resourceManifestSchema,
   runPluginRequirementSchema,
@@ -62,16 +65,23 @@ import {
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { appendAuditEvent } from '../audit.js';
+import { hasMinimumRole } from '../authorization.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
-import { currentActorId } from '../request-context.js';
+import { currentActorId, currentRequestPrincipal } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { requireHumanActor } from './actors.js';
+import { subjectFromResourceVersion } from './attention-subject.js';
 import {
   appendExecutionRunEvent,
   appendPlatformEvent,
   recordDigestDeliveryForRun,
 } from './attention-service.js';
+import { executionApprovalInclude, groupExecutionApprovals } from './execution-approval-groups.js';
+import {
+  userFacingExecutionRunWhere,
+  userFacingResourceVersionWhere,
+} from './user-facing-records.js';
 
 const providerKindMap = {
   deterministic: ModelProviderKind.DETERMINISTIC,
@@ -114,6 +124,36 @@ const pluginPlacementWire = {
   [PluginResidency.CONTROL_PLANE]: 'control_plane',
   [PluginResidency.WORKSTATION]: 'workstation',
 } as const;
+const retryBackoffMap = {
+  fixed: AutomationBackoff.FIXED,
+  exponential: AutomationBackoff.EXPONENTIAL,
+} as const;
+const retryBackoffWire = {
+  [AutomationBackoff.FIXED]: 'fixed',
+  [AutomationBackoff.EXPONENTIAL]: 'exponential',
+} as const;
+
+interface ExecutionMutationScope {
+  workspaceId: string;
+  departmentId: string | null;
+}
+
+function governedExecutionMutationScope(): ExecutionMutationScope {
+  const principal = currentRequestPrincipal();
+  if (principal.departmentId === null && !hasMinimumRole(principal, 'admin')) {
+    throw new AppError(
+      403,
+      'AUTHORIZATION_REQUIRED',
+      'Workspace-global execution authority requires the admin role',
+      { requiredRole: 'admin' },
+    );
+  }
+  return { workspaceId: principal.workspaceId, departmentId: principal.departmentId };
+}
+
+function executionDecisionLockKey(scope: ExecutionMutationScope, runId: string): string {
+  return `${scope.workspaceId}:${scope.departmentId ?? 'workspace'}:execution-decision:${runId}`;
+}
 
 const SERIALIZABLE_TRANSACTION_ATTEMPTS = 3;
 
@@ -161,12 +201,35 @@ type ReleaseForExecution = Prisma.ReleaseBundleGetPayload<{
 const stringArraySchema = z.array(z.string());
 const pluginAuthorityScopesSchema = z.array(pluginAuthorityScopeSchema);
 const runPluginRequirementsSchema = z.array(runPluginRequirementSchema);
+// A run already pins this exact version. Joining the stable family identity in the originating
+// query keeps the projection immutable without adding a mutable display-name column or N+1 reads.
+const executionRunSubjectInclude = {
+  entryResourceVersion: { include: { family: true } },
+} satisfies Prisma.ExecutionRunInclude;
+type SubjectBearingExecutionRun = Prisma.ExecutionRunGetPayload<{
+  include: typeof executionRunSubjectInclude;
+}>;
+const authorityGrantSubjectInclude = {
+  entryResourceVersion: { include: { family: true } },
+} satisfies Prisma.AuthorityGrantInclude;
+type SubjectBearingAuthorityGrant = Prisma.AuthorityGrantGetPayload<{
+  include: typeof authorityGrantSubjectInclude;
+}>;
 
-function toGrant(record: DatabaseAuthorityGrant): AuthorityGrant {
+function runScopesFromRecord(run: { requiredToolScopes: Prisma.JsonValue }): string[] {
+  return parseJson(stringArraySchema, run.requiredToolScopes, 'ExecutionRun.requiredToolScopes');
+}
+
+function toGrant(
+  record: DatabaseAuthorityGrant & {
+    entryResourceVersion?: SubjectBearingAuthorityGrant['entryResourceVersion'];
+  },
+): AuthorityGrant {
   return authorityGrantSchema.parse({
     id: record.id,
     releaseId: record.releaseId,
     entryResourceVersionId: record.entryResourceVersionId,
+    entrySubject: subjectFromResourceVersion(record.entryResourceVersion ?? null),
     releaseDigest: record.releaseDigest,
     contextDigest: record.contextDigest,
     projectId: record.projectId,
@@ -197,11 +260,12 @@ function toGrant(record: DatabaseAuthorityGrant): AuthorityGrant {
   });
 }
 
-function toRun(record: DatabaseExecutionRun): ExecutionRun {
+function toRun(record: SubjectBearingExecutionRun): ExecutionRun {
   return executionRunSchema.parse({
     id: record.id,
     releaseId: record.releaseId,
     entryResourceVersionId: record.entryResourceVersionId,
+    entrySubject: subjectFromResourceVersion(record.entryResourceVersion ?? null),
     legacyEntrypointUnresolved: record.legacyEntrypointUnresolved,
     releaseDigest: record.releaseDigest,
     contextDigest: record.contextDigest,
@@ -246,6 +310,8 @@ function toRun(record: DatabaseExecutionRun): ExecutionRun {
     progress: record.progress,
     message: record.message,
     attempts: record.attempts,
+    maxAttempts: record.maxAttempts,
+    retryBackoff: retryBackoffWire[record.retryBackoff],
     error:
       record.error === null
         ? null
@@ -357,6 +423,47 @@ export class ExecutionService implements ExecutionWorkerApi {
     private readonly config: AppConfig,
     private readonly provider: ModelProvider,
   ) {}
+
+  /**
+   * All human authority decisions and cancellation take the same per-run locks before reading
+   * mutable state. The advisory lock gives tests and non-row decision paths one stable ordering
+   * primitive; the row locks make the ordering durable at the database boundary.
+   */
+  private async lockExecutionDecisions(
+    transaction: Prisma.TransactionClient,
+    runIds: string[],
+    scope: ExecutionMutationScope,
+  ): Promise<void> {
+    const orderedRunIds = [...new Set(runIds)].sort();
+    if (orderedRunIds.length === 0) return;
+    for (const runId of orderedRunIds) {
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${executionDecisionLockKey(
+        scope,
+        runId,
+      )}))`;
+    }
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT "id"
+        FROM "ExecutionRun"
+        WHERE "id" IN (${Prisma.join(orderedRunIds.map((id) => Prisma.sql`${id}::uuid`))})
+          AND "workspaceId" = ${scope.workspaceId}::uuid
+          AND "departmentId" IS NOT DISTINCT FROM ${scope.departmentId}::uuid
+        ORDER BY "id"
+        FOR UPDATE`,
+    );
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT approval."id"
+        FROM "ApprovalRequest" approval
+        JOIN "ExecutionRun" run ON run."id" = approval."runId"
+        WHERE approval."runId" IN (${Prisma.join(
+          orderedRunIds.map((id) => Prisma.sql`${id}::uuid`),
+        )})
+          AND run."workspaceId" = ${scope.workspaceId}::uuid
+          AND run."departmentId" IS NOT DISTINCT FROM ${scope.departmentId}::uuid
+        ORDER BY approval."id"
+        FOR UPDATE OF approval`,
+    );
+  }
 
   private async executionContext(): Promise<AssembledContext> {
     try {
@@ -975,6 +1082,9 @@ export class ExecutionService implements ExecutionWorkerApi {
       },
       update: {
         state: ApprovalRequestState.PENDING,
+        requestVersion: { increment: 1 },
+        decisionGroupKey: null,
+        decisionGroupSize: null,
         reasons: toPrismaJson(stringArraySchema, blockers, 'ApprovalRequest.reasons'),
         requestedBy: run.requestedBy,
         decidedBy: null,
@@ -1009,15 +1119,20 @@ export class ExecutionService implements ExecutionWorkerApi {
             | AuthorityGrantState
             | undefined);
     const scopeWhere = aggregateScopeWhere();
+    const indexWhere = {
+      ...scopeWhere,
+      entryResourceVersion: userFacingResourceVersionWhere,
+    } satisfies Prisma.AuthorityGrantWhereInput;
     const [records, stateTotals] = await Promise.all([
       this.prisma.authorityGrant.findMany({
-        where: { ...scopeWhere, ...(state === undefined ? {} : { state }) },
+        where: { ...indexWhere, ...(state === undefined ? {} : { state }) },
+        include: authorityGrantSubjectInclude,
         orderBy: { createdAt: 'desc' },
         take: query.limit,
       }),
       this.prisma.authorityGrant.groupBy({
         by: ['state'],
-        where: scopeWhere,
+        where: indexWhere,
         _count: { _all: true },
       }),
     ]);
@@ -1035,6 +1150,7 @@ export class ExecutionService implements ExecutionWorkerApi {
     input: z.input<typeof createAuthorityGrantRequestSchema>,
   ): Promise<AuthorityGrant> {
     const actor = requireHumanActor();
+    const mutationScope = governedExecutionMutationScope();
     const parsed = createAuthorityGrantRequestSchema.parse(input);
     const release = await this.release(parsed.releaseId);
     if (parsed.projectId !== release.projectId) {
@@ -1055,7 +1171,7 @@ export class ExecutionService implements ExecutionWorkerApi {
     const record = await this.prisma.$transaction(async (transaction) => {
       const created = await transaction.authorityGrant.create({
         data: {
-          ...aggregateScope(),
+          ...mutationScope,
           releaseId: release.id,
           entryResourceVersionId: parsed.entryResourceVersionId,
           releaseDigest: release.digest,
@@ -1102,6 +1218,7 @@ export class ExecutionService implements ExecutionWorkerApi {
 
   async revokeGrant(grantId: string): Promise<AuthorityGrant> {
     const actor = requireHumanActor();
+    const mutationScope = governedExecutionMutationScope();
     const result = await retrySerializableTransaction(() =>
       this.prisma.$transaction(
         async (transaction) => {
@@ -1113,6 +1230,8 @@ export class ExecutionService implements ExecutionWorkerApi {
         SELECT "id"
         FROM "ExecutionRun"
         WHERE "authorityGrantId" = ${grantId}::uuid
+          AND "workspaceId" = ${mutationScope.workspaceId}::uuid
+          AND "departmentId" IS NOT DISTINCT FROM ${mutationScope.departmentId}::uuid
           AND "state" IN ('queued', 'running')
         ORDER BY "id" ASC
         FOR UPDATE
@@ -1121,10 +1240,12 @@ export class ExecutionService implements ExecutionWorkerApi {
         SELECT "id"
         FROM "AuthorityGrant"
         WHERE "id" = ${grantId}::uuid
+          AND "workspaceId" = ${mutationScope.workspaceId}::uuid
+          AND "departmentId" IS NOT DISTINCT FROM ${mutationScope.departmentId}::uuid
         FOR UPDATE
       `;
           const existing = await transaction.authorityGrant.findFirst({
-            where: { id: grantId, ...aggregateScopeWhere() },
+            where: { id: grantId, ...mutationScope },
           });
           if (existing === null)
             throw new AppError(404, 'AUTHORITY_GRANT_NOT_FOUND', 'Authority grant was not found');
@@ -1132,7 +1253,11 @@ export class ExecutionService implements ExecutionWorkerApi {
             return { grant: existing, runningRunIds: [] as string[] };
           }
           const queuedRuns = await transaction.executionRun.findMany({
-            where: { authorityGrantId: grantId, state: ExecutionRunState.QUEUED },
+            where: {
+              authorityGrantId: grantId,
+              state: ExecutionRunState.QUEUED,
+              ...mutationScope,
+            },
             orderBy: { id: 'asc' },
           });
           for (const run of queuedRuns) {
@@ -1164,6 +1289,9 @@ export class ExecutionService implements ExecutionWorkerApi {
               },
               update: {
                 state: ApprovalRequestState.PENDING,
+                requestVersion: { increment: 1 },
+                decisionGroupKey: null,
+                decisionGroupSize: null,
                 reasons: toPrismaJson(stringArraySchema, reasons, 'ApprovalRequest.reasons'),
                 decidedBy: null,
                 rationale: null,
@@ -1172,7 +1300,11 @@ export class ExecutionService implements ExecutionWorkerApi {
             });
           }
           const runningRuns = await transaction.executionRun.findMany({
-            where: { authorityGrantId: grantId, state: ExecutionRunState.RUNNING },
+            where: {
+              authorityGrantId: grantId,
+              state: ExecutionRunState.RUNNING,
+              ...mutationScope,
+            },
             orderBy: { id: 'asc' },
           });
           const cancelledRunningRunIds: string[] = [];
@@ -1236,18 +1368,23 @@ export class ExecutionService implements ExecutionWorkerApi {
             | ExecutionRunState
             | undefined);
     const scopeWhere = aggregateScopeWhere();
+    const indexWhere = {
+      ...scopeWhere,
+      AND: [userFacingExecutionRunWhere],
+    } satisfies Prisma.ExecutionRunWhereInput;
     const [records, stateTotals] = await Promise.all([
       this.prisma.executionRun.findMany({
         where: {
-          ...scopeWhere,
+          ...indexWhere,
           ...(databaseState === undefined ? {} : { state: databaseState }),
         },
+        include: executionRunSubjectInclude,
         orderBy: { createdAt: 'desc' },
         take: query.limit,
       }),
       this.prisma.executionRun.groupBy({
         by: ['state'],
-        where: scopeWhere,
+        where: indexWhere,
         _count: { _all: true },
       }),
     ]);
@@ -1289,6 +1426,7 @@ export class ExecutionService implements ExecutionWorkerApi {
     const idempotent = await this.prisma.executionRun.findFirst({
       where: { idempotencyKey: parsed.idempotencyKey, ...aggregateScopeWhere() },
       include: {
+        ...executionRunSubjectInclude,
         pluginCallPlans: {
           orderBy: { ordinal: 'asc' },
           include: { requirement: true },
@@ -1305,6 +1443,8 @@ export class ExecutionService implements ExecutionWorkerApi {
           canonicalJson(parsed.input) &&
         idempotent.maxInputTokens === parsed.maxInputTokens &&
         idempotent.maxOutputTokens === parsed.maxOutputTokens &&
+        idempotent.maxAttempts === parsed.maxAttempts &&
+        idempotent.retryBackoff === retryBackoffMap[parsed.retryBackoff] &&
         Number(idempotent.maxEstimatedCostUsd) === parsed.maxEstimatedCostUsd;
       const sameDevelopmentMode = idempotent.developmentDraft === parsed.developmentDraft;
       const sameDigestSnapshot = idempotent.digestSnapshotId === (options.digestSnapshotId ?? null);
@@ -1480,6 +1620,8 @@ export class ExecutionService implements ExecutionWorkerApi {
             model: this.provider.model,
             maxInputTokens: parsed.maxInputTokens,
             maxOutputTokens: parsed.maxOutputTokens,
+            maxAttempts: parsed.maxAttempts,
+            retryBackoff: retryBackoffMap[parsed.retryBackoff],
             maxEstimatedCostUsd: parsed.maxEstimatedCostUsd,
             estimatedUpperCostUsd: estimate,
             pricingVersion: this.config.model.pricingVersion,
@@ -1511,6 +1653,7 @@ export class ExecutionService implements ExecutionWorkerApi {
                 }
               : {}),
           },
+          include: executionRunSubjectInclude,
         });
         if (requiredPluginScopes.length > 0) {
           await transaction.runPluginRequirement.createMany({
@@ -1591,141 +1734,663 @@ export class ExecutionService implements ExecutionWorkerApi {
     input: z.input<typeof approveExecutionRunRequestSchema>,
   ): Promise<{ grant: AuthorityGrant; run: ExecutionRun }> {
     const actor = requireHumanActor();
+    const mutationScope = governedExecutionMutationScope();
     const parsed = approveExecutionRunRequestSchema.parse(input);
     if (new Date(parsed.validUntil).getTime() <= Date.now()) {
       throw new AppError(400, 'VALIDATION_ERROR', 'Authority grant must expire in the future');
     }
-    const result = await this.prisma.$transaction(
-      async (transaction) => {
-        const run = await transaction.executionRun.findFirst({
-          where: { id: runId, ...aggregateScopeWhere() },
-        });
-        if (run === null)
-          throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
-        if (run.state !== ExecutionRunState.AWAITING_APPROVAL) {
-          throw new AppError(
-            409,
-            'RUN_NOT_AWAITING_APPROVAL',
-            'Only an awaiting run can be approved',
+    const result = await retrySerializableTransaction(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          await this.lockExecutionDecisions(transaction, [runId], mutationScope);
+          const run = await transaction.executionRun.findFirst({
+            where: { id: runId, ...mutationScope },
+          });
+          if (run === null)
+            throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
+          if (run.state !== ExecutionRunState.AWAITING_APPROVAL) {
+            throw new AppError(
+              409,
+              'RUN_NOT_AWAITING_APPROVAL',
+              'Only an awaiting run can be approved',
+            );
+          }
+          const release = await transaction.releaseBundle.findFirst({
+            where: {
+              id: run.releaseId,
+              workspaceId: run.workspaceId,
+              departmentId: run.departmentId,
+            },
+            include: { resources: { include: { resourceVersion: { include: { family: true } } } } },
+          });
+          if (release === null || release.digest !== run.releaseDigest) {
+            throw new AppError(409, 'RELEASE_CHANGED', 'The exact release digest is unavailable');
+          }
+          if (parsed.entryResourceVersionId !== run.entryResourceVersionId) {
+            throw new AppError(
+              422,
+              'ENTRYPOINT_RELEASE_MISMATCH',
+              'Approval must bind the exact entry resource requested by the run',
+            );
+          }
+          const pluginScopes = await this.materializePluginScopes(
+            release,
+            run.entryResourceVersionId,
+            parsed.pluginScopes,
+            transaction,
           );
-        }
-        const release = await transaction.releaseBundle.findFirst({
-          where: {
-            id: run.releaseId,
-            workspaceId: run.workspaceId,
-            departmentId: run.departmentId,
-          },
-          include: { resources: { include: { resourceVersion: { include: { family: true } } } } },
-        });
-        if (release === null || release.digest !== run.releaseDigest) {
-          throw new AppError(409, 'RELEASE_CHANGED', 'The exact release digest is unavailable');
-        }
-        if (parsed.entryResourceVersionId !== run.entryResourceVersionId) {
-          throw new AppError(
-            422,
-            'ENTRYPOINT_RELEASE_MISMATCH',
-            'Approval must bind the exact entry resource requested by the run',
+          const grant = await transaction.authorityGrant.create({
+            data: {
+              workspaceId: run.workspaceId,
+              departmentId: run.departmentId,
+              releaseId: release.id,
+              entryResourceVersionId: run.entryResourceVersionId,
+              releaseDigest: release.digest,
+              contextDigest: run.contextDigest,
+              projectId: parsed.projectId,
+              inputConstraints: toPrismaJson(
+                jsonObjectSchema,
+                parsed.inputConstraints,
+                'AuthorityGrant.inputConstraints',
+              ),
+              toolScopes: toPrismaJson(
+                stringArraySchema,
+                parsed.toolScopes,
+                'AuthorityGrant.toolScopes',
+              ),
+              pluginScopes: toPrismaJson(
+                pluginAuthorityScopesSchema,
+                pluginScopes,
+                'AuthorityGrant.pluginScopes',
+              ),
+              validUntil: new Date(parsed.validUntil),
+              maxRuns: parsed.maxRuns,
+              maxEstimatedCostPerRunUsd: parsed.maxEstimatedCostPerRunUsd,
+              totalCostBudgetUsd: parsed.totalCostBudgetUsd,
+              actorId: actor,
+              rationale: parsed.rationale,
+            },
+          });
+          const blockers = this.grantBlockers(
+            grant,
+            release,
+            run.entryResourceVersionId,
+            run.contextDigest,
+            parseJson(jsonObjectSchema, run.input, 'ExecutionRun.input'),
+            (await this.entryRequirements(release, run.entryResourceVersionId, transaction))
+              .requiredTools,
+            parseJson(
+              runPluginRequirementsSchema,
+              run.requiredPluginScopes,
+              'ExecutionRun.requiredPluginScopes',
+            ),
+            Number(run.estimatedUpperCostUsd),
+            true,
           );
-        }
-        const pluginScopes = await this.materializePluginScopes(
-          release,
-          run.entryResourceVersionId,
-          parsed.pluginScopes,
-          transaction,
-        );
-        const grant = await transaction.authorityGrant.create({
-          data: {
-            workspaceId: run.workspaceId,
-            departmentId: run.departmentId,
-            releaseId: release.id,
-            entryResourceVersionId: run.entryResourceVersionId,
-            releaseDigest: release.digest,
-            contextDigest: run.contextDigest,
-            projectId: parsed.projectId,
-            inputConstraints: toPrismaJson(
-              jsonObjectSchema,
-              parsed.inputConstraints,
-              'AuthorityGrant.inputConstraints',
-            ),
-            toolScopes: toPrismaJson(
-              stringArraySchema,
-              parsed.toolScopes,
-              'AuthorityGrant.toolScopes',
-            ),
-            pluginScopes: toPrismaJson(
-              pluginAuthorityScopesSchema,
-              pluginScopes,
-              'AuthorityGrant.pluginScopes',
-            ),
-            validUntil: new Date(parsed.validUntil),
-            maxRuns: parsed.maxRuns,
-            maxEstimatedCostPerRunUsd: parsed.maxEstimatedCostPerRunUsd,
-            totalCostBudgetUsd: parsed.totalCostBudgetUsd,
-            actorId: actor,
-            rationale: parsed.rationale,
-          },
-        });
-        const blockers = this.grantBlockers(
-          grant,
-          release,
-          run.entryResourceVersionId,
-          run.contextDigest,
-          parseJson(jsonObjectSchema, run.input, 'ExecutionRun.input'),
-          (await this.entryRequirements(release, run.entryResourceVersionId, transaction))
-            .requiredTools,
-          parseJson(
-            runPluginRequirementsSchema,
-            run.requiredPluginScopes,
-            'ExecutionRun.requiredPluginScopes',
-          ),
-          Number(run.estimatedUpperCostUsd),
-          true,
-        );
-        if (blockers.length > 0) {
-          throw new AppError(
-            422,
-            'AUTHORITY_ENVELOPE_INSUFFICIENT',
-            'The proposed authority does not cover this run',
-            { blockers },
-          );
-        }
-        const updatedRun = await transaction.executionRun.update({
-          where: { id: run.id },
-          data: {
-            authorityGrantId: grant.id,
-            state: ExecutionRunState.QUEUED,
-            approvalReasons: toPrismaJson(stringArraySchema, [], 'ExecutionRun.approvalReasons'),
-            message: 'Queued',
-          },
-        });
-        await transaction.approvalRequest.update({
-          where: { runId },
-          data: {
-            state: ApprovalRequestState.APPROVED,
-            decidedBy: actor,
-            rationale: parsed.rationale,
-            decidedAt: new Date(),
-          },
-        });
-        await appendAuditEvent(transaction, {
-          action: 'execution.approved',
-          entityType: 'ExecutionRun',
-          entityId: runId,
-          details: { authorityGrantId: grant.id, releaseDigest: release.digest },
-        });
-        await appendExecutionRunEvent(transaction, updatedRun, {
-          phase: 'authority',
-          state: 'approved',
-          message: 'A human approved bounded authority for this run.',
-        });
-        return {
-          grant: await transaction.authorityGrant.findUniqueOrThrow({ where: { id: grant.id } }),
-          run: updatedRun,
-        };
-      },
-      { isolationLevel: 'Serializable' },
+          if (blockers.length > 0) {
+            throw new AppError(
+              422,
+              'AUTHORITY_ENVELOPE_INSUFFICIENT',
+              'The proposed authority does not cover this run',
+              { blockers },
+            );
+          }
+          const updatedRuns = await transaction.executionRun.updateMany({
+            where: {
+              id: run.id,
+              state: ExecutionRunState.AWAITING_APPROVAL,
+              ...mutationScope,
+            },
+            data: {
+              authorityGrantId: grant.id,
+              state: ExecutionRunState.QUEUED,
+              approvalReasons: toPrismaJson(stringArraySchema, [], 'ExecutionRun.approvalReasons'),
+              message: 'Queued',
+            },
+          });
+          if (updatedRuns.count !== 1) {
+            throw new AppError(
+              409,
+              'RUN_NOT_AWAITING_APPROVAL',
+              'The run changed before the authority decision was recorded',
+            );
+          }
+          const updatedApprovals = await transaction.approvalRequest.updateMany({
+            where: { runId, state: ApprovalRequestState.PENDING, decisionGroupKey: null },
+            data: {
+              state: ApprovalRequestState.APPROVED,
+              decidedBy: actor,
+              rationale: parsed.rationale,
+              decidedAt: new Date(),
+            },
+          });
+          if (updatedApprovals.count !== 1) {
+            throw new AppError(
+              409,
+              'APPROVAL_ALREADY_DECIDED',
+              'The authority request changed before the decision was recorded',
+            );
+          }
+          const updatedRun = await transaction.executionRun.findUniqueOrThrow({
+            where: { id: run.id },
+            include: executionRunSubjectInclude,
+          });
+          await appendAuditEvent(transaction, {
+            action: 'execution.approved',
+            entityType: 'ExecutionRun',
+            entityId: runId,
+            details: { authorityGrantId: grant.id, releaseDigest: release.digest },
+          });
+          await appendExecutionRunEvent(transaction, updatedRun, {
+            phase: 'authority',
+            state: 'approved',
+            message: 'A human approved bounded authority for this run.',
+          });
+          return {
+            grant: await transaction.authorityGrant.findUniqueOrThrow({ where: { id: grant.id } }),
+            run: updatedRun,
+          };
+        },
+        { isolationLevel: 'Serializable' },
+      ),
     );
     return { grant: toGrant(result.grant), run: toRun(result.run) };
+  }
+
+  async approveRunGroup(
+    groupKey: string,
+    input: z.input<typeof approveExecutionRunRequestSchema>,
+  ): Promise<z.infer<typeof approveExecutionRunGroupResponseSchema>> {
+    const actor = requireHumanActor();
+    const mutationScope = governedExecutionMutationScope();
+    const parsed = approveExecutionRunRequestSchema.parse(input);
+    if (new Date(parsed.validUntil).getTime() <= Date.now()) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Authority grant must expire in the future');
+    }
+    const result = await retrySerializableTransaction(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${mutationScope.workspaceId}:${mutationScope.departmentId ?? 'workspace'}:execution-approval-group:${groupKey}`}))`;
+
+          const decided = await transaction.approvalRequest.findMany({
+            where: { decisionGroupKey: groupKey, run: mutationScope },
+            include: executionApprovalInclude,
+            orderBy: { id: 'asc' },
+          });
+          if (decided.length > 0) {
+            this.assertCompleteDecisionGroup(decided);
+            if (
+              decided.some(
+                ({ state, rationale }) =>
+                  state !== ApprovalRequestState.APPROVED || rationale !== parsed.rationale,
+              )
+            ) {
+              throw new AppError(
+                409,
+                'ATTENTION_GROUP_ALREADY_DECIDED',
+                'This authority group already has a different immutable decision',
+              );
+            }
+            const grantIds = new Set(decided.map(({ run }) => run.authorityGrantId));
+            const grantId = grantIds.size === 1 ? ([...grantIds][0] ?? null) : null;
+            const grant =
+              grantId === null
+                ? null
+                : await transaction.authorityGrant.findFirst({
+                    where: { id: grantId, ...mutationScope },
+                  });
+            if (grant === null || !this.sameApprovalEnvelope(grant, parsed)) {
+              throw new AppError(
+                409,
+                'ATTENTION_GROUP_ALREADY_DECIDED',
+                'This authority group already has a different immutable decision',
+              );
+            }
+            return { grant, runs: decided.map(({ run }) => run) };
+          }
+
+          const pending = await transaction.approvalRequest.findMany({
+            where: {
+              state: ApprovalRequestState.PENDING,
+              run: { ...mutationScope, state: ExecutionRunState.AWAITING_APPROVAL },
+            },
+            include: executionApprovalInclude,
+            orderBy: { createdAt: 'asc' },
+          });
+          const group = groupExecutionApprovals(pending).find(
+            (candidate) => candidate.groupKey === groupKey,
+          );
+          if (group === undefined) {
+            throw new AppError(
+              404,
+              'ATTENTION_GROUP_NOT_FOUND',
+              'The reviewed authority group is no longer pending',
+            );
+          }
+          const runIds = group.approvals.map(({ run }) => run.id).sort();
+          const approvalIds = group.approvals.map(({ id }) => id).sort();
+          await this.lockExecutionDecisions(transaction, runIds, mutationScope);
+          const locked = await transaction.approvalRequest.findMany({
+            where: {
+              id: { in: approvalIds },
+              state: ApprovalRequestState.PENDING,
+              run: { ...mutationScope, state: ExecutionRunState.AWAITING_APPROVAL },
+            },
+            include: executionApprovalInclude,
+            orderBy: { createdAt: 'asc' },
+          });
+          const lockedGroup = groupExecutionApprovals(locked).find(
+            (candidate) => candidate.groupKey === groupKey,
+          );
+          if (lockedGroup === undefined || lockedGroup.approvals.length !== approvalIds.length) {
+            throw new AppError(
+              409,
+              'ATTENTION_GROUP_CHANGED',
+              'The authority group changed before the decision was recorded; refresh and review it again',
+            );
+          }
+          const runs = lockedGroup.approvals.map(({ run }) => run);
+          const first = runs[0];
+          if (first === undefined || first.entryResourceVersionId === null) {
+            throw new AppError(
+              409,
+              'ENTRYPOINT_UNRESOLVED',
+              'The exact governed subject is unavailable',
+            );
+          }
+          if (parsed.entryResourceVersionId !== first.entryResourceVersionId) {
+            throw new AppError(
+              422,
+              'ENTRYPOINT_RELEASE_MISMATCH',
+              'Approval must bind the exact entry resource reviewed for this group',
+            );
+          }
+          if (parsed.maxRuns < runs.length) {
+            throw new AppError(
+              422,
+              'AUTHORITY_ENVELOPE_INSUFFICIENT',
+              'The proposed authority does not cover every reviewed run',
+              { blockers: ['Run budget is smaller than the reviewed request group'] },
+            );
+          }
+          const aggregateEstimatedCost = runs.reduce(
+            (total, run) => total + Number(run.estimatedUpperCostUsd),
+            0,
+          );
+          if (parsed.totalCostBudgetUsd + Number.EPSILON < aggregateEstimatedCost) {
+            throw new AppError(
+              422,
+              'AUTHORITY_ENVELOPE_INSUFFICIENT',
+              'The proposed authority does not cover every reviewed run',
+              { blockers: ['Total cost budget is smaller than the reviewed request group'] },
+            );
+          }
+          if (
+            runs.some(
+              (run) =>
+                run.releaseId !== first.releaseId ||
+                run.releaseDigest !== first.releaseDigest ||
+                run.entryResourceVersionId !== first.entryResourceVersionId ||
+                run.contextDigest !== first.contextDigest ||
+                run.projectId !== first.projectId ||
+                run.workspaceId !== first.workspaceId ||
+                run.departmentId !== first.departmentId,
+            )
+          ) {
+            throw new AppError(
+              409,
+              'ATTENTION_GROUP_CHANGED',
+              'The authority identity changed before the decision was recorded',
+            );
+          }
+          const release = await transaction.releaseBundle.findFirst({
+            where: {
+              id: first.releaseId,
+              workspaceId: first.workspaceId,
+              departmentId: first.departmentId,
+            },
+            include: { resources: { include: { resourceVersion: { include: { family: true } } } } },
+          });
+          if (release === null || release.digest !== first.releaseDigest) {
+            throw new AppError(409, 'RELEASE_CHANGED', 'The exact release digest is unavailable');
+          }
+          const pluginScopes = await this.materializePluginScopes(
+            release,
+            first.entryResourceVersionId,
+            parsed.pluginScopes,
+            transaction,
+          );
+          const grant = await transaction.authorityGrant.create({
+            data: {
+              workspaceId: first.workspaceId,
+              departmentId: first.departmentId,
+              releaseId: release.id,
+              entryResourceVersionId: first.entryResourceVersionId,
+              releaseDigest: release.digest,
+              contextDigest: first.contextDigest,
+              projectId: parsed.projectId,
+              inputConstraints: toPrismaJson(
+                jsonObjectSchema,
+                parsed.inputConstraints,
+                'AuthorityGrant.inputConstraints',
+              ),
+              toolScopes: toPrismaJson(
+                stringArraySchema,
+                parsed.toolScopes,
+                'AuthorityGrant.toolScopes',
+              ),
+              pluginScopes: toPrismaJson(
+                pluginAuthorityScopesSchema,
+                pluginScopes,
+                'AuthorityGrant.pluginScopes',
+              ),
+              validUntil: new Date(parsed.validUntil),
+              maxRuns: parsed.maxRuns,
+              maxEstimatedCostPerRunUsd: parsed.maxEstimatedCostPerRunUsd,
+              totalCostBudgetUsd: parsed.totalCostBudgetUsd,
+              actorId: actor,
+              rationale: parsed.rationale,
+            },
+          });
+          for (const run of runs) {
+            if (run.requiresPluginApproval && runs.length !== 1) {
+              throw new AppError(
+                409,
+                'PLUGIN_APPROVAL_MUST_BE_RUN_SPECIFIC',
+                'Approval-required Plugin actions cannot share a grouped decision',
+              );
+            }
+            const blockers = this.grantBlockers(
+              grant,
+              release,
+              first.entryResourceVersionId,
+              run.contextDigest,
+              parseJson(jsonObjectSchema, run.input, 'ExecutionRun.input'),
+              runScopesFromRecord(run),
+              parseJson(
+                runPluginRequirementsSchema,
+                run.requiredPluginScopes,
+                'ExecutionRun.requiredPluginScopes',
+              ),
+              Number(run.estimatedUpperCostUsd),
+              true,
+            );
+            if (blockers.length > 0) {
+              throw new AppError(
+                422,
+                'AUTHORITY_ENVELOPE_INSUFFICIENT',
+                'The proposed authority does not cover every reviewed run',
+                { blockers },
+              );
+            }
+          }
+          const updatedRuns = await transaction.executionRun.updateMany({
+            where: {
+              id: { in: runIds },
+              state: ExecutionRunState.AWAITING_APPROVAL,
+              ...mutationScope,
+            },
+            data: {
+              authorityGrantId: grant.id,
+              state: ExecutionRunState.QUEUED,
+              approvalReasons: toPrismaJson(stringArraySchema, [], 'ExecutionRun.approvalReasons'),
+              message: 'Queued',
+            },
+          });
+          if (updatedRuns.count !== runs.length) {
+            throw new AppError(
+              409,
+              'ATTENTION_GROUP_CHANGED',
+              'A reviewed run changed before the decision was recorded',
+            );
+          }
+          const updatedApprovals = await transaction.approvalRequest.updateMany({
+            where: { id: { in: approvalIds }, state: ApprovalRequestState.PENDING },
+            data: {
+              state: ApprovalRequestState.APPROVED,
+              decisionGroupKey: groupKey,
+              decisionGroupSize: runs.length,
+              decidedBy: actor,
+              rationale: parsed.rationale,
+              decidedAt: new Date(),
+            },
+          });
+          if (updatedApprovals.count !== runs.length) {
+            throw new AppError(
+              409,
+              'ATTENTION_GROUP_CHANGED',
+              'An authority request changed before the decision was recorded',
+            );
+          }
+          const records = await transaction.executionRun.findMany({
+            where: { id: { in: runIds }, ...mutationScope },
+            include: executionRunSubjectInclude,
+            orderBy: { createdAt: 'asc' },
+          });
+          for (const run of records) {
+            await appendAuditEvent(transaction, {
+              action: 'execution.approved',
+              entityType: 'ExecutionRun',
+              entityId: run.id,
+              details: {
+                authorityGrantId: grant.id,
+                releaseDigest: release.digest,
+                approvalGroupKey: groupKey,
+                approvalGroupSize: records.length,
+              },
+            });
+            await appendExecutionRunEvent(transaction, run, {
+              phase: 'authority',
+              state: 'approved',
+              message: `A human approved bounded authority for ${records.length} matching pending ${records.length === 1 ? 'run' : 'runs'}.`,
+            });
+          }
+          return { grant, runs: records };
+        },
+        { isolationLevel: 'Serializable' },
+      ),
+    );
+    return approveExecutionRunGroupResponseSchema.parse({
+      groupKey,
+      grant: toGrant(result.grant),
+      runs: result.runs.map(toRun),
+    });
+  }
+
+  async rejectRunGroup(
+    groupKey: string,
+    input: z.input<typeof rejectExecutionRunRequestSchema>,
+  ): Promise<z.infer<typeof rejectExecutionRunGroupResponseSchema>> {
+    const actor = requireHumanActor();
+    const mutationScope = governedExecutionMutationScope();
+    const { rationale } = rejectExecutionRunRequestSchema.parse(input);
+    const runs = await retrySerializableTransaction(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${mutationScope.workspaceId}:${mutationScope.departmentId ?? 'workspace'}:execution-approval-group:${groupKey}`}))`;
+          const decided = await transaction.approvalRequest.findMany({
+            where: { decisionGroupKey: groupKey, run: mutationScope },
+            include: executionApprovalInclude,
+            orderBy: { id: 'asc' },
+          });
+          if (decided.length > 0) {
+            this.assertCompleteDecisionGroup(decided);
+            if (
+              decided.some(
+                ({ state, rationale: storedRationale }) =>
+                  state !== ApprovalRequestState.REJECTED || storedRationale !== rationale,
+              )
+            ) {
+              throw new AppError(
+                409,
+                'ATTENTION_GROUP_ALREADY_DECIDED',
+                'This authority group already has a different immutable decision',
+              );
+            }
+            return decided.map(({ run }) => run);
+          }
+          const pending = await transaction.approvalRequest.findMany({
+            where: {
+              state: ApprovalRequestState.PENDING,
+              run: { ...mutationScope, state: ExecutionRunState.AWAITING_APPROVAL },
+            },
+            include: executionApprovalInclude,
+            orderBy: { createdAt: 'asc' },
+          });
+          const group = groupExecutionApprovals(pending).find(
+            (candidate) => candidate.groupKey === groupKey,
+          );
+          if (group === undefined) {
+            throw new AppError(
+              404,
+              'ATTENTION_GROUP_NOT_FOUND',
+              'The reviewed authority group is no longer pending',
+            );
+          }
+          const runIds = group.approvals.map(({ run }) => run.id).sort();
+          const approvalIds = group.approvals.map(({ id }) => id).sort();
+          await this.lockExecutionDecisions(transaction, runIds, mutationScope);
+          const locked = await transaction.approvalRequest.findMany({
+            where: {
+              id: { in: approvalIds },
+              state: ApprovalRequestState.PENDING,
+              run: { ...mutationScope, state: ExecutionRunState.AWAITING_APPROVAL },
+            },
+            include: executionApprovalInclude,
+            orderBy: { createdAt: 'asc' },
+          });
+          const lockedGroup = groupExecutionApprovals(locked).find(
+            (candidate) => candidate.groupKey === groupKey,
+          );
+          if (lockedGroup === undefined || lockedGroup.approvals.length !== approvalIds.length) {
+            throw new AppError(
+              409,
+              'ATTENTION_GROUP_CHANGED',
+              'The authority group changed before the decision was recorded; refresh and review it again',
+            );
+          }
+          const finishedAt = new Date();
+          const updatedRuns = await transaction.executionRun.updateMany({
+            where: {
+              id: { in: runIds },
+              state: ExecutionRunState.AWAITING_APPROVAL,
+              ...mutationScope,
+            },
+            data: { state: ExecutionRunState.CANCELLED, message: 'Rejected', finishedAt },
+          });
+          if (updatedRuns.count !== runIds.length) {
+            throw new AppError(
+              409,
+              'ATTENTION_GROUP_CHANGED',
+              'A reviewed run changed before the decision was recorded',
+            );
+          }
+          const updatedApprovals = await transaction.approvalRequest.updateMany({
+            where: { id: { in: approvalIds }, state: ApprovalRequestState.PENDING },
+            data: {
+              state: ApprovalRequestState.REJECTED,
+              decisionGroupKey: groupKey,
+              decisionGroupSize: runIds.length,
+              decidedBy: actor,
+              rationale,
+              decidedAt: finishedAt,
+            },
+          });
+          if (updatedApprovals.count !== runIds.length) {
+            throw new AppError(
+              409,
+              'ATTENTION_GROUP_CHANGED',
+              'An authority request changed before the decision was recorded',
+            );
+          }
+          const records = await transaction.executionRun.findMany({
+            where: { id: { in: runIds }, ...mutationScope },
+            include: executionRunSubjectInclude,
+            orderBy: { createdAt: 'asc' },
+          });
+          for (const run of records) {
+            await appendExecutionRunEvent(transaction, run, {
+              phase: 'authority',
+              state: 'rejected',
+              message: `A human rejected ${records.length} matching pending ${records.length === 1 ? 'run' : 'runs'}.`,
+              occurredAt: finishedAt,
+            });
+            await appendPlatformEvent(transaction, {
+              kind: 'execution.rejected',
+              entityType: 'ExecutionRun',
+              entityId: run.id,
+              summary: { releaseId: run.releaseId, rationale, approvalGroupKey: groupKey },
+              occurredAt: finishedAt,
+            });
+            await recordDigestDeliveryForRun(transaction, run, {
+              state: 'failed',
+              code: 'RUN_REJECTED',
+            });
+            await appendAuditEvent(transaction, {
+              action: 'execution.rejected',
+              entityType: 'ExecutionRun',
+              entityId: run.id,
+              details: { rationale, approvalGroupKey: groupKey, approvalGroupSize: records.length },
+            });
+          }
+          return records;
+        },
+        { isolationLevel: 'Serializable' },
+      ),
+    );
+    return rejectExecutionRunGroupResponseSchema.parse({
+      groupKey,
+      runs: runs.map(toRun),
+    });
+  }
+
+  private sameApprovalEnvelope(
+    grant: DatabaseAuthorityGrant,
+    parsed: z.output<typeof approveExecutionRunRequestSchema>,
+  ): boolean {
+    const storedPluginScopes = parseJson(
+      pluginAuthorityScopesSchema,
+      grant.pluginScopes,
+      'AuthorityGrant.pluginScopes',
+    ).map(({ installationId, pluginVersionId, tool, limits }) => ({
+      installationId,
+      pluginVersionId,
+      tool,
+      limits,
+    }));
+    const normalize = (values: unknown[]) =>
+      [...values].sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right)));
+    return (
+      grant.entryResourceVersionId === parsed.entryResourceVersionId &&
+      grant.projectId === parsed.projectId &&
+      canonicalJson(
+        parseJson(jsonObjectSchema, grant.inputConstraints, 'AuthorityGrant.inputConstraints'),
+      ) === canonicalJson(parsed.inputConstraints) &&
+      canonicalJson(
+        normalize(parseJson(stringArraySchema, grant.toolScopes, 'AuthorityGrant.toolScopes')),
+      ) === canonicalJson(normalize(parsed.toolScopes)) &&
+      canonicalJson(normalize(storedPluginScopes)) ===
+        canonicalJson(normalize(parsed.pluginScopes)) &&
+      grant.validUntil.getTime() === new Date(parsed.validUntil).getTime() &&
+      grant.maxRuns === parsed.maxRuns &&
+      Number(grant.maxEstimatedCostPerRunUsd) === parsed.maxEstimatedCostPerRunUsd &&
+      Number(grant.totalCostBudgetUsd) === parsed.totalCostBudgetUsd &&
+      grant.rationale === parsed.rationale
+    );
+  }
+
+  private assertCompleteDecisionGroup(
+    decisions: Array<{ decisionGroupSize: number | null }>,
+  ): void {
+    const expectedSizes = new Set(decisions.map(({ decisionGroupSize }) => decisionGroupSize));
+    const expectedSize = expectedSizes.size === 1 ? ([...expectedSizes][0] ?? null) : null;
+    if (expectedSize === null || expectedSize !== decisions.length) {
+      throw new AppError(
+        409,
+        'ATTENTION_GROUP_MEMBERSHIP_CHANGED',
+        'The original authority group is no longer intact; refresh and review the pending requests again',
+      );
+    }
   }
 
   async rejectRun(
@@ -1733,74 +2398,103 @@ export class ExecutionService implements ExecutionWorkerApi {
     input: z.input<typeof rejectExecutionRunRequestSchema>,
   ): Promise<ExecutionRun> {
     const actor = requireHumanActor();
+    const mutationScope = governedExecutionMutationScope();
     const { rationale } = rejectExecutionRunRequestSchema.parse(input);
-    const result = await this.prisma.$transaction(async (transaction) => {
-      const run = await transaction.executionRun.findFirst({
-        where: { id: runId, ...aggregateScopeWhere() },
-      });
-      if (run === null) {
-        throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
-      }
-      if (run.state !== ExecutionRunState.AWAITING_APPROVAL) {
-        throw new AppError(
-          409,
-          'RUN_NOT_AWAITING_APPROVAL',
-          'Only a run awaiting approval can be rejected',
-        );
-      }
-      const approval = await transaction.approvalRequest.findUnique({ where: { runId } });
-      if (approval?.state !== ApprovalRequestState.PENDING) {
-        throw new AppError(
-          409,
-          'APPROVAL_ALREADY_DECIDED',
-          'The authority request has already been decided',
-        );
-      }
-      const finishedAt = new Date();
-      const updated = await transaction.executionRun.update({
-        where: { id: runId },
-        data: { state: ExecutionRunState.CANCELLED, message: 'Rejected', finishedAt },
-      });
-      await transaction.approvalRequest.update({
-        where: { runId },
-        data: {
-          state: ApprovalRequestState.REJECTED,
-          decidedBy: actor,
-          rationale,
-          decidedAt: finishedAt,
+    const result = await retrySerializableTransaction(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          await this.lockExecutionDecisions(transaction, [runId], mutationScope);
+          const run = await transaction.executionRun.findFirst({
+            where: { id: runId, ...mutationScope },
+          });
+          if (run === null) {
+            throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
+          }
+          if (run.state !== ExecutionRunState.AWAITING_APPROVAL) {
+            throw new AppError(
+              409,
+              'RUN_NOT_AWAITING_APPROVAL',
+              'Only a run awaiting approval can be rejected',
+            );
+          }
+          const approval = await transaction.approvalRequest.findUnique({ where: { runId } });
+          if (approval?.state !== ApprovalRequestState.PENDING) {
+            throw new AppError(
+              409,
+              'APPROVAL_ALREADY_DECIDED',
+              'The authority request has already been decided',
+            );
+          }
+          const finishedAt = new Date();
+          const updatedRuns = await transaction.executionRun.updateMany({
+            where: {
+              id: runId,
+              state: ExecutionRunState.AWAITING_APPROVAL,
+              ...mutationScope,
+            },
+            data: { state: ExecutionRunState.CANCELLED, message: 'Rejected', finishedAt },
+          });
+          if (updatedRuns.count !== 1) {
+            throw new AppError(
+              409,
+              'RUN_NOT_AWAITING_APPROVAL',
+              'The run changed before the rejection was recorded',
+            );
+          }
+          const updatedApprovals = await transaction.approvalRequest.updateMany({
+            where: { runId, state: ApprovalRequestState.PENDING, decisionGroupKey: null },
+            data: {
+              state: ApprovalRequestState.REJECTED,
+              decidedBy: actor,
+              rationale,
+              decidedAt: finishedAt,
+            },
+          });
+          if (updatedApprovals.count !== 1) {
+            throw new AppError(
+              409,
+              'APPROVAL_ALREADY_DECIDED',
+              'The authority request changed before the rejection was recorded',
+            );
+          }
+          await appendExecutionRunEvent(transaction, run, {
+            phase: 'authority',
+            state: 'rejected',
+            message: 'A human rejected this run request.',
+            occurredAt: finishedAt,
+          });
+          await appendPlatformEvent(transaction, {
+            kind: 'execution.rejected',
+            entityType: 'ExecutionRun',
+            entityId: runId,
+            summary: { releaseId: run.releaseId, rationale },
+            occurredAt: finishedAt,
+          });
+          await recordDigestDeliveryForRun(transaction, run, {
+            state: 'failed',
+            code: 'RUN_REJECTED',
+          });
+          await appendAuditEvent(transaction, {
+            action: 'execution.rejected',
+            entityType: 'ExecutionRun',
+            entityId: runId,
+            details: { rationale },
+          });
+          return transaction.executionRun.findUniqueOrThrow({
+            where: { id: runId },
+            include: executionRunSubjectInclude,
+          });
         },
-      });
-      await appendExecutionRunEvent(transaction, run, {
-        phase: 'authority',
-        state: 'rejected',
-        message: 'A human rejected this run request.',
-        occurredAt: finishedAt,
-      });
-      await appendPlatformEvent(transaction, {
-        kind: 'execution.rejected',
-        entityType: 'ExecutionRun',
-        entityId: runId,
-        summary: { releaseId: run.releaseId, rationale },
-        occurredAt: finishedAt,
-      });
-      await recordDigestDeliveryForRun(transaction, run, {
-        state: 'failed',
-        code: 'RUN_REJECTED',
-      });
-      await appendAuditEvent(transaction, {
-        action: 'execution.rejected',
-        entityType: 'ExecutionRun',
-        entityId: runId,
-        details: { rationale },
-      });
-      return updated;
-    });
+        { isolationLevel: 'Serializable' },
+      ),
+    );
     return toRun(result);
   }
 
   async getRun(runId: string): Promise<ExecutionRun> {
     const record = await this.prisma.executionRun.findFirst({
       where: { id: runId, ...aggregateScopeWhere() },
+      include: executionRunSubjectInclude,
     });
     if (record === null)
       throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
@@ -1809,55 +2503,81 @@ export class ExecutionService implements ExecutionWorkerApi {
 
   async cancelRun(runId: string): Promise<ExecutionRun> {
     const actor = currentActorId();
-    const result = await this.prisma.$transaction(async (transaction) => {
-      const run = await transaction.executionRun.findFirst({
-        where: { id: runId, ...aggregateScopeWhere() },
-      });
-      if (run === null)
-        throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
-      if (
-        run.state === ExecutionRunState.SUCCEEDED ||
-        run.state === ExecutionRunState.FAILED ||
-        run.state === ExecutionRunState.CANCELLED
-      ) {
-        throw new AppError(409, 'RUN_TERMINAL', 'A terminal execution run cannot be cancelled');
-      }
-      const running = run.state === ExecutionRunState.RUNNING;
-      const updated = await transaction.executionRun.update({
-        where: { id: runId },
-        data: running
-          ? { cancelRequestedAt: new Date(), message: 'Cancellation requested' }
-          : { state: ExecutionRunState.CANCELLED, finishedAt: new Date(), message: 'Cancelled' },
-      });
-      if (!running) {
-        await transaction.approvalRequest.updateMany({
-          where: { runId, state: ApprovalRequestState.PENDING },
-          data: { state: ApprovalRequestState.CANCELLED, decidedBy: actor, decidedAt: new Date() },
-        });
-        await appendExecutionRunEvent(transaction, run, {
-          phase: 'outcome',
-          state: 'cancelled',
-          message: 'The run was cancelled before execution began.',
-          metadata: { code: 'RUN_CANCELLED' },
-        });
-        await appendPlatformEvent(transaction, {
-          kind: 'execution.cancelled',
-          entityType: 'ExecutionRun',
-          entityId: runId,
-          summary: { code: 'RUN_CANCELLED' },
-        });
-        await recordDigestDeliveryForRun(transaction, run, {
-          state: 'failed',
-          code: 'RUN_CANCELLED',
-        });
-      }
-      await appendAuditEvent(transaction, {
-        action: 'execution.cancelled',
-        entityType: 'ExecutionRun',
-        entityId: runId,
-      });
-      return updated;
-    });
+    const mutationScope = governedExecutionMutationScope();
+    const result = await retrySerializableTransaction(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          await this.lockExecutionDecisions(transaction, [runId], mutationScope);
+          const run = await transaction.executionRun.findFirst({
+            where: { id: runId, ...mutationScope },
+          });
+          if (run === null)
+            throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
+          if (
+            run.state === ExecutionRunState.SUCCEEDED ||
+            run.state === ExecutionRunState.FAILED ||
+            run.state === ExecutionRunState.CANCELLED
+          ) {
+            throw new AppError(409, 'RUN_TERMINAL', 'A terminal execution run cannot be cancelled');
+          }
+          const running = run.state === ExecutionRunState.RUNNING;
+          const updatedRuns = await transaction.executionRun.updateMany({
+            where: { id: runId, state: run.state, ...mutationScope },
+            data: running
+              ? { cancelRequestedAt: new Date(), message: 'Cancellation requested' }
+              : {
+                  state: ExecutionRunState.CANCELLED,
+                  finishedAt: new Date(),
+                  message: 'Cancelled',
+                },
+          });
+          if (updatedRuns.count !== 1) {
+            throw new AppError(409, 'RUN_STATE_CHANGED', 'The run changed before cancellation');
+          }
+          const updated = await transaction.executionRun.findUniqueOrThrow({
+            where: { id: runId },
+            include: executionRunSubjectInclude,
+          });
+          if (!running) {
+            await transaction.approvalRequest.updateMany({
+              where: {
+                runId,
+                state: ApprovalRequestState.PENDING,
+                decisionGroupKey: null,
+              },
+              data: {
+                state: ApprovalRequestState.CANCELLED,
+                decidedBy: actor,
+                decidedAt: new Date(),
+              },
+            });
+            await appendExecutionRunEvent(transaction, run, {
+              phase: 'outcome',
+              state: 'cancelled',
+              message: 'The run was cancelled before execution began.',
+              metadata: { code: 'RUN_CANCELLED' },
+            });
+            await appendPlatformEvent(transaction, {
+              kind: 'execution.cancelled',
+              entityType: 'ExecutionRun',
+              entityId: runId,
+              summary: { code: 'RUN_CANCELLED' },
+            });
+            await recordDigestDeliveryForRun(transaction, run, {
+              state: 'failed',
+              code: 'RUN_CANCELLED',
+            });
+          }
+          await appendAuditEvent(transaction, {
+            action: 'execution.cancelled',
+            entityType: 'ExecutionRun',
+            entityId: runId,
+          });
+          return updated;
+        },
+        { isolationLevel: 'Serializable' },
+      ),
+    );
     if (result.cancelRequestedAt !== null) {
       this.activeControllers.get(runId)?.abort(new Error('RUN_CANCELLED'));
     }
@@ -1867,7 +2587,10 @@ export class ExecutionService implements ExecutionWorkerApi {
   async listOutcomes(runId?: string): Promise<z.infer<typeof outcomeListResponseSchema>> {
     const records = await this.prisma.outcomeRecord.findMany({
       where: {
-        run: aggregateScopeWhere(),
+        run: {
+          ...aggregateScopeWhere(),
+          AND: [userFacingExecutionRunWhere],
+        },
         ...(runId === undefined ? {} : { runId }),
       },
       orderBy: { createdAt: 'desc' },
@@ -1895,7 +2618,15 @@ export class ExecutionService implements ExecutionWorkerApi {
 
   async listMetrics(runId?: string): Promise<z.infer<typeof metricListResponseSchema>> {
     const records = await this.prisma.metricSample.findMany({
-      where: { ...aggregateScopeWhere(), ...(runId === undefined ? {} : { runId }) },
+      where: {
+        ...aggregateScopeWhere(),
+        AND: [
+          {
+            OR: [{ runId: null }, { run: { is: userFacingExecutionRunWhere } }],
+          },
+        ],
+        ...(runId === undefined ? {} : { runId }),
+      },
       orderBy: { observedAt: 'desc' },
       take: 500,
     });
@@ -2154,6 +2885,9 @@ export class ExecutionService implements ExecutionWorkerApi {
             },
             update: {
               state: ApprovalRequestState.PENDING,
+              requestVersion: { increment: 1 },
+              decisionGroupKey: null,
+              decisionGroupSize: null,
               reasons: toPrismaJson(stringArraySchema, reasons, 'ApprovalRequest.reasons'),
               requestedBy: run.requestedBy,
               decidedBy: null,

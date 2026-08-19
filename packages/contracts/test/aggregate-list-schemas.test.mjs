@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { automationScheduleListResponseSchema } from '../dist/automation-learning-schemas.js';
+import {
+  automationScheduleListResponseSchema,
+  automationScheduleSchema,
+} from '../dist/automation-learning-schemas.js';
 import {
   authorityGrantListResponseSchema,
+  executionRunEntrySubjectSchema,
   executionRunListResponseSchema,
   resourceListResponseSchema,
 } from '../dist/platform-schemas.js';
@@ -26,6 +30,66 @@ const countsByLifecycle = {
   production: 6,
   deprecated: 1,
 };
+const scheduleFixture = {
+  id: '10000000-0000-4000-8000-000000000001',
+  name: 'Compose daily brief 20000000-0000-4000-8000-000000000001',
+  channelKey: 'daily-operations',
+  releaseId: '30000000-0000-4000-8000-000000000001',
+  entryResourceVersionId: '40000000-0000-4000-8000-000000000001',
+  entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
+  authorityGrantId: null,
+  timezone: 'America/New_York',
+  intervalSeconds: 3600,
+  nextRunAt: '2026-08-18T14:00:00.000Z',
+  inputTemplate: {},
+  includePlatformDigest: false,
+  inputConstraints: {},
+  catchUpPolicy: 'latest_only',
+  maxCatchUpRuns: 1,
+  deduplicationWindowSeconds: 300,
+  retry: { maximumAttempts: 3, backoff: 'exponential' },
+  cost: { maxInputTokens: 8000, maxOutputTokens: 2000, maxEstimatedCostUsd: 0.25 },
+  outcomeExpectations: {},
+  releaseDigest: 'a'.repeat(64),
+  projectId: 'daily-operations',
+  state: 'active',
+  lastScheduledAt: null,
+  createdBy: 'human:local-operator',
+  updatedBy: 'human:local-operator',
+  createdAt: '2026-08-18T13:00:00.000Z',
+  updatedAt: '2026-08-18T13:00:00.000Z',
+};
+
+test('execution runs expose an exact, bounded entry subject projection', () => {
+  assert.deepEqual(
+    executionRunEntrySubjectSchema.parse({ name: 'Daily Brief', kind: 'skill', version: '1.0.0' }),
+    { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
+  );
+  assert.equal(
+    executionRunEntrySubjectSchema.safeParse({
+      name: 'Daily Brief',
+      kind: 'skill',
+      version: '',
+    }).success,
+    false,
+  );
+});
+
+test('automation schedules expose a safe entry subject independently of their authored name', () => {
+  const parsed = automationScheduleSchema.parse(scheduleFixture);
+  assert.deepEqual(parsed.entrySubject, {
+    name: 'Daily Brief',
+    kind: 'skill',
+    version: '1.0.0',
+  });
+  assert.equal(
+    automationScheduleSchema.safeParse({
+      ...scheduleFixture,
+      entrySubject: { name: 'Daily Brief', kind: 'skill', version: '' },
+    }).success,
+    false,
+  );
+});
 
 test('capped operational lists require server-owned full-scope totals', () => {
   assert.deepEqual(

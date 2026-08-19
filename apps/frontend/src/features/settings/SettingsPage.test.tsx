@@ -1,6 +1,7 @@
 import type { ResourceVersion } from '@agent-builder/contracts';
 import { http, HttpResponse } from 'msw';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { SettingsPage } from './SettingsPage';
 import { renderWithClient } from '../../test/render';
 import { server } from '../../test/server';
@@ -81,12 +82,13 @@ function installRuleHandler() {
 
 describe('Settings', () => {
   it('shows server-resolved scope and honest control-plane boundaries', async () => {
+    const user = userEvent.setup();
     installRuleHandler();
     renderWithClient(<SettingsPage />, ['/settings']);
 
-    expect(await screen.findByText('test-operator')).toBeInTheDocument();
-    expect(screen.getByText('42424242-4242-4242-8242-424242424242')).toBeInTheDocument();
-    expect(screen.getByText('43434343-4343-4343-8343-434343434343')).toBeInTheDocument();
+    expect(await screen.findByText('Local operator')).toBeVisible();
+    expect(screen.getByText('Local workspace')).toBeVisible();
+    expect(screen.getByText('Local department')).toBeVisible();
     expect(screen.getByText('local')).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Effective roles' })).toHaveTextContent('admin');
     expect(screen.getByRole('list', { name: 'Granted permissions' })).toHaveTextContent(
@@ -102,6 +104,13 @@ describe('Settings', () => {
     expect(screen.getByRole('heading', { name: 'Local operations' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Console copy' })).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    expect(screen.getByText('test-operator')).not.toBeVisible();
+    expect(screen.getByText('42424242-4242-4242-8242-424242424242')).not.toBeVisible();
+    await user.click(screen.getByText('Technical identifiers'));
+    expect(screen.getByText('test-operator')).toBeVisible();
+    expect(screen.getByText('42424242-4242-4242-8242-424242424242')).toBeVisible();
+    expect(screen.getByText('43434343-4343-4343-8343-434343434343')).toBeVisible();
   });
 
   it('fails closed when the current session cannot be resolved', async () => {
@@ -124,7 +133,7 @@ describe('Settings', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Current session unavailable. Identity ledger unavailable.',
     );
-    expect(screen.queryByText('test-operator')).not.toBeInTheDocument();
+    expect(screen.queryByText('Local operator')).not.toBeInTheDocument();
     expect(screen.getByText('SESSION UNAVAILABLE')).toBeInTheDocument();
   });
 });

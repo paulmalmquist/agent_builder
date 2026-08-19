@@ -5,13 +5,13 @@ import {
   type SurfaceAction,
 } from '@agent-builder/contracts';
 import {
-  useApproveExecutionRun,
+  useApproveExecutionApprovalGroup,
   useAttention,
   useCancelExecutionRun,
   useDeclineRelease,
   useExecutionRun,
   usePromoteRelease,
-  useRejectExecutionRun,
+  useRejectExecutionApprovalGroup,
   useResolveAttentionItem,
   useReviewImprovementCandidate,
   useReviewMemoryCandidate,
@@ -60,6 +60,7 @@ function decisionCopy(decision: PendingDecision) {
 
 function AttentionCard({
   item,
+  queuePosition,
   focused,
   setReference,
   onAction,
@@ -67,6 +68,7 @@ function AttentionCard({
   onFocus,
 }: {
   item: AttentionItem;
+  queuePosition: number;
   focused: boolean;
   setReference: (node: HTMLElement | null) => void;
   onAction: (action: SurfaceAction) => void;
@@ -83,7 +85,7 @@ function AttentionCard({
       tabIndex={0}
     >
       <div aria-hidden="true" className="attention-status-mark">
-        <span />
+        <span>{String(queuePosition).padStart(2, '0')}</span>
       </div>
       <div className="attention-card-body">
         <header>
@@ -107,25 +109,46 @@ function AttentionCard({
         </header>
         <p className="attention-delta">{item.delta}</p>
         <p className="attention-reason">{item.reason}</p>
-        {item.payload.scopes.length > 0 ? (
-          <div aria-label="Authority scopes" className="attention-scopes">
-            {item.payload.scopes.map((scope) => (
-              <span key={scope}>{scope}</span>
-            ))}
+        {item.payload.subject ? (
+          <div className="attention-subject">
+            <span>{item.payload.subject.kind}</span>
+            <strong>{item.payload.subject.name}</strong>
+            <span>{item.payload.subject.version}</span>
+            {item.payload.requestCount > 1 ? (
+              <button
+                aria-haspopup="dialog"
+                aria-label={`Inspect ${item.payload.requestCount} exact matching requests`}
+                className="attention-request-count"
+                onClick={onDetail}
+                type="button"
+              >
+                {item.payload.requestCount} exact matching requests
+              </button>
+            ) : null}
           </div>
         ) : null}
-        {item.payload.reviewFacts.length > 0 ? (
-          <dl className="attention-review-facts">
-            {item.payload.reviewFacts.map((fact) => (
-              <div key={`${fact.label}:${fact.value}`}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
+        {item.primaryAction ? (
+          <dl aria-label="Decision effects" className="attention-card-effects">
+            <div>
+              <dt>{item.primaryAction.label}</dt>
+              <dd>
+                {item.primaryAction.consequence}
+                <small>UNDO · {item.primaryAction.undo}</small>
+              </dd>
+            </div>
+            {item.secondaryAction ? (
+              <div>
+                <dt>{item.secondaryAction.label}</dt>
+                <dd>
+                  {item.secondaryAction.consequence}
+                  <small>UNDO · {item.secondaryAction.undo}</small>
+                </dd>
               </div>
-            ))}
+            ) : null}
           </dl>
         ) : null}
         <footer>
-          <button className="attention-why" onClick={onDetail} type="button">
+          <button aria-haspopup="dialog" className="attention-why" onClick={onDetail} type="button">
             <Icon name="search" size={14} />
             {consoleCriticalCopy.attention.actions[0].label}
           </button>
@@ -157,8 +180,8 @@ function AttentionCard({
 
 export function AttentionPage() {
   const attention = useAttention();
-  const approve = useApproveExecutionRun();
-  const rejectRun = useRejectExecutionRun();
+  const approve = useApproveExecutionApprovalGroup();
+  const rejectGroup = useRejectExecutionApprovalGroup();
   const promote = usePromoteRelease();
   const decline = useDeclineRelease();
   const reviewMemory = useReviewMemoryCandidate();
@@ -254,7 +277,7 @@ export function AttentionPage() {
   }, [activeIndex, focusCard, items, openAction]);
 
   const decisionError =
-    rejectRun.error ??
+    rejectGroup.error ??
     promote.error ??
     decline.error ??
     reviewMemory.error ??
@@ -263,7 +286,7 @@ export function AttentionPage() {
     resolveItem.error;
 
   const decisionPending =
-    rejectRun.isPending ||
+    rejectGroup.isPending ||
     promote.isPending ||
     decline.isPending ||
     reviewMemory.isPending ||
@@ -275,9 +298,17 @@ export function AttentionPage() {
     if (!pending) return;
     const payload = pending.item.payload;
     const close = { onSuccess: () => setPending(null) };
+    const decisionGroupBinding = payload.decisionGroupKey
+      ? {
+          decisionGroupKey: payload.decisionGroupKey,
+          expectedRequestCount: payload.requestCount,
+        }
+      : {};
     switch (pending.action.kind) {
       case 'reject_run':
-        if (payload.runId) rejectRun.mutate({ runId: payload.runId, rationale }, close);
+        if (payload.approvalGroupKey) {
+          rejectGroup.mutate({ groupKey: payload.approvalGroupKey, rationale }, close);
+        }
         break;
       case 'promote_release':
         if (payload.channelKey && payload.releaseId && payload.evaluationId) {
@@ -318,6 +349,7 @@ export function AttentionPage() {
               value: {
                 decision: pending.action.kind === 'accept_memory' ? 'accept' : 'reject',
                 rationale,
+                ...decisionGroupBinding,
               },
             },
             close,
@@ -333,6 +365,7 @@ export function AttentionPage() {
               value: {
                 decision: pending.action.kind === 'incubate_candidate' ? 'incubate' : 'reject',
                 rationale,
+                ...decisionGroupBinding,
               },
             },
             close,
@@ -418,6 +451,7 @@ export function AttentionPage() {
                 onAction={(action) => openAction(item, action)}
                 onDetail={() => setDetailItemId(item.id)}
                 onFocus={() => setFocusIndex(index)}
+                queuePosition={index + 1}
                 setReference={(node) => {
                   if (node) cardReferences.current.set(item.id, node);
                   else cardReferences.current.delete(item.id);
@@ -441,6 +475,7 @@ export function AttentionPage() {
                 onAction={(action) => openAction(item, action)}
                 onDetail={() => setDetailItemId(item.id)}
                 onFocus={() => setFocusIndex(decide.length + index)}
+                queuePosition={decide.length + index + 1}
                 setReference={(node) => {
                   if (node) cardReferences.current.set(item.id, node);
                   else cardReferences.current.delete(item.id);
@@ -463,13 +498,17 @@ export function AttentionPage() {
             error={approve.error ? getErrorMessage(approve.error) : null}
             isApproving={approve.isPending}
             onApprove={(value) =>
-              approve.mutate(
-                { runId: selectedRun.data.id, value },
-                { onSuccess: () => setPending(null) },
-              )
+              pending.item.payload.approvalGroupKey
+                ? approve.mutate(
+                    { groupKey: pending.item.payload.approvalGroupKey, value },
+                    { onSuccess: () => setPending(null) },
+                  )
+                : undefined
             }
             onClose={() => setPending(null)}
+            requestCount={pending.item.payload.requestCount}
             run={selectedRun.data}
+            subject={pending.item.payload.subject}
           />
         ) : (
           <Modal

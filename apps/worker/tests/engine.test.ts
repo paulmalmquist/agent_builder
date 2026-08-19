@@ -9,6 +9,7 @@ import {
 } from '@paul-os/runtime';
 import type { WorkerConfig } from '../src/config.js';
 import { ExecutionEngine } from '../src/engine.js';
+import type { WorkerPluginPlanCoordinator } from '../src/plugin-plan.js';
 import type {
   ClaimedRun,
   CompletedRun,
@@ -59,6 +60,7 @@ const claimedRun: ClaimedRun = {
   estimatedUpperCostUsd: 1,
   attempts: 1,
   maxAttempts: 3,
+  retryBackoff: 'exponential',
 };
 
 const config: WorkerConfig = {
@@ -88,7 +90,11 @@ class FakeStore implements WorkerStore {
   heartbeatResults: HeartbeatResult[] = [{ owned: true, cancellationRequested: false }];
   completed: CompletedRun | null = null;
   cancelled = false;
-  failures: Array<{ code: string; retryable: boolean }> = [];
+  failures: Array<{
+    code: string;
+    retryable: boolean;
+    retrySuppressedBy?: 'plugin_invocation_started';
+  }> = [];
   failureSettlements: Array<ProviderUsageSettlement | undefined> = [];
   cancellationSettlement: ProviderUsageSettlement | undefined;
   pausedForPlugin: string | null = null;
@@ -143,12 +149,18 @@ class FakeStore implements WorkerStore {
     code: string,
     retryable: boolean,
     incurred?: ProviderUsageSettlement,
+    retrySuppressedBy?: 'plugin_invocation_started',
   ): Promise<FailureDisposition> {
-    this.failures.push({ code, retryable });
+    this.failures.push({
+      code,
+      retryable,
+      ...(retrySuppressedBy === undefined ? {} : { retrySuppressedBy }),
+    });
     this.failureSettlements.push(incurred);
+    const willRetry = retryable && retrySuppressedBy === undefined;
     return Promise.resolve({
-      state: retryable ? 'queued' : 'failed',
-      retryAfterMs: retryable ? 2_000 : null,
+      state: willRetry ? 'queued' : 'failed',
+      retryAfterMs: willRetry ? 2_000 : null,
     });
   }
 }
@@ -341,6 +353,31 @@ describe('ExecutionEngine', () => {
     expect(store.failures).toEqual([{ code: 'MODEL_OUTPUT_INVALID_JSON', retryable: true }]);
     expect(store.failureSettlements[0]?.usage).toEqual({ inputTokens: 1, outputTokens: 1 });
     expect(store.failureSettlements[0]?.actualCostUsd).toBeGreaterThan(0);
+  });
+
+  it('terminalizes retryable model failure after Plugin hydration instead of replaying it', async () => {
+    const store = new FakeStore();
+    const pluginPlans = {
+      execute: jest.fn(() =>
+        Promise.resolve({
+          context: { lookup_result: { value: 'bounded result' } },
+          costUsd: 0.01,
+          invocationCount: 1,
+        }),
+      ),
+    } as unknown as WorkerPluginPlanCoordinator;
+    const engine = new ExecutionEngine(store, new MalformedProvider(), config, logger, pluginPlans);
+
+    await engine.runNext('worker:test');
+
+    expect(store.failures).toEqual([
+      {
+        code: 'MODEL_OUTPUT_INVALID_JSON',
+        retryable: true,
+        retrySuppressedBy: 'plugin_invocation_started',
+      },
+    ]);
+    expect(store.failureSettlements[0]?.pluginCostUsd).toBe(0.01);
   });
 
   it('rejects invalid stored input before invoking model execution', async () => {

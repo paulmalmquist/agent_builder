@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { useMemo, type CSSProperties } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { consoleCriticalCopy } from '@agent-builder/contracts';
 import {
   useAttention,
@@ -7,314 +8,876 @@ import {
   useExecutionRuns,
   usePlugins,
 } from '../../api/hooks';
+import { featureFlags } from '../../config/feature-flags';
+import seedManifestText from '../../../../../03-projects/aim/program.seed.json?raw';
+import {
+  HOME_VERTICALS,
+  isHomeVerticalId,
+  loadHomeProgram,
+  metricsForVertical,
+  programActionsForVertical,
+  verticalLabel,
+  workstreamsForVertical,
+  type HomeMetric,
+  type HomeMetricSource,
+  type HomeProgramAction,
+  type HomeProgramModel,
+  type HomeVerticalId,
+  type HomeWorkstream,
+} from './home-model';
 import './home.css';
 
 const homeCopy = consoleCriticalCopy.home;
 const homeAttentionAction = homeCopy.actions[0];
+const homeProgram = loadHomeProgram(seedManifestText);
 
 if (!homeAttentionAction) {
   throw new Error('Governed Today copy must define the Attention handoff.');
 }
 
-type TimelineSource = 'attention' | 'run' | 'schedule';
-
-interface TimelineEvent {
-  id: string;
-  detail: string;
-  label: string;
-  occurredAt: string;
-  source: TimelineSource;
-}
-
 interface HomePageProps {
-  /** Retained while the capability-map route remains behind its existing feature flag. */
-  aimEnabled?: boolean;
-  /** Injectable only so the date-driven surface can be tested without changing global clocks. */
+  /** Injectable so date-driven labels and exception windows remain deterministic in tests. */
   now?: Date;
+  /** Injectable for fail-closed manifest projection tests. Production uses the validated seed. */
+  manifestText?: string;
 }
 
-const fullDateFormatter = new Intl.DateTimeFormat(undefined, {
+interface NextMove {
+  readonly id: string;
+  readonly label: string;
+  readonly reason: string;
+  readonly eligibility: string;
+  readonly source: 'live' | 'synthetic';
+  readonly global: boolean;
+  readonly to: string;
+  readonly destinationLabel: string;
+  readonly dueAt: string | null;
+  readonly dueLabel: string | null;
+}
+
+interface GlobalCoverage {
+  readonly authorityIncomplete: boolean;
+  readonly pluginsIncomplete: boolean;
+  readonly schedulesIncomplete: boolean;
+  readonly incomplete: boolean;
+}
+
+const fullDateFormatter = new Intl.DateTimeFormat('en-US', {
   weekday: 'long',
   month: 'long',
   day: 'numeric',
   year: 'numeric',
 });
 
-const sameDayTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  hour: 'numeric',
-  minute: '2-digit',
-});
-
-const datedTimeFormatter = new Intl.DateTimeFormat(undefined, {
+const planDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
+  year: 'numeric',
+  timeZone: 'UTC',
 });
 
-function greetingFor(date: Date): string {
-  const hour = date.getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+const monthFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  timeZone: 'UTC',
+});
 
-function dayPartFor(date: Date): 'morning' | 'afternoon' | 'evening' {
-  const hour = date.getHours();
-  if (hour < 12) return 'morning';
-  if (hour < 17) return 'afternoon';
-  return 'evening';
-}
+const costFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
-function isSameLocalDay(left: Date, right: Date): boolean {
+const integerFormatter = new Intl.NumberFormat('en-US');
+
+const sourceLabels: Record<HomeMetricSource, string> = {
+  live: 'LIVE',
+  synthetic: 'SYNTHETIC',
+  unavailable: 'UNAVAILABLE',
+  awaiting_transfer: 'AWAITING TRANSFER',
+};
+
+const workstreamStateLabels: Record<NonNullable<HomeWorkstream['state']>, string> = {
+  complete: 'COMPLETE',
+  in_work: 'IN WORK',
+  planned: 'PLANNED',
+  at_risk: 'AT RISK',
+};
+
+function SourceBadge({ source }: { source: HomeMetricSource }) {
   return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
-
-function formatEventTime(value: string, now: Date): string {
-  const eventDate = new Date(value);
-  return isSameLocalDay(eventDate, now)
-    ? sameDayTimeFormatter.format(eventDate)
-    : datedTimeFormatter.format(eventDate);
-}
-
-function readableState(value: string): string {
-  return value.replaceAll('_', ' ');
-}
-
-function collectTimelineEvents(
-  attention: ReturnType<typeof useAttention>['data'],
-  runs: ReturnType<typeof useExecutionRuns>['data'],
-  schedules: ReturnType<typeof useAutomationSchedules>['data'],
-): TimelineEvent[] {
-  const events: TimelineEvent[] = [];
-
-  for (const item of [...(attention?.decide ?? []), ...(attention?.degraded ?? [])]) {
-    events.push({
-      id: `attention:${item.id}:occurred`,
-      detail: `${item.shelf === 'decide' ? 'Decision requested' : 'Degraded work surfaced'} · ${item.reason}`,
-      label: item.headline,
-      occurredAt: item.occurredAt,
-      source: 'attention',
-    });
-    if (item.payload.expiresAt !== null) {
-      events.push({
-        id: `attention:${item.id}:expires`,
-        detail: 'Attention review window closes',
-        label: item.headline,
-        occurredAt: item.payload.expiresAt,
-        source: 'attention',
-      });
-    }
-  }
-
-  for (const run of runs?.items ?? []) {
-    events.push({
-      id: `run:${run.id}:created`,
-      detail: `${readableState(run.state)} · requested by ${run.requestedBy}`,
-      label: 'Agent run requested',
-      occurredAt: run.createdAt,
-      source: 'run',
-    });
-    if (run.startedAt !== null && run.startedAt !== run.createdAt) {
-      events.push({
-        id: `run:${run.id}:started`,
-        detail: `${readableState(run.state)} · ${run.message}`,
-        label: 'Agent run started',
-        occurredAt: run.startedAt,
-        source: 'run',
-      });
-    }
-    if (run.finishedAt !== null && run.finishedAt !== run.startedAt) {
-      events.push({
-        id: `run:${run.id}:finished`,
-        detail: `${readableState(run.state)} · ${run.message}`,
-        label: 'Agent run finished',
-        occurredAt: run.finishedAt,
-        source: 'run',
-      });
-    }
-  }
-
-  for (const schedule of schedules?.items ?? []) {
-    if (schedule.state !== 'active') continue;
-    events.push({
-      id: `schedule:${schedule.id}:next`,
-      detail: `Scheduled automation · ${schedule.channelKey}`,
-      label: schedule.name,
-      occurredAt: schedule.nextRunAt,
-      source: 'schedule',
-    });
-  }
-
-  return events.sort((left, right) => {
-    const timeDelta = Date.parse(left.occurredAt) - Date.parse(right.occurredAt);
-    return timeDelta === 0 ? left.id.localeCompare(right.id) : timeDelta;
-  });
-}
-
-function nearestTimelineWindow(events: TimelineEvent[], now: Date): TimelineEvent[] {
-  if (events.length <= 12) return events;
-  const nowMs = now.getTime();
-  const firstFutureIndex = events.findIndex((event) => Date.parse(event.occurredAt) >= nowMs);
-  const splitIndex = firstFutureIndex === -1 ? events.length : firstFutureIndex;
-  const start = Math.max(0, Math.min(splitIndex - 5, events.length - 12));
-  return events.slice(start, start + 12);
-}
-
-function TimelineRow({ event, now }: { event: TimelineEvent; now: Date }) {
-  return (
-    <li className="today-timeline-row" data-source={event.source} data-testid="timeline-event">
-      <time dateTime={event.occurredAt}>{formatEventTime(event.occurredAt, now)}</time>
-      <span className="today-timeline-node" aria-hidden="true" />
-      <div>
-        <strong>{event.label}</strong>
-        <p>{event.detail}</p>
-      </div>
-    </li>
+    <span className="today-source-badge" data-source={source} data-testid="kpi-source">
+      {sourceLabels[source]}
+    </span>
   );
 }
 
 function SourceUnavailable({ children }: { children: string }) {
   return (
     <p className="today-unavailable" role="status">
-      <strong>{children}</strong> No nominal state is inferred.
+      <strong>{children}</strong> No zero or nominal state is inferred.
     </p>
   );
 }
 
-export function HomePage({ aimEnabled = false, now = new Date() }: HomePageProps) {
-  const attention = useAttention();
-  const runs = useExecutionRuns();
-  const grants = useAuthorityGrants();
-  const schedules = useAutomationSchedules();
-  const plugins = usePlugins({ includeDisabled: true, limit: 100 });
-
-  const attentionData = attention.isError ? undefined : attention.data;
-  const runData = runs.isError ? undefined : runs.data;
-  const grantData = grants.isError ? undefined : grants.data;
-  const scheduleData = schedules.isError ? undefined : schedules.data;
-  const pluginData = plugins.isError ? undefined : plugins.data;
-  const timelineEvents = collectTimelineEvents(attentionData, runData, scheduleData);
-  const visibleTimelineEvents = nearestTimelineWindow(timelineEvents, now);
-  const reviewItems = [...(attentionData?.decide ?? []), ...(attentionData?.degraded ?? [])].slice(
-    0,
-    3,
+function SourcePending({ children }: { children: string }) {
+  return (
+    <p className="today-loading" role="status">
+      <strong>{children}</strong> Global exception coverage is not complete yet.
+    </p>
   );
+}
 
+function MetricCard({ metric }: { metric: HomeMetric }) {
+  return (
+    <article
+      aria-label={`${metric.label}: ${metric.value}, ${sourceLabels[metric.source]}`}
+      className="today-metric"
+      data-source={metric.source}
+      data-state={metric.state}
+      data-testid={`home-metric-${metric.id}`}
+    >
+      <header>
+        <span>{metric.label}</span>
+        <SourceBadge source={metric.source} />
+      </header>
+      <div className="today-metric-value">
+        <strong>{metric.value}</strong>
+        {metric.scopeLabel ? <small>{metric.scopeLabel}</small> : null}
+      </div>
+      {metric.progressPercent === undefined ? null : (
+        <progress
+          aria-label={`${metric.label} ${metric.progressPercent} percent`}
+          max={100}
+          value={metric.progressPercent}
+        />
+      )}
+      <footer>
+        <p>{metric.detail}</p>
+        {metric.statusLabel ? <span>{metric.statusLabel}</span> : null}
+      </footer>
+    </article>
+  );
+}
+
+function BandHeading({
+  number,
+  title,
+  detail,
+  id,
+  trailing,
+}: {
+  number: '01' | '02' | '03';
+  title: string;
+  detail: string;
+  id: string;
+  trailing?: string;
+}) {
+  return (
+    <header className="today-band-heading">
+      <span className="today-band-number" aria-hidden="true">
+        {number}
+      </span>
+      <div>
+        <h2 id={id}>{title}</h2>
+        <p>{detail}</p>
+      </div>
+      {trailing ? <small>{trailing}</small> : null}
+    </header>
+  );
+}
+
+function formatPlanDate(value: string): string {
+  return planDateFormatter.format(new Date(value));
+}
+
+function scheduleTiming(
+  nextRunAt: string,
+  now: Date,
+  timeZone: string,
+): { readonly timeLabel: string; readonly dueLabel: string } | null {
+  try {
+    const next = new Date(nextRunAt);
+    const dayFormatter = new Intl.DateTimeFormat('en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      timeZone,
+      year: 'numeric',
+    });
+    if (dayFormatter.format(next) !== dayFormatter.format(now)) return null;
+    const timeLabel = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone,
+      timeZoneName: 'short',
+    }).format(next);
+    const dueLabel = new Intl.DateTimeFormat('en-US', {
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      month: 'short',
+      timeZone,
+      timeZoneName: 'short',
+      year: 'numeric',
+    }).format(next);
+    return { dueLabel, timeLabel };
+  } catch {
+    return null;
+  }
+}
+
+function timelinePercent(value: string | Date, startAt: string, endAt: string): number {
+  const start = Date.parse(startAt);
+  const end = Date.parse(endAt);
+  const current = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.min(100, Math.max(0, ((current - start) / (end - start)) * 100));
+}
+
+function timelineMonths(startAt: string, endAt: string): string[] {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const values: string[] = [];
+  while (cursor.getTime() <= end.getTime() && values.length < 24) {
+    const includeYear = values.length === 0 || cursor.getUTCMonth() === 0;
+    values.push(
+      `${monthFormatter.format(cursor).toUpperCase()}${includeYear ? ` ${String(cursor.getUTCFullYear()).slice(-2)}` : ''}`,
+    );
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return values;
+}
+
+function workstreamHref(workstream: HomeWorkstream): string {
+  const query = new URLSearchParams({ group: workstream.ownerGroupId });
+  const partId = workstream.affectedPartIds[0];
+  if (partId) query.set('part', partId);
+  return `/aim?${query.toString()}`;
+}
+
+function actionHref(action: HomeProgramAction, selectedVertical: HomeVerticalId): string {
+  const groupId =
+    selectedVertical !== 'all' && action.groupIds.includes(selectedVertical)
+      ? selectedVertical
+      : action.groupIds[0];
+  if (!groupId) return '/aim';
+  const query = new URLSearchParams({ group: groupId });
+  const partId = action.partTargets.find((target) => target.groupId === groupId)?.partId;
+  if (partId) query.set('part', partId);
+  return `/aim?${query.toString()}`;
+}
+
+function Gantt({
+  program,
+  workstreams,
+  now,
+  selectedVertical,
+}: {
+  program: HomeProgramModel;
+  workstreams: readonly HomeWorkstream[];
+  now: Date;
+  selectedVertical: HomeVerticalId;
+}) {
+  const months = timelineMonths(program.timeline.startAt, program.timeline.endAt);
+  const todayPosition = timelinePercent(now, program.timeline.startAt, program.timeline.endAt);
+  const showToday =
+    now.getTime() >= Date.parse(program.timeline.startAt) &&
+    now.getTime() <= Date.parse(program.timeline.endAt);
+  const milestoneById = new Map(program.milestones.map((item) => [item.id, item] as const));
+
+  if (workstreams.length === 0) {
+    return (
+      <p className="today-empty">
+        No declared workstreams match {verticalLabel(selectedVertical)}.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      aria-label={`${verticalLabel(selectedVertical)} manufacturing plan. Scroll horizontally for later months.`}
+      className="today-gantt-viewport"
+      data-testid="home-gantt-viewport"
+      role="region"
+      tabIndex={0}
+    >
+      <div className="today-gantt" style={{ '--month-count': months.length } as CSSProperties}>
+        {showToday ? (
+          <span className="sr-only">Today marker: {formatPlanDate(now.toISOString())}.</span>
+        ) : null}
+        <div className="today-gantt-months" aria-hidden="true">
+          <span />
+          {months.map((month) => (
+            <span key={month}>{month}</span>
+          ))}
+        </div>
+        <ol aria-label="AIM manufacturing workstreams" className="today-gantt-rows">
+          {workstreams.map((workstream) => {
+            const start = timelinePercent(
+              workstream.startAt,
+              program.timeline.startAt,
+              program.timeline.endAt,
+            );
+            const end = timelinePercent(
+              workstream.endAt,
+              program.timeline.startAt,
+              program.timeline.endAt,
+            );
+            const milestones = workstream.milestoneIds.flatMap((id) => {
+              const milestone = milestoneById.get(id);
+              return milestone ? [milestone] : [];
+            });
+            const stateLabel = workstream.state
+              ? workstreamStateLabels[workstream.state]
+              : 'SOURCE UNAVAILABLE';
+            const destinationLabel =
+              workstream.affectedPartIds.length > 1 ? 'RELATED AIM PART' : 'AIM PART';
+            return (
+              <li
+                aria-label={`${workstream.label}, ${workstream.ownerGroupLabel}, ${stateLabel}, ${workstream.source}`}
+                data-testid="home-gantt-row"
+                key={workstream.id}
+              >
+                <div className="today-gantt-label">
+                  <strong>{workstream.label}</strong>
+                  <span>{workstream.ownerGroupLabel}</span>
+                  <small>
+                    {formatPlanDate(workstream.startAt)} – {formatPlanDate(workstream.endAt)} ·{' '}
+                    {stateLabel} · {workstream.source.toUpperCase()}
+                    {workstream.available ? ` · OPENS ${destinationLabel}` : ''}
+                  </small>
+                </div>
+                <div className="today-gantt-track">
+                  {showToday ? (
+                    <span
+                      aria-hidden="true"
+                      className="today-gantt-now"
+                      style={{ left: `${todayPosition}%` }}
+                    />
+                  ) : null}
+                  {workstream.available && workstream.state ? (
+                    <Link
+                      aria-label={`${workstream.label}, ${workstream.ownerGroupLabel}, ${formatPlanDate(workstream.startAt)} through ${formatPlanDate(workstream.endAt)}, ${stateLabel}, ${workstream.source} plan. Open ${destinationLabel.toLowerCase()}.`}
+                      className="today-gantt-bar"
+                      data-state={workstream.state}
+                      data-testid={`home-workstream-${workstream.id}`}
+                      style={
+                        {
+                          '--bar-start': `${start}%`,
+                          '--bar-width': `${Math.max(1.5, end - start)}%`,
+                        } as CSSProperties
+                      }
+                      to={workstreamHref(workstream)}
+                    >
+                      <span>{stateLabel}</span>
+                    </Link>
+                  ) : (
+                    <span
+                      aria-label={`${workstream.label} source unavailable. ${workstream.sourceDetail}`}
+                      className="today-gantt-bar"
+                      data-state="unavailable"
+                      data-testid={`home-workstream-${workstream.id}`}
+                      role="status"
+                      style={
+                        {
+                          '--bar-start': `${start}%`,
+                          '--bar-width': `${Math.max(1.5, end - start)}%`,
+                        } as CSSProperties
+                      }
+                    >
+                      <span>UNAVAILABLE</span>
+                    </span>
+                  )}
+                  {milestones.map((milestone) => (
+                    <span
+                      aria-label={`${milestone.label}, ${formatPlanDate(milestone.date)}, ${milestone.state}`}
+                      className="today-gantt-milestone"
+                      data-state={milestone.state}
+                      key={milestone.id}
+                      role="img"
+                      style={{
+                        left: `${timelinePercent(milestone.date, program.timeline.startAt, program.timeline.endAt)}%`,
+                      }}
+                      title={`${milestone.label} · ${formatPlanDate(milestone.date)} · ${milestone.state}`}
+                    />
+                  ))}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        {showToday ? (
+          <div aria-hidden="true" className="today-gantt-now-label-track">
+            <p className="today-gantt-now-label" style={{ left: `${todayPosition}%` }}>
+              TODAY
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function createDigestMetrics(attention: ReturnType<typeof useAttention>): readonly HomeMetric[] {
+  const state = attention.isError ? 'unavailable' : attention.data ? 'neutral' : 'pending';
+  const stateLabel = attention.isError ? 'UNAVAILABLE' : attention.data ? undefined : 'READING';
+  const availableData = attention.isError ? undefined : attention.data;
+  const runCount = availableData?.digest.runCount;
+  const totalCostUsd = availableData?.digest.totalCostUsd;
+  return [
+    {
+      id: 'digest-runs',
+      label: 'Runs since briefing',
+      value: runCount === undefined ? '—' : integerFormatter.format(runCount),
+      detail:
+        runCount === undefined
+          ? 'The live briefing ledger is not available yet.'
+          : 'Runs recorded in the current briefing ledger window.',
+      source: 'live',
+      state,
+      ...(stateLabel ? { statusLabel: stateLabel } : {}),
+      scopeLabel: 'ALL VERTICALS',
+    },
+    {
+      id: 'digest-cost',
+      label: 'Recorded cost',
+      value: totalCostUsd === undefined ? '—' : costFormatter.format(totalCostUsd),
+      detail:
+        totalCostUsd === undefined
+          ? 'The live briefing ledger is not available yet.'
+          : 'Recorded agent cost in the current briefing ledger window.',
+      source: 'live',
+      state,
+      ...(stateLabel ? { statusLabel: stateLabel } : {}),
+      scopeLabel: 'ALL VERTICALS',
+    },
+  ];
+}
+
+function buildGlobalMoves(
+  grants: ReturnType<typeof useAuthorityGrants>['data'],
+  plugins: ReturnType<typeof usePlugins>['data'],
+  runs: ReturnType<typeof useExecutionRuns>['data'],
+  schedules: ReturnType<typeof useAutomationSchedules>['data'],
+  coverage: GlobalCoverage,
+  now: Date,
+): NextMove[] {
+  const moves: NextMove[] = [];
   const nowMs = now.getTime();
   const sevenDaysFromNow = nowMs + 7 * 24 * 60 * 60 * 1_000;
-  const expiringGrants = (grantData?.items ?? []).filter((grant) => {
+  const activeGrantsPastExpiry = (grants?.items ?? []).filter(
+    (grant) => grant.state === 'active' && Date.parse(grant.validUntil) < nowMs,
+  );
+  const expiringGrants = (grants?.items ?? []).filter((grant) => {
     const expiry = Date.parse(grant.validUntil);
     return grant.state === 'active' && expiry >= nowMs && expiry <= sevenDaysFromNow;
   });
-  const activeGrantsPastExpiry = (grantData?.items ?? []).filter(
-    (grant) => grant.state === 'active' && Date.parse(grant.validUntil) < nowMs,
-  );
-  const degradedPlugins = (pluginData?.items ?? []).filter(
+  const degradedPlugins = (plugins?.items ?? []).filter(
     (plugin) =>
       plugin.installationId !== null &&
       (plugin.installationState === 'degraded' ||
         plugin.healthStatus === 'degraded' ||
         plugin.healthStatus === 'unavailable'),
   );
-  const heldRunCount = runData
-    ? runData.countsByState.awaiting_approval +
-      runData.countsByState.paused_budget +
-      runData.countsByState.paused_plugin
+  const heldRunCount = runs
+    ? runs.countsByState.awaiting_approval +
+      runs.countsByState.paused_budget +
+      runs.countsByState.paused_plugin
     : 0;
-  const hasOperatingExceptions =
-    expiringGrants.length > 0 ||
-    activeGrantsPastExpiry.length > 0 ||
-    degradedPlugins.length > 0 ||
-    heldRunCount > 0 ||
-    grants.isError ||
-    plugins.isError ||
-    runs.isError;
+
+  if (activeGrantsPastExpiry.length > 0) {
+    moves.push({
+      id: 'global:authority-overdue',
+      label: 'Review authority past its recorded expiry',
+      reason: `${coverage.authorityIncomplete ? 'At least ' : ''}${activeGrantsPastExpiry.length} active ${activeGrantsPastExpiry.length === 1 ? 'grant is' : 'grants are'} past expiry.`,
+      eligibility: 'AUTHORITY EXCEPTION',
+      source: 'live',
+      global: true,
+      to: '/operate#operate-authority',
+      destinationLabel: 'OPEN AUTHORITY',
+      dueAt: null,
+      dueLabel: null,
+    });
+  }
+  if (expiringGrants.length > 0) {
+    moves.push({
+      id: 'global:authority-expiring',
+      label: 'Review authority expiring this week',
+      reason: `${coverage.authorityIncomplete ? 'At least ' : ''}${expiringGrants.length} active ${expiringGrants.length === 1 ? 'grant expires' : 'grants expire'} within seven days.`,
+      eligibility: 'AUTHORITY EXCEPTION',
+      source: 'live',
+      global: true,
+      to: '/operate#operate-authority',
+      destinationLabel: 'OPEN AUTHORITY',
+      dueAt: null,
+      dueLabel: null,
+    });
+  }
+  if (degradedPlugins.length > 0) {
+    moves.push({
+      id: 'global:connections-degraded',
+      label: 'Restore degraded connections',
+      reason: `${coverage.pluginsIncomplete ? 'At least ' : ''}${degradedPlugins.length} installed ${degradedPlugins.length === 1 ? 'connection needs' : 'connections need'} review.`,
+      eligibility: 'CONNECTION EXCEPTION',
+      source: 'live',
+      global: true,
+      to: '/connections',
+      destinationLabel: 'OPEN CONNECTIONS',
+      dueAt: null,
+      dueLabel: null,
+    });
+  }
+  if (heldRunCount > 0) {
+    moves.push({
+      id: 'global:runs-held',
+      label: 'Clear held governed runs',
+      reason: `${heldRunCount} ${heldRunCount === 1 ? 'run is' : 'runs are'} awaiting approval, budget, or a connection.`,
+      eligibility: 'RUN EXCEPTION',
+      source: 'live',
+      global: true,
+      to: '/operate',
+      destinationLabel: 'OPEN RUNS',
+      dueAt: null,
+      dueLabel: null,
+    });
+  }
+  for (const schedule of [...(schedules?.items ?? [])]
+    .filter((item) => item.state === 'active')
+    .sort((left, right) => Date.parse(left.nextRunAt) - Date.parse(right.nextRunAt))) {
+    const timing = scheduleTiming(schedule.nextRunAt, now, schedule.timezone);
+    if (!timing) continue;
+    const subject = schedule.entrySubject;
+    moves.push({
+      id: `global:schedule:${schedule.id}`,
+      label: subject ? `${subject.name} is scheduled today` : 'Automation subject unavailable',
+      reason: subject
+        ? `${subject.kind.replaceAll('_', ' ')} version ${subject.version} is scheduled for ${timing.timeLabel}.`
+        : `The exact schedule subject is unavailable. Its next run is recorded for ${timing.timeLabel}.`,
+      eligibility: 'SCHEDULE DUE TODAY',
+      source: 'live',
+      global: true,
+      to: '/operate#operate-schedules',
+      destinationLabel: 'OPEN SCHEDULES',
+      dueAt: schedule.nextRunAt,
+      dueLabel: timing.dueLabel,
+    });
+  }
+  return moves;
+}
+
+export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawVertical = searchParams.get('vertical');
+  const selectedVertical: HomeVerticalId = isHomeVerticalId(rawVertical) ? rawVertical : 'all';
+  const attention = useAttention();
+  const runs = useExecutionRuns();
+  const grants = useAuthorityGrants({ limit: 100 });
+  const schedules = useAutomationSchedules();
+  const plugins = usePlugins({ includeDisabled: true, limit: 100 });
+
+  const program = useMemo(
+    () => (manifestText === undefined ? homeProgram : loadHomeProgram(manifestText)),
+    [manifestText],
+  );
+
+  const attentionData = attention.isError ? undefined : attention.data;
+  const runData = runs.isError ? undefined : runs.data;
+  const grantData = grants.isError ? undefined : grants.data;
+  const scheduleData = schedules.isError ? undefined : schedules.data;
+  const pluginData = plugins.isError ? undefined : plugins.data;
+  const returnedActiveGrantCount = (grantData?.items ?? []).filter(
+    ({ state }) => state === 'active',
+  ).length;
+  const returnedActiveScheduleCount = (scheduleData?.items ?? []).filter(
+    ({ state }) => state === 'active',
+  ).length;
+  const globalCoverage: GlobalCoverage = {
+    authorityIncomplete:
+      grantData !== undefined && grantData.activeTotal > returnedActiveGrantCount,
+    pluginsIncomplete: pluginData?.items.length === 100,
+    schedulesIncomplete:
+      scheduleData !== undefined && scheduleData.activeTotal > returnedActiveScheduleCount,
+    incomplete:
+      grants.isPending ||
+      grants.isError ||
+      runs.isPending ||
+      runs.isError ||
+      plugins.isPending ||
+      plugins.isError ||
+      schedules.isPending ||
+      schedules.isError ||
+      (grantData !== undefined && grantData.activeTotal > returnedActiveGrantCount) ||
+      pluginData?.items.length === 100 ||
+      (scheduleData !== undefined && scheduleData.activeTotal > returnedActiveScheduleCount),
+  };
+  const programMetrics = program.ok ? metricsForVertical(program.model, selectedVertical) : [];
+  const metrics =
+    selectedVertical === 'all'
+      ? [...programMetrics, ...createDigestMetrics(attention)]
+      : programMetrics;
+  const workstreams = program.ok ? workstreamsForVertical(program.model, selectedVertical) : [];
+  const selectedProgramActions = program.ok
+    ? programActionsForVertical(program.model, selectedVertical)
+    : [];
+  const unavailableProgramActions = selectedProgramActions.filter((action) => !action.available);
+  const programMoves: NextMove[] = selectedProgramActions
+    .filter(
+      (action): action is HomeProgramAction & { source: 'live' | 'synthetic' } =>
+        action.available && action.source !== 'unavailable',
+    )
+    .map((action) => ({
+      id: action.id,
+      label: action.label,
+      reason: action.reason,
+      eligibility:
+        action.eligibility === 'milestone_blocker' ? 'MILESTONE BLOCKER' : 'COVERAGE GAP',
+      source: action.source,
+      global: false,
+      to: actionHref(action, selectedVertical),
+      destinationLabel:
+        action.partIds.length > 1
+          ? 'OPEN RELATED AIM PART'
+          : action.partIds.length === 1
+            ? 'OPEN AIM PART'
+            : 'OPEN AIM GROUP',
+      dueAt: action.dueAt,
+      dueLabel: null,
+    }));
+  const globalMoves = buildGlobalMoves(
+    grantData,
+    pluginData,
+    runData,
+    scheduleData,
+    globalCoverage,
+    now,
+  );
+  const eligibleMoves = [...globalMoves, ...programMoves];
+  const visibleMoves = eligibleMoves.slice(0, 5);
+  const reviewItems = [...(attentionData?.decide ?? []), ...(attentionData?.degraded ?? [])].slice(
+    0,
+    3,
+  );
+  const selectedLabel = verticalLabel(selectedVertical);
+  const moveCoverageIncomplete = globalCoverage.incomplete || unavailableProgramActions.length > 0;
+  const countDisclosure = moveCoverageIncomplete
+    ? `${visibleMoves.length} shown · at least ${eligibleMoves.length} eligible · source coverage incomplete`
+    : `${visibleMoves.length} shown of ${eligibleMoves.length} eligible`;
+  const liveSummary = `${selectedLabel} · ${metrics.length} metrics · ${workstreams.length} workstreams · ${moveCoverageIncomplete ? 'at least ' : ''}${visibleMoves.length} ${visibleMoves.length === 1 ? 'next move' : 'next moves'}${moveCoverageIncomplete ? ' · source coverage incomplete' : ''}`;
+  const unavailableWorkstreamCount = workstreams.filter((item) => !item.available).length;
+  const availableWorkstreams = workstreams.filter((item) => item.available);
+  const planLabel =
+    unavailableWorkstreamCount > 0
+      ? `${unavailableWorkstreamCount} ${unavailableWorkstreamCount === 1 ? 'SOURCE' : 'SOURCES'} UNAVAILABLE`
+      : availableWorkstreams.length === 0
+        ? 'PLAN UNAVAILABLE'
+        : availableWorkstreams.every((item) => item.source === 'synthetic')
+          ? 'SYNTHETIC PLAN'
+          : availableWorkstreams.every((item) => item.source === 'declared')
+            ? 'DECLARED PLAN'
+            : 'MIXED PLAN';
+
+  function selectVertical(verticalId: HomeVerticalId) {
+    const next = new URLSearchParams(searchParams);
+    next.set('vertical', verticalId);
+    setSearchParams(next);
+  }
 
   return (
-    <main className="today-home" data-capability-map={aimEnabled ? 'available' : 'hidden'}>
+    <main className="today-home">
       <header className="today-heading">
         <div>
-          <span className="today-eyebrow">TODAY · {greetingFor(now).toUpperCase()}</span>
-          <h1>{fullDateFormatter.format(now)}</h1>
+          <span className="today-eyebrow">PROGRAM CONTROL · {selectedLabel.toUpperCase()}</span>
+          <h1>Today</h1>
+          <time dateTime={now.toISOString()}>{fullDateFormatter.format(now)}</time>
         </div>
         <p>{homeCopy.introduction.join(' ')}</p>
       </header>
 
-      <div className="today-layout">
-        <section
-          className="today-panel today-timeline-panel"
-          aria-labelledby="today-timeline-title"
-        >
-          <header className="today-panel-heading">
-            <div>
-              <span>TIME AXIS</span>
-              <h2 id="today-timeline-title">Work around now</h2>
-            </div>
-            {timelineEvents.length > visibleTimelineEvents.length ? (
-              <small>
-                Nearest {visibleTimelineEvents.length} of {timelineEvents.length} ledger events
-              </small>
-            ) : null}
-          </header>
-
-          <div className="today-source-gaps" aria-label="Timeline source coverage">
-            <p>
-              <strong>Meetings</strong> Not connected on this machine.
-            </p>
-            <p>
-              <strong>Project deadlines</strong> Not connected on this machine.
-            </p>
-          </div>
-          <p className="sr-only">{homeCopy.body?.[0]}</p>
-
-          {runs.isError ? <SourceUnavailable>Run timeline unavailable.</SourceUnavailable> : null}
-          {schedules.isError ? (
-            <SourceUnavailable>Schedule timeline unavailable.</SourceUnavailable>
-          ) : null}
-          {attention.isError ? (
-            <SourceUnavailable>Attention timeline unavailable.</SourceUnavailable>
-          ) : null}
-
-          <ol className="today-timeline" aria-label="Merged work timeline">
-            {visibleTimelineEvents
-              .filter((event) => Date.parse(event.occurredAt) < nowMs)
-              .map((event) => (
-                <TimelineRow event={event} key={event.id} now={now} />
-              ))}
-            <li className="today-now-marker" data-testid="timeline-now">
-              <time dateTime={now.toISOString()}>{sameDayTimeFormatter.format(now)}</time>
-              <span aria-hidden="true" />
-              <strong>NOW</strong>
+      <nav aria-label="Program vertical" className="today-vertical-filter">
+        <span>VERTICAL</span>
+        <ul>
+          {HOME_VERTICALS.map((vertical) => (
+            <li key={vertical.id}>
+              <button
+                aria-pressed={selectedVertical === vertical.id}
+                data-testid={`home-vertical-${vertical.id}`}
+                onClick={() => selectVertical(vertical.id)}
+                type="button"
+              >
+                {vertical.label}
+              </button>
             </li>
-            {visibleTimelineEvents
-              .filter((event) => Date.parse(event.occurredAt) >= nowMs)
-              .map((event) => (
-                <TimelineRow event={event} key={event.id} now={now} />
-              ))}
-          </ol>
+          ))}
+        </ul>
+      </nav>
 
-          {timelineEvents.length === 0 &&
-          !runs.isPending &&
-          !schedules.isPending &&
-          !attention.isPending &&
-          !runs.isError &&
-          !schedules.isError &&
-          !attention.isError ? (
-            <p className="today-empty">No events are recorded in the connected ledger sources.</p>
+      <p aria-atomic="true" aria-live="polite" className="sr-only" data-testid="home-scope-summary">
+        {liveSummary}
+      </p>
+
+      <section
+        aria-labelledby="today-health-title"
+        className="today-band"
+        data-testid="home-band-health"
+      >
+        <BandHeading
+          detail="Current platform coverage and program outcomes, with provenance on every metric."
+          id="today-health-title"
+          number="01"
+          title="Are we on track"
+          trailing={`${metrics.length} METRICS`}
+        />
+        {program.ok ? null : <SourceUnavailable>{program.message}</SourceUnavailable>}
+        <p className="today-source-note">
+          {homeCopy.body?.[0]} {homeCopy.body?.[2]} {homeCopy.body?.[3]}
+        </p>
+        <div aria-label={`${selectedLabel} health metrics`} className="today-metric-grid">
+          {metrics.map((metric) => (
+            <MetricCard key={metric.id} metric={metric} />
+          ))}
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="today-plan-title"
+        className="today-band"
+        data-testid="home-band-plan"
+      >
+        <BandHeading
+          detail="Declared manufacturing workstreams, dates, milestones, and current plan state."
+          id="today-plan-title"
+          number="02"
+          title="AIM manufacturing build"
+          trailing={planLabel}
+        />
+        <div className="today-plan-tools">
+          {featureFlags.visualSurfacesEnabled ? (
+            <Link to="/history">SIX MONTHS AS TERRAIN ↗</Link>
           ) : null}
-        </section>
+          <Link to="/roadmaps">COMPARE ROADMAP FORKS ↗</Link>
+        </div>
+        {program.ok ? (
+          <>
+            {unavailableWorkstreamCount > 0 ? (
+              <SourceUnavailable>
+                {`${unavailableWorkstreamCount} visible ${unavailableWorkstreamCount === 1 ? 'workstream has' : 'workstreams have'} an unavailable plan source.`}
+              </SourceUnavailable>
+            ) : null}
+            <Gantt
+              now={now}
+              program={program.model}
+              selectedVertical={selectedVertical}
+              workstreams={workstreams}
+            />
+          </>
+        ) : (
+          <SourceUnavailable>{program.message}</SourceUnavailable>
+        )}
+      </section>
 
-        <div className="today-side-column" data-day-part={dayPartFor(now)}>
-          <section className="today-panel today-needs-you" aria-labelledby="today-needs-title">
-            <header className="today-panel-heading">
+      <section
+        aria-labelledby="today-action-title"
+        className="today-band"
+        data-testid="home-band-action"
+      >
+        <BandHeading
+          detail="Only milestone blockers, coverage gaps, and global operating exceptions appear here."
+          id="today-action-title"
+          number="03"
+          title="What moves it"
+          trailing={countDisclosure.toUpperCase()}
+        />
+        <div className="today-action-layout">
+          <section aria-labelledby="today-next-moves-title" className="today-next-moves">
+            <header>
               <div>
-                <span>READ-ONLY PREVIEW</span>
-                <h2 id="today-needs-title">Needs you</h2>
+                <span>ACTION · TODAY</span>
+                <h3 id="today-next-moves-title">Next moves</h3>
+              </div>
+              <small>{countDisclosure}</small>
+            </header>
+            {grants.isPending ? (
+              <SourcePending>Authority status is still loading.</SourcePending>
+            ) : null}
+            {grants.isError ? (
+              <SourceUnavailable>Authority status unavailable.</SourceUnavailable>
+            ) : null}
+            {globalCoverage.authorityIncomplete ? (
+              <SourceUnavailable>
+                Authority coverage is incomplete. Counts from returned grants are at least.
+              </SourceUnavailable>
+            ) : null}
+            {plugins.isPending ? (
+              <SourcePending>Connections status is still loading.</SourcePending>
+            ) : null}
+            {plugins.isError ? (
+              <SourceUnavailable>Connections status unavailable.</SourceUnavailable>
+            ) : null}
+            {globalCoverage.pluginsIncomplete ? (
+              <SourceUnavailable>
+                Connection coverage is bounded at 100 returned plugins. Counts are at least.
+              </SourceUnavailable>
+            ) : null}
+            {runs.isPending ? (
+              <SourcePending>Held-run status is still loading.</SourcePending>
+            ) : null}
+            {runs.isError ? (
+              <SourceUnavailable>Held-run status unavailable.</SourceUnavailable>
+            ) : null}
+            {schedules.isPending ? (
+              <SourcePending>Schedule status is still loading.</SourcePending>
+            ) : null}
+            {schedules.isError ? (
+              <SourceUnavailable>Schedule status unavailable.</SourceUnavailable>
+            ) : null}
+            {globalCoverage.schedulesIncomplete ? (
+              <SourceUnavailable>
+                Schedule coverage is incomplete. More active schedules exist than were returned.
+              </SourceUnavailable>
+            ) : null}
+            {unavailableProgramActions.length > 0 ? (
+              <SourceUnavailable>
+                {`${unavailableProgramActions.length} program ${unavailableProgramActions.length === 1 ? 'action has' : 'actions have'} unavailable contributing sources.`}
+              </SourceUnavailable>
+            ) : null}
+            {visibleMoves.length === 0 ? (
+              <p className="today-empty">No available item meets the Home eligibility rule.</p>
+            ) : (
+              <ol
+                aria-label="Eligible next moves"
+                className="today-task-list"
+                data-testid="home-task-list"
+              >
+                {visibleMoves.map((move) => (
+                  <li data-source={move.source} key={move.id}>
+                    <Link to={move.to}>
+                      <span>
+                        {move.global ? 'GLOBAL · ' : ''}
+                        {move.eligibility}
+                      </span>
+                      <strong>{move.label}</strong>
+                      <p>{move.reason}</p>
+                      <small>
+                        {move.dueLabel
+                          ? `DUE ${move.dueLabel.toUpperCase()} · `
+                          : move.dueAt
+                            ? `DUE ${formatPlanDate(move.dueAt).toUpperCase()} · `
+                            : ''}
+                        {move.source.toUpperCase()} · {move.destinationLabel} →
+                      </small>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+
+          <section aria-labelledby="today-needs-title" className="today-needs-you">
+            <header>
+              <div>
+                <span>GLOBAL · READ-ONLY PREVIEW</span>
+                <h3 id="today-needs-title">Needs you</h3>
               </div>
               {attentionData ? (
                 <b aria-label={`${attentionData.decideBadgeCount} decisions`}>
@@ -322,12 +885,11 @@ export function HomePage({ aimEnabled = false, now = new Date() }: HomePageProps
                 </b>
               ) : null}
             </header>
-
             {attention.isPending ? (
               <p className="today-muted">Reading the governed queue…</p>
             ) : null}
             {attention.isError ? (
-              <SourceUnavailable>Needs You unavailable.</SourceUnavailable>
+              <SourceUnavailable>Attention preview unavailable.</SourceUnavailable>
             ) : null}
             {attentionData && reviewItems.length === 0 ? (
               <p className="today-empty">
@@ -338,17 +900,13 @@ export function HomePage({ aimEnabled = false, now = new Date() }: HomePageProps
               <ol className="today-review-list">
                 {reviewItems.map((item) => (
                   <li data-status={item.status} key={item.id}>
-                    <span>
-                      {item.shelf === 'degraded' ? <i aria-hidden="true" /> : null}
-                      {item.status.replaceAll('_', ' ').toUpperCase()}
-                    </span>
+                    <span>{item.status.replaceAll('_', ' ').toUpperCase()}</span>
                     <strong>{item.headline}</strong>
                     <p>{item.delta}</p>
                   </li>
                 ))}
               </ol>
             ) : null}
-
             <Link className="primary-button today-attention-link" to="/attention">
               {homeAttentionAction.label} <span aria-hidden="true">→</span>
             </Link>
@@ -356,98 +914,8 @@ export function HomePage({ aimEnabled = false, now = new Date() }: HomePageProps
               {homeAttentionAction.consequence} {homeAttentionAction.undo}
             </small>
           </section>
-
-          <section className="today-panel today-briefing" aria-labelledby="today-briefing-title">
-            <header className="today-panel-heading">
-              <div>
-                <span>BRIEFING WINDOW</span>
-                <h2 id="today-briefing-title">Since the last delivered briefing</h2>
-              </div>
-            </header>
-            {attention.isPending ? <p className="today-muted">Reading the digest cursor…</p> : null}
-            {attention.isError ? (
-              <SourceUnavailable>Briefing digest unavailable.</SourceUnavailable>
-            ) : null}
-            {attentionData ? (
-              <>
-                <strong className="today-digest-headline">{attentionData.digest.headline}</strong>
-                <p>
-                  {attentionData.lastDeliveredBriefingAt
-                    ? `Last delivered ${datedTimeFormatter.format(new Date(attentionData.lastDeliveredBriefingAt))}.`
-                    : 'No briefing has been delivered yet; the ledger cursor remains the source boundary.'}
-                </p>
-                <small className="today-contract-note">
-                  Briefing history is not exposed by the current read API; this is the active cursor
-                  window only.
-                </small>
-              </>
-            ) : null}
-          </section>
-
-          <section className="today-panel today-history-gap" aria-labelledby="today-history-title">
-            <header className="today-panel-heading">
-              <div>
-                <span>14-DAY DECISION FLOW</span>
-                <h2 id="today-history-title">History contract needed</h2>
-              </div>
-            </header>
-            <p>{homeCopy.body?.[1]}</p>
-          </section>
         </div>
-      </div>
-
-      {hasOperatingExceptions ? (
-        <section className="today-panel today-operating" aria-labelledby="today-operating-title">
-          <header className="today-panel-heading">
-            <div>
-              <span>NONNOMINAL ONLY</span>
-              <h2 id="today-operating-title">Operating exceptions</h2>
-            </div>
-          </header>
-          <div className="today-exception-grid">
-            {grants.isError ? (
-              <SourceUnavailable>Authority status unavailable.</SourceUnavailable>
-            ) : null}
-            {plugins.isError ? (
-              <SourceUnavailable>Connections status unavailable.</SourceUnavailable>
-            ) : null}
-            {runs.isError ? (
-              <SourceUnavailable>Held-run status unavailable.</SourceUnavailable>
-            ) : null}
-            {activeGrantsPastExpiry.length > 0 ? (
-              <p className="today-exception">
-                <strong>AUTHORITY · OVERDUE</strong>
-                At least {activeGrantsPastExpiry.length} active{' '}
-                {activeGrantsPastExpiry.length === 1 ? 'grant has' : 'grants have'} passed the
-                recorded expiry time.
-              </p>
-            ) : null}
-            {expiringGrants.length > 0 ? (
-              <p className="today-exception">
-                <strong>AUTHORITY · EXPIRING</strong>
-                At least {expiringGrants.length} active{' '}
-                {expiringGrants.length === 1 ? 'grant expires' : 'grants expire'} within seven days.
-              </p>
-            ) : null}
-            {degradedPlugins.length > 0 ? (
-              <p className="today-exception">
-                <strong>CONNECTIONS · DEGRADED</strong>
-                At least {degradedPlugins.length} installed{' '}
-                {degradedPlugins.length === 1 ? 'connection needs' : 'connections need'} review.
-              </p>
-            ) : null}
-            {heldRunCount > 0 ? (
-              <p className="today-exception">
-                <strong>RUNS · HELD</strong>
-                {heldRunCount} {heldRunCount === 1 ? 'run is' : 'runs are'} held:{' '}
-                {runData?.countsByState.awaiting_approval ?? 0} awaiting approval,{' '}
-                {runData?.countsByState.paused_budget ?? 0} budget-paused, and{' '}
-                {runData?.countsByState.paused_plugin ?? 0} connection-paused.
-              </p>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+      </section>
     </main>
   );
 }

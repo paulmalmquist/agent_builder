@@ -161,6 +161,7 @@ export class ExecutionEngine {
     const started = performance.now();
     let observedUsage: ModelUsage | null = null;
     let observedPluginCostUsd = 0;
+    let pluginInvocationStarted = false;
     const incurredUsage = (): ProviderUsageSettlement | undefined => {
       if (observedUsage === null && observedPluginCostUsd === 0) return undefined;
       const usage = observedUsage ?? { inputTokens: 0, outputTokens: 0 };
@@ -202,8 +203,9 @@ export class ExecutionEngine {
       const input = inputResult.data;
       const pluginResult =
         this.pluginPlans === undefined
-          ? { context: {}, costUsd: 0 }
+          ? { context: {}, costUsd: 0, invocationCount: 0 }
           : await this.pluginPlans.execute(run, workerId, controller.signal);
+      pluginInvocationStarted = pluginResult.invocationCount > 0;
       observedPluginCostUsd = pluginResult.costUsd;
       const baseContext = providerContextValues(executionContext);
       if (Object.hasOwn(baseContext, 'pluginResults')) {
@@ -302,12 +304,17 @@ export class ExecutionEngine {
         return;
       }
       const failure = classifyFailure(error);
+      const retrySuppressedBy =
+        failure.retryable && pluginInvocationStarted
+          ? ('plugin_invocation_started' as const)
+          : undefined;
       const disposition = await this.store.failOrRetry(
         run,
         workerId,
         failure.code,
         failure.retryable,
         incurredUsage(),
+        retrySuppressedBy,
       );
       this.logger.warn(
         { runId: run.id, code: failure.code, disposition: disposition.state },

@@ -6,6 +6,8 @@ import {
   MemoryCandidateState,
   PluginInstallationState,
   ReleaseEvaluationVerdict,
+  ResourceKind,
+  ResourceLifecycle,
   type DigestDeliveryAttempt,
   type DigestSnapshot as DigestSnapshotRecord,
   type ExecutionRun,
@@ -14,8 +16,10 @@ import {
 } from '@prisma/client';
 import {
   consoleActionCopy,
+  consoleCriticalCopy,
   attentionItemDetailSchema,
   attentionItemSchema,
+  attentionMembershipSchema,
   attentionResolutionSchema,
   attentionResponseSchema,
   digestSnapshotSchema,
@@ -24,23 +28,283 @@ import {
   executionRunEventSchema,
   jsonObjectSchema,
   resolveAttentionItemRequestSchema,
+  runPluginRequirementSchema,
   type AttentionItem,
   type AttentionItemDetail,
+  type AttentionMembership,
   type AttentionResponse,
   type DigestSnapshot,
   type ExecutionRunEvent,
   type JsonValue,
 } from '@agent-builder/contracts';
 import { z } from 'zod';
+import { canonicalJson, sha256 } from '@paul-os/runtime';
 import { appendAuditEvent } from '../audit.js';
+import { hasMinimumRole } from '../authorization.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentRequestContext, currentRequestPrincipal } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { requireHumanActor } from './actors.js';
+import {
+  safeAttentionLabel,
+  subjectFromNamedVersion,
+  subjectFromRelease,
+  subjectFromResourceVersion,
+  subjectFromRun,
+  type AttentionSubject,
+} from './attention-subject.js';
+import {
+  executionApprovalInclude,
+  groupExecutionApprovals,
+  type ExecutionApprovalGroup,
+  type ExecutionApprovalRecord,
+} from './execution-approval-groups.js';
+import { learningDecisionGroupKey } from './learning-decision-groups.js';
+import {
+  isQuarantinedTestIdentity,
+  quarantinedActorPredicates,
+  userFacingExecutionRunWhere,
+  userFacingImprovementCandidateWhere,
+  userFacingMemoryCandidateWhere,
+  userFacingObservationWhere,
+  userFacingPluginInstallationWhere,
+  userFacingReleaseBundleWhere,
+  userFacingResourceVersionWhere,
+} from './user-facing-records.js';
 
 const stringArraySchema = z.array(z.string());
 const MAX_DIGEST_EVENTS = 250;
+const MAX_PENDING_ATTENTION_DECISIONS = 250;
+
+const attentionRunInclude = {
+  entryResourceVersion: { include: { family: true } },
+  release: {
+    include: {
+      resources: { include: { resourceVersion: { include: { family: true } } } },
+    },
+  },
+} satisfies Prisma.ExecutionRunInclude;
+
+const attentionReleaseEvaluationInclude = {
+  release: {
+    include: {
+      resources: { include: { resourceVersion: { include: { family: true } } } },
+    },
+  },
+} satisfies Prisma.ReleaseEvaluationInclude;
+
+const attentionMemoryInclude = {
+  sourceRun: { include: attentionRunInclude },
+} satisfies Prisma.MemoryCandidateInclude;
+
+const attentionImprovementInclude = {
+  observation: {
+    include: { sourceRun: { include: attentionRunInclude } },
+  },
+} satisfies Prisma.ImprovementCandidateInclude;
+
+type AttentionRunRecord = Prisma.ExecutionRunGetPayload<{ include: typeof attentionRunInclude }>;
+type AttentionReleaseEvaluationRecord = Prisma.ReleaseEvaluationGetPayload<{
+  include: typeof attentionReleaseEvaluationInclude;
+}>;
+type AttentionMemoryRecord = Prisma.MemoryCandidateGetPayload<{
+  include: typeof attentionMemoryInclude;
+}>;
+type AttentionImprovementRecord = Prisma.ImprovementCandidateGetPayload<{
+  include: typeof attentionImprovementInclude;
+}>;
+
+interface AttentionDecisionGroup<T> {
+  representative: T;
+  members: T[];
+  requestCount: number;
+  decisionGroupKey: string | null;
+}
+
+type AttentionMembershipRecord = AttentionMembership['records'][number];
+
+function exactMembership(records: AttentionMembershipRecord[]): AttentionMembership | null {
+  if (records.length <= 1) return null;
+  return attentionMembershipSchema.parse({ exactCount: records.length, records });
+}
+
+function membershipFromItem(item: AttentionItem): AttentionMembership | null {
+  const candidate = item.payload.metadata['membership'];
+  if (candidate === undefined || candidate === null) return null;
+  return attentionMembershipSchema.parse(candidate);
+}
+
+function memoryDecisionKey(record: AttentionMemoryRecord): string {
+  return sha256(
+    canonicalJson({
+      workspaceId: record.sourceRun.workspaceId,
+      departmentId: record.sourceRun.departmentId,
+      projectId: record.sourceRun.projectId,
+      namespace: record.namespace,
+      proposedValue: record.proposedValue,
+    }),
+  );
+}
+
+function groupedStagedMemoryCandidates(
+  records: AttentionMemoryRecord[],
+): AttentionDecisionGroup<AttentionMemoryRecord>[] {
+  const groups = new Map<string, AttentionMemoryRecord[]>();
+  for (const record of [...records].sort(
+    (left, right) =>
+      right.stagedAt.getTime() - left.stagedAt.getTime() || right.id.localeCompare(left.id),
+  )) {
+    const key = memoryDecisionKey(record);
+    const members = groups.get(key) ?? [];
+    members.push(record);
+    groups.set(key, members);
+  }
+  return [...groups.values()].flatMap((members) => {
+    const representative = members[0];
+    return representative === undefined
+      ? []
+      : [
+          {
+            representative,
+            members,
+            requestCount: members.length,
+            decisionGroupKey: learningDecisionGroupKey(
+              'memory',
+              memoryDecisionKey(representative),
+              members.map(({ id }) => id),
+            ),
+          },
+        ];
+  });
+}
+
+function releaseDecisionKey(record: AttentionReleaseEvaluationRecord): string {
+  return canonicalJson({
+    releaseId: record.releaseId,
+    corpusVersion: record.corpusVersion,
+    executorKind: record.executorKind,
+    executorVersion: record.executorVersion,
+    evaluationMode: record.evaluationMode,
+    gateScores: record.gateScores,
+  });
+}
+
+function groupedCurrentReleaseEvaluations(
+  pending: AttentionReleaseEvaluationRecord[],
+  latestEvaluationIds: ReadonlySet<string>,
+): AttentionDecisionGroup<AttentionReleaseEvaluationRecord>[] {
+  const byRelease = new Map<string, AttentionReleaseEvaluationRecord[]>();
+  for (const evaluation of pending) {
+    const members = byRelease.get(evaluation.releaseId) ?? [];
+    members.push(evaluation);
+    byRelease.set(evaluation.releaseId, members);
+  }
+  const groups: AttentionDecisionGroup<AttentionReleaseEvaluationRecord>[] = [];
+  for (const members of byRelease.values()) {
+    const latest = members.find(({ id }) => latestEvaluationIds.has(id));
+    if (latest === undefined) continue;
+    const key = releaseDecisionKey(latest);
+    groups.push({
+      representative: latest,
+      members: members.filter((candidate) => releaseDecisionKey(candidate) === key),
+      requestCount: members.filter((candidate) => releaseDecisionKey(candidate) === key).length,
+      decisionGroupKey: null,
+    });
+  }
+  return groups;
+}
+
+function improvementDecisionKey(record: AttentionImprovementRecord): string {
+  return sha256(
+    canonicalJson({
+      workspaceId: record.observation.workspaceId,
+      departmentId: record.observation.departmentId,
+      projectId: record.observation.sourceRun?.projectId ?? null,
+      entryResourceVersionId: record.observation.sourceRun?.entryResourceVersionId ?? null,
+      title: record.title,
+      proposedTarget: record.proposedTarget,
+      proposedChange: record.proposedChange,
+    }),
+  );
+}
+
+function groupedImprovementCandidates(
+  records: AttentionImprovementRecord[],
+): AttentionDecisionGroup<AttentionImprovementRecord>[] {
+  const groups = new Map<string, AttentionImprovementRecord[]>();
+  for (const record of [...records].sort(
+    (left, right) =>
+      right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id),
+  )) {
+    const key = improvementDecisionKey(record);
+    const members = groups.get(key) ?? [];
+    members.push(record);
+    groups.set(key, members);
+  }
+  return [...groups.values()].flatMap((members) => {
+    const representative = members[0];
+    return representative === undefined
+      ? []
+      : [
+          {
+            representative,
+            members,
+            requestCount: members.length,
+            decisionGroupKey: learningDecisionGroupKey(
+              'improvement',
+              improvementDecisionKey(representative),
+              members.map(({ id }) => id),
+            ),
+          },
+        ];
+  });
+}
+
+interface ImprovementTargetReference {
+  kind: ResourceKind | null;
+  slug: string;
+  version: string | null;
+  intent: 'current_base' | 'exact' | 'successor';
+}
+
+interface GovernedImprovementTarget {
+  subject: AttentionSubject;
+  intentLabel: string;
+}
+
+function normalizedResourceKind(value: string | undefined): ResourceKind | null {
+  if (value === undefined) return null;
+  const normalized = value.replace(/([a-z])([A-Z])/gu, '$1_$2').toUpperCase();
+  return Object.values(ResourceKind).find((kind) => kind === normalized) ?? null;
+}
+
+function improvementTargetReference(value: string): ImprovementTargetReference | null {
+  const normalized = value.trim();
+  const match =
+    /^(?:([A-Z][A-Za-z]+):)?([a-z0-9]+(?:-[a-z0-9]+)*)(?:@([A-Za-z0-9][A-Za-z0-9.+_-]{0,79}))?$/u.exec(
+      normalized,
+    );
+  if (match?.[2] === undefined) return null;
+  const kind = normalizedResourceKind(match[1]);
+  if (match[1] !== undefined && kind === null) return null;
+  const requestedVersion = match[3] ?? null;
+  return {
+    kind,
+    slug: match[2],
+    version: requestedVersion === null || requestedVersion === 'next' ? null : requestedVersion,
+    intent:
+      requestedVersion === 'next'
+        ? 'successor'
+        : requestedVersion === null
+          ? 'current_base'
+          : 'exact',
+  };
+}
+
+function improvementTargetKey(reference: ImprovementTargetReference): string {
+  return `${reference.kind ?? '*'}:${reference.slug}@${reference.intent}:${reference.version ?? ''}`;
+}
 
 type DegradedPluginRecord = Prisma.PluginInstallationGetPayload<{
   include: { pluginVersion: { include: { family: true } } };
@@ -103,12 +367,82 @@ function iso(value: Date): string {
   return value.toISOString();
 }
 
+function humanizeRecorderValue(value: string): string {
+  const normalized = value.replaceAll('_', ' ').replaceAll('-', ' ').trim().toLowerCase();
+  return normalized.length === 0
+    ? 'Recorded phase'
+    : `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+}
+
 function itemId(kind: AttentionItem['kind'], sourceId: string): string {
   return `${kind}:${sourceId}`;
 }
 
 function runScopes(run: { requiredToolScopes: Prisma.JsonValue }): string[] {
   return parseJson(stringArraySchema, run.requiredToolScopes, 'ExecutionRun.requiredToolScopes');
+}
+
+function humanizeToolScope(scope: string): string {
+  const label = scope
+    .split(/[.:/_-]+/u)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' · ');
+  return label.length > 0 ? label : scope;
+}
+
+const SENSITIVE_AUTHORITY_LABEL = /secret|token|password|credential|api.?key/iu;
+const OPAQUE_AUTHORITY_LABEL =
+  /(?:\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b|\b[0-9a-f]{8,}\b|\b[a-z][a-z0-9+.-]*:\/\/|\burn:[^\s]+|\b[^\s@]+@[^\s@]+\.[^\s@]+|(?:^|\s)(?:[a-z]:[\\/]|\.{0,2}[\\/]|\/))/iu;
+
+function safeAuthorityBoundaryLabel(rawValue: string, displayValue = rawValue): string | null {
+  if (SENSITIVE_AUTHORITY_LABEL.test(rawValue) || OPAQUE_AUTHORITY_LABEL.test(rawValue)) {
+    return null;
+  }
+  return safeAttentionLabel(displayValue, 220);
+}
+
+export function approvalScopePresentation(
+  run: Pick<ExecutionRun, 'requiredToolScopes' | 'requiredPluginScopes'>,
+): { labels: string[]; total: number } {
+  const toolLabels = runScopes(run).map((scope) => ({
+    raw: scope,
+    safe: safeAuthorityBoundaryLabel(scope, humanizeToolScope(scope)),
+  }));
+  const pluginLabels = parseJson(
+    z.array(runPluginRequirementSchema),
+    run.requiredPluginScopes,
+    'ExecutionRun.requiredPluginScopes',
+  ).map(({ scopeDescription }) => ({
+    raw: scopeDescription,
+    safe: safeAuthorityBoundaryLabel(scopeDescription),
+  }));
+  const exactBoundaries = [
+    ...new Map(
+      [...toolLabels, ...pluginLabels].map((boundary) => [boundary.raw, boundary]),
+    ).values(),
+  ];
+  if (exactBoundaries.length === 0) return { labels: ['Run and spend limit'], total: 1 };
+  if (exactBoundaries.some(({ safe }) => safe === null)) {
+    return {
+      labels: [
+        exactBoundaries.length === 1
+          ? 'One exact authority boundary'
+          : `${exactBoundaries.length} exact authority boundaries`,
+      ],
+      total: exactBoundaries.length,
+    };
+  }
+  const safeLabels = exactBoundaries.map(({ safe }) => safe as string);
+  if (safeLabels.length <= 4) return { labels: safeLabels, total: safeLabels.length };
+  return {
+    labels: [...safeLabels.slice(0, 3), `${safeLabels.length - 3} more exact boundaries in review`],
+    total: safeLabels.length,
+  };
+}
+
+function boundedHeadline(value: string): string {
+  return value.length <= 160 ? value : `${value.slice(0, 159)}…`;
 }
 
 function eventDetails(value: Prisma.JsonValue, label: string): Record<string, JsonValue> {
@@ -354,6 +688,7 @@ export function summarizePlatformEventsForDigest(
   }>,
   windowStartedAt: Date | null,
   windowEndedAt: Date,
+  sourceEventCount = records.length,
 ) {
   if (records.length > MAX_DIGEST_EVENTS) {
     throw new AppError(
@@ -367,7 +702,7 @@ export function summarizePlatformEventsForDigest(
     ...summary,
     eventCount: records.length,
     eventLines: records.map(digestEventLine),
-    omittedEventCount: 0,
+    omittedEventCount: Math.max(0, sourceEventCount - records.length),
   });
 }
 
@@ -409,6 +744,119 @@ function summarizePlatformEventCounts(
   });
 }
 
+type DigestPlatformEvent = {
+  kind: string;
+  entityType: string;
+  entityId: string;
+};
+
+const uuidValue = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+async function userFacingDigestEvents<T extends DigestPlatformEvent>(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  records: readonly T[],
+  scope: ReturnType<typeof aggregateScopeWhere>,
+): Promise<T[]> {
+  const idsFor = (entityType: string) =>
+    records
+      .filter((record) => record.entityType === entityType && uuidValue.test(record.entityId))
+      .map(({ entityId }) => entityId);
+  const runIds = idsFor('ExecutionRun');
+  const resolutionRunByItemId = new Map<string, string>();
+  for (const record of records) {
+    if (record.kind !== 'attention.resolved' || record.entityType !== 'AttentionItem') continue;
+    const match = /^stalled_run:([0-9a-f-]+)$/iu.exec(record.entityId);
+    if (match?.[1] !== undefined && uuidValue.test(match[1])) {
+      resolutionRunByItemId.set(record.entityId, match[1]);
+    }
+  }
+  const allRunIds = [...new Set([...runIds, ...resolutionRunByItemId.values()])];
+  const observationIds = idsFor('Observation');
+  const releaseIds = idsFor('ReleaseBundle');
+  const evaluationIds = idsFor('ReleaseEvaluation');
+  const pluginIds = idsFor('PluginInstallation');
+  const publicationIds = idsFor('CatalogPublication');
+  const improvementIds = idsFor('ImprovementCandidate');
+  const [runs, observations, releases, evaluations, plugins, publications, improvements] =
+    await Promise.all([
+      allRunIds.length === 0
+        ? []
+        : prisma.executionRun.findMany({
+            where: { AND: [scope, userFacingExecutionRunWhere, { id: { in: allRunIds } }] },
+            select: { id: true, state: true },
+          }),
+      observationIds.length === 0
+        ? []
+        : prisma.observation.findMany({
+            where: { AND: [scope, userFacingObservationWhere, { id: { in: observationIds } }] },
+            select: { id: true },
+          }),
+      releaseIds.length === 0
+        ? []
+        : prisma.releaseBundle.findMany({
+            where: { AND: [scope, userFacingReleaseBundleWhere, { id: { in: releaseIds } }] },
+            select: { id: true },
+          }),
+      evaluationIds.length === 0
+        ? []
+        : prisma.releaseEvaluation.findMany({
+            where: {
+              AND: [
+                { id: { in: evaluationIds } },
+                { release: { is: { AND: [scope, userFacingReleaseBundleWhere] } } },
+              ],
+            },
+            select: { id: true },
+          }),
+      pluginIds.length === 0
+        ? []
+        : prisma.pluginInstallation.findMany({
+            where: { AND: [scope, userFacingPluginInstallationWhere, { id: { in: pluginIds } }] },
+            select: { id: true },
+          }),
+      publicationIds.length === 0
+        ? []
+        : prisma.catalogPublication.findMany({
+            where: {
+              AND: [
+                scope,
+                { resourceVersion: { is: userFacingResourceVersionWhere } },
+                { id: { in: publicationIds } },
+              ],
+            },
+            select: { id: true },
+          }),
+      improvementIds.length === 0
+        ? []
+        : prisma.improvementCandidate.findMany({
+            where: {
+              AND: [
+                userFacingImprovementCandidateWhere,
+                { observation: scope },
+                { id: { in: improvementIds } },
+              ],
+            },
+            select: { id: true },
+          }),
+    ]);
+  const visible = new Set<string>([
+    ...runs.map(({ id }) => `ExecutionRun:${id}`),
+    ...observations.map(({ id }) => `Observation:${id}`),
+    ...releases.map(({ id }) => `ReleaseBundle:${id}`),
+    ...evaluations.map(({ id }) => `ReleaseEvaluation:${id}`),
+    ...plugins.map(({ id }) => `PluginInstallation:${id}`),
+    ...publications.map(({ id }) => `CatalogPublication:${id}`),
+    ...improvements.map(({ id }) => `ImprovementCandidate:${id}`),
+  ]);
+  const runStateById = new Map(runs.map(({ id, state }) => [id, state]));
+  for (const [attentionItemId, runId] of resolutionRunByItemId) {
+    if (runStateById.get(runId) === ExecutionRunState.FAILED) {
+      visible.add(`AttentionItem:${attentionItemId}`);
+    }
+  }
+  return records.filter(({ entityType, entityId }) => visible.has(`${entityType}:${entityId}`));
+}
+
 function digestState(attempts: readonly DigestDeliveryAttempt[]) {
   const delivered = attempts.find(
     (attempt) => attempt.state === DigestDeliveryAttemptState.DELIVERED,
@@ -444,6 +892,14 @@ export class AttentionService {
     const now = new Date();
     const scope = aggregateScopeWhere();
     const principal = currentRequestPrincipal();
+    const canGovernRelease =
+      hasMinimumRole(principal, 'owner') &&
+      (principal.departmentId !== null || hasMinimumRole(principal, 'admin'));
+    const governedReleaseScope = {
+      workspaceId: principal.workspaceId,
+      departmentId: principal.departmentId,
+      ...(canGovernRelease ? {} : { id: { in: [] as string[] } }),
+    };
     const cursor = await this.prisma.attentionCursor.findFirst({
       where: {
         workspaceId: principal.workspaceId,
@@ -462,38 +918,65 @@ export class AttentionService {
       events,
     ] = await Promise.all([
       this.prisma.approvalRequest.findMany({
-        where: { state: ApprovalRequestState.PENDING, run: scope },
-        include: { run: true },
+        where: {
+          state: ApprovalRequestState.PENDING,
+          NOT: quarantinedActorPredicates('requestedBy'),
+          run: {
+            AND: [
+              scope,
+              userFacingExecutionRunWhere,
+              { state: ExecutionRunState.AWAITING_APPROVAL },
+            ],
+          },
+        },
+        include: executionApprovalInclude,
         orderBy: { createdAt: 'asc' },
+        take: MAX_PENDING_ATTENTION_DECISIONS + 1,
       }),
       this.prisma.releaseEvaluation.findMany({
         where: {
           verdict: ReleaseEvaluationVerdict.PASSED,
-          release: scope,
+          release: {
+            AND: [
+              governedReleaseScope,
+              userFacingReleaseBundleWhere,
+              { activeChannels: { none: {} } },
+            ],
+          },
           promotionDecisions: { none: {} },
           declineDecisions: { none: {} },
         },
-        include: {
-          release: {
-            include: { resources: { include: { resourceVersion: true } } },
-          },
-        },
-        orderBy: { finishedAt: 'asc' },
+        include: attentionReleaseEvaluationInclude,
+        orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+        take: MAX_PENDING_ATTENTION_DECISIONS + 1,
       }),
       this.prisma.memoryCandidate.findMany({
-        where: { state: MemoryCandidateState.STAGED, sourceRun: scope },
-        include: { sourceRun: true },
-        orderBy: { stagedAt: 'asc' },
+        where: {
+          AND: [
+            userFacingMemoryCandidateWhere,
+            { state: MemoryCandidateState.STAGED, sourceRun: scope },
+          ],
+        },
+        include: attentionMemoryInclude,
+        orderBy: [{ stagedAt: 'desc' }, { id: 'desc' }],
+        take: MAX_PENDING_ATTENTION_DECISIONS + 1,
       }),
       this.prisma.improvementCandidate.findMany({
-        where: { state: ImprovementCandidateState.PROPOSED, observation: scope },
-        include: { observation: true },
+        where: {
+          AND: [
+            userFacingImprovementCandidateWhere,
+            { state: ImprovementCandidateState.PROPOSED, observation: scope },
+          ],
+        },
+        include: attentionImprovementInclude,
         orderBy: { createdAt: 'asc' },
+        take: MAX_PENDING_ATTENTION_DECISIONS + 1,
       }),
       this.prisma.executionRun.findMany({
         where: {
           AND: [
             scope,
+            userFacingExecutionRunWhere,
             {
               OR: [
                 { state: ExecutionRunState.FAILED },
@@ -509,13 +992,19 @@ export class AttentionService {
         },
         orderBy: { updatedAt: 'desc' },
         take: 50,
+        include: attentionRunInclude,
       }),
       this.prisma.pluginInstallation.findMany({
         where: {
-          ...scope,
-          state: {
-            in: [PluginInstallationState.DEGRADED, PluginInstallationState.DISABLED],
-          },
+          AND: [
+            scope,
+            userFacingPluginInstallationWhere,
+            {
+              state: {
+                in: [PluginInstallationState.DEGRADED, PluginInstallationState.DISABLED],
+              },
+            },
+          ],
         },
         include: { pluginVersion: { include: { family: true } } },
         orderBy: { updatedAt: 'desc' },
@@ -538,24 +1027,148 @@ export class AttentionService {
       }),
     ]);
 
-    const decide: AttentionItem[] = [
-      ...approvals.map(({ run, ...approval }) => this.executionApprovalItem(run, approval)),
-      ...evaluations
-        .filter(
-          ({ release }) =>
-            release.resources.length > 0 &&
-            release.resources.every(
-              ({ resourceVersion }) =>
-                resourceVersion.lifecycle === 'CERTIFIED' &&
-                /^[a-f0-9]{7,64}$/i.test(resourceVersion.sourceCommit),
-            ),
+    if (
+      approvals.length > MAX_PENDING_ATTENTION_DECISIONS ||
+      evaluations.length > MAX_PENDING_ATTENTION_DECISIONS ||
+      memory.length > MAX_PENDING_ATTENTION_DECISIONS ||
+      improvements.length > MAX_PENDING_ATTENTION_DECISIONS
+    ) {
+      throw new AppError(
+        503,
+        'ATTENTION_QUEUE_LIMIT_EXCEEDED',
+        'The governed decision queue exceeds its safe review limit',
+      );
+    }
+    const latestReleaseEvaluationIds = new Set(
+      (
+        await Promise.all(
+          [...new Set(evaluations.map(({ releaseId }) => releaseId))].map((releaseId) =>
+            this.prisma.releaseEvaluation.findFirst({
+              where: { releaseId },
+              select: { id: true },
+              orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
+            }),
+          ),
         )
-        .map((evaluation) => this.releasePromotionItem(evaluation)),
-      ...memory.map((candidate) => this.memoryItem(candidate)),
-      ...improvements.map((candidate) => this.improvementItem(candidate)),
+      )
+        .filter((record): record is { id: string } => record !== null)
+        .map(({ id }) => id),
+    );
+    const eligibleEvaluations = evaluations.filter(
+      ({ release }) =>
+        release.resources.length > 0 &&
+        release.resources.every(
+          ({ resourceVersion }) =>
+            resourceVersion.lifecycle === 'CERTIFIED' &&
+            /^[a-f0-9]{7,64}$/i.test(resourceVersion.sourceCommit) &&
+            ![
+              resourceVersion.sourceCommit,
+              resourceVersion.createdBy,
+              resourceVersion.updatedBy,
+              resourceVersion.family.createdBy,
+              resourceVersion.family.updatedBy,
+            ].some(isQuarantinedTestIdentity),
+        ),
+    );
+    const releaseGroups = groupedCurrentReleaseEvaluations(
+      eligibleEvaluations,
+      latestReleaseEvaluationIds,
+    );
+    const improvementGroups = groupedImprovementCandidates(improvements);
+    const targetReferences = [
+      ...new Map(
+        improvementGroups.flatMap(({ representative }) => {
+          const reference = improvementTargetReference(representative.proposedTarget);
+          return reference === null ? [] : [[improvementTargetKey(reference), reference] as const];
+        }),
+      ).values(),
     ];
+    const governedTargetVersions =
+      targetReferences.length === 0
+        ? []
+        : await this.prisma.resourceVersion.findMany({
+            where: {
+              AND: [
+                userFacingResourceVersionWhere,
+                {
+                  lifecycle: ResourceLifecycle.CERTIFIED,
+                  OR: targetReferences.map((reference) => ({
+                    ...(reference.version === null ? {} : { version: reference.version }),
+                    family: {
+                      ...scope,
+                      slug: reference.slug,
+                      ...(reference.kind === null ? {} : { kind: reference.kind }),
+                    },
+                  })),
+                },
+              ],
+            },
+            include: { family: true },
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            take: MAX_PENDING_ATTENTION_DECISIONS + 1,
+          });
+    const governedTargetByKey = new Map<string, GovernedImprovementTarget | null>();
+    for (const reference of targetReferences) {
+      const matches = governedTargetVersions.filter(
+        ({ family, version }) =>
+          family.slug === reference.slug &&
+          (reference.kind === null || family.kind === reference.kind) &&
+          (reference.version === null || version === reference.version),
+      );
+      const familyIds = new Set(matches.map(({ familyId }) => familyId));
+      const baseSubject =
+        familyIds.size === 1 ? subjectFromResourceVersion(matches[0] ?? null) : null;
+      governedTargetByKey.set(
+        improvementTargetKey(reference),
+        baseSubject === null
+          ? null
+          : {
+              subject: baseSubject,
+              intentLabel:
+                reference.intent === 'exact'
+                  ? `Exact governed version ${baseSubject.version}`
+                  : reference.intent === 'successor'
+                    ? `Successor to governed version ${baseSubject.version}`
+                    : `Current governed base ${baseSubject.version}`,
+            },
+      );
+    }
+
+    const approvalGroups = groupExecutionApprovals(approvals);
+    const adminRequiredApprovalGroups = approvalGroups.filter(({ approvals: members }) => {
+      const groupDepartmentId = members[0]?.run.departmentId;
+      return (
+        groupDepartmentId === null &&
+        (principal.departmentId !== null || !hasMinimumRole(principal, 'admin'))
+      );
+    });
+    const actionableApprovalGroups = approvalGroups.filter(
+      (group) => !adminRequiredApprovalGroups.includes(group),
+    );
+    const unresolvedApprovals = approvals.filter(
+      ({ run }) => subjectFromResourceVersion(run.entryResourceVersion) === null,
+    );
+    const projectedDecisions: AttentionItem[] = [
+      ...actionableApprovalGroups.map((group) => this.executionApprovalItem(group)),
+      ...releaseGroups.map((group) => this.releasePromotionItem(group)),
+      ...groupedStagedMemoryCandidates(memory).map((group) => this.memoryItem(group)),
+      ...improvementGroups.map((group) => {
+        const reference = improvementTargetReference(group.representative.proposedTarget);
+        return this.improvementItem(
+          group,
+          reference === null
+            ? null
+            : (governedTargetByKey.get(improvementTargetKey(reference)) ?? null),
+        );
+      }),
+    ];
+    const decide = projectedDecisions.filter(({ shelf }) => shelf === 'decide');
+    const decisionSafetyStops = projectedDecisions.filter(({ shelf }) => shelf === 'degraded');
     const resolvedIds = new Set(resolutions.map(({ itemId: resolvedItemId }) => resolvedItemId));
     const degraded = [
+      ...decisionSafetyStops,
+      ...adminRequiredApprovalGroups.map((group) => this.adminRequiredExecutionApprovalItem(group)),
+      ...unresolvedApprovals.map((approval) => this.unresolvedExecutionApprovalItem(approval)),
       ...degradedPlugins.map((installation) => this.degradedPluginItem(installation)),
       ...degradedRuns
         .map((run) => this.degradedRunItem(run, now))
@@ -564,7 +1177,8 @@ export class AttentionService {
             payload.metadata['state'] !== 'failed' || !resolvedIds.has(degradedItemId),
         ),
     ];
-    const digest = summarizePlatformEventCounts(events, cursor?.lastDeliveredAt ?? null, now);
+    const digestEvents = await userFacingDigestEvents(this.prisma, events, scope);
+    const digest = summarizePlatformEventCounts(digestEvents, cursor?.lastDeliveredAt ?? null, now);
     return attentionResponseSchema.parse({
       generatedAt: now.toISOString(),
       decide,
@@ -583,6 +1197,7 @@ export class AttentionService {
     if (item === undefined) {
       throw new AppError(404, 'ATTENTION_ITEM_NOT_FOUND', 'Attention item was not found');
     }
+    const membership = membershipFromItem(item);
     if (item.payload.runId !== null) {
       const run = await this.prisma.executionRun.findFirst({
         where: { id: item.payload.runId, ...aggregateScopeWhere() },
@@ -594,6 +1209,9 @@ export class AttentionService {
       if (run === null) {
         throw new AppError(404, 'EXECUTION_RUN_NOT_FOUND', 'Execution run was not found');
       }
+      const recordedEventStates = new Set(
+        run.events.map(({ phase, state }) => `${phase}\u0000${state.toLowerCase()}`),
+      );
       const timeline = [
         ...run.events.map((event) => ({
           id: event.id,
@@ -604,19 +1222,25 @@ export class AttentionService {
           costUsd: money(event.costUsd),
           occurredAt: iso(event.occurredAt),
         })),
-        ...run.steps.map((step) => ({
-          id: step.id,
-          phase: step.stepKey,
-          state: step.state,
-          message: `Run phase ${step.stepKey} is ${step.state}.`,
-          durationMs: null,
-          costUsd: null,
-          occurredAt: iso(step.createdAt),
-        })),
+        ...run.steps
+          .filter(
+            ({ stepKey, state }) =>
+              !recordedEventStates.has(`${stepKey}\u0000${state.toLowerCase()}`),
+          )
+          .map((step) => ({
+            id: step.id,
+            phase: step.stepKey,
+            state: step.state,
+            message: `${humanizeRecorderValue(step.stepKey)} ${humanizeRecorderValue(step.state).toLowerCase()}.`,
+            durationMs: null,
+            costUsd: null,
+            occurredAt: iso(step.createdAt),
+          })),
       ].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt));
       return attentionItemDetailSchema.parse({
         item,
         timeline,
+        membership,
         details: {
           runId: run.id,
           state: run.state.toLowerCase(),
@@ -633,6 +1257,7 @@ export class AttentionService {
     return attentionItemDetailSchema.parse({
       item,
       timeline: [],
+      membership,
       details: item.payload.metadata,
     });
   }
@@ -703,7 +1328,17 @@ export class AttentionService {
         const eventTimes = events.map(({ occurredAt }) => occurredAt.getTime());
         const windowStartedAt = new Date(Math.min(...eventTimes));
         const windowEndedAt = new Date(Math.max(...eventTimes));
-        const summary = summarizePlatformEventsForDigest(events, windowStartedAt, windowEndedAt);
+        const visibleEvents = await userFacingDigestEvents(
+          transaction,
+          events,
+          aggregateScopeWhere(),
+        );
+        const summary = summarizePlatformEventsForDigest(
+          visibleEvents,
+          windowStartedAt,
+          windowEndedAt,
+          events.length,
+        );
         return transaction.digestSnapshot.upsert({
           where: {
             workspaceId_departmentScopeKey_actorId_eventSequenceFrom_eventSequenceThrough: {
@@ -917,44 +1552,85 @@ export class AttentionService {
     });
   }
 
-  private executionApprovalItem(
-    run: ExecutionRun,
-    approval: { id: string; requestedBy: string; createdAt: Date },
-  ): AttentionItem {
-    const scopes = runScopes(run);
+  private executionApprovalItem(group: ExecutionApprovalGroup): AttentionItem {
+    const approval = group.approvals[0];
+    if (approval === undefined) {
+      throw new AppError(500, 'ATTENTION_GROUP_EMPTY', 'An authority group has no requests');
+    }
+    const { run } = approval;
+    const scopePresentation = approvalScopePresentation(run);
+    const scopes = scopePresentation.labels;
     const estimated = run.estimatedUpperCostUsd.toNumber();
+    const requestCount = group.approvals.length;
+    const runNoun = requestCount === 1 ? 'run' : 'runs';
+    const requestLabel = requestCount === 1 ? 'one run' : `${requestCount} runs`;
+    const decisionTarget = requestCount === 1 ? 'this run' : `these ${requestCount} runs`;
+    const pendingTarget =
+      requestCount === 1 ? 'this pending run' : `these ${requestCount} pending runs`;
+    const scopeSummary =
+      scopePresentation.total === 0
+        ? 'No external tool access'
+        : scopePresentation.total === 1
+          ? scopes[0]
+          : `${scopePresentation.total} exact authority boundaries`;
+    const retrySummary =
+      run.maxAttempts === 1
+        ? 'One attempt · no automatic retry'
+        : `Up to ${run.maxAttempts} total attempts · ${run.retryBackoff} backoff`;
+    const membership = exactMembership(
+      group.approvals.map((member, index) => ({
+        label: `Authority request ${String(index + 1).padStart(2, '0')}`,
+        subject: group.subject,
+        occurredAt: iso(member.createdAt),
+        evidence: [
+          {
+            label: 'Decision match',
+            value: 'Exact authority, input, retry, and cost requirements match this group.',
+          },
+          { label: 'Current state', value: 'Pending human decision; the run remains paused.' },
+        ],
+        technicalReferences: [
+          { label: 'Approval request', value: member.id },
+          { label: 'Execution run', value: member.run.id },
+        ],
+      })),
+    );
     return attentionItemSchema.parse({
-      id: itemId('execution_approval', run.id),
+      id: itemId('execution_approval', group.groupKey),
       kind: 'execution_approval',
       shelf: 'decide',
-      headline: 'A run is asking for permission.',
-      delta: `${scopes.length} tool scopes · about $${estimated.toFixed(2)} at most`,
+      headline: boundedHeadline(`${group.subject.name} wants authority for ${requestLabel}.`),
+      delta: `${scopeSummary} · up to $${estimated.toFixed(2)} per run`,
       status: 'decide',
       primaryAction: {
         kind: 'approve_run',
-        ...consoleActionCopy.approveRun,
-        resourceId: run.id,
+        label: consoleActionCopy.approveRun.label,
+        consequence: `Queues ${decisionTarget} under one bounded grant. Matching future runs may use it until its limits or expiry.`,
+        undo: consoleActionCopy.approveRun.undo,
+        resourceId: group.groupKey,
         requiresRationale: true,
       },
       secondaryAction: {
         kind: 'reject_run',
-        ...consoleActionCopy.rejectRun,
-        resourceId: run.id,
+        label: consoleActionCopy.rejectRun.label,
+        consequence: `Cancels ${pendingTarget} and records your reason.`,
+        undo: consoleActionCopy.rejectRun.undo,
+        resourceId: group.groupKey,
         requiresRationale: true,
       },
       cost: { period: 'run', usd: estimated, budgetUsd: run.maxEstimatedCostUsd.toNumber() },
-      reason: 'This run needs authority before it can use tools or spend its budget.',
+      reason: `Without approval, ${group.subject.name} remains paused and performs no work for ${requestCount === 1 ? 'this request' : 'these requests'}.`,
       provenance: {
-        sourceType: 'ApprovalRequest',
-        sourceId: approval.id,
-        actorId: approval.requestedBy,
+        sourceType: 'ApprovalRequestGroup',
+        sourceId: group.groupKey,
+        actorId: null,
         requestId: null,
-        explanation: 'The execution service paused because no matching authority grant exists.',
+        explanation: `The execution service grouped ${requestCount} exact pending ${runNoun} with the same authority requirements.`,
       },
       occurredAt: iso(approval.createdAt),
       payload: {
-        sourceType: 'ApprovalRequest',
-        sourceId: approval.id,
+        sourceType: 'ApprovalRequestGroup',
+        sourceId: group.groupKey,
         detailPath: `/v1/execution-runs/${run.id}`,
         scopes,
         runId: run.id,
@@ -963,16 +1639,33 @@ export class AttentionService {
         releaseId: run.releaseId,
         evaluationId: null,
         expiresAt: null,
+        approvalGroupKey: group.groupKey,
+        requestCount,
+        subject: group.subject,
         reviewFacts: [
-          { label: 'Release', value: `${run.releaseId} · ${run.releaseDigest}` },
-          { label: 'Tool scopes', value: scopes.length === 0 ? 'No tools' : scopes.join(', ') },
           {
-            label: 'Cost limit',
-            value: `$${run.maxEstimatedCostUsd.toNumber().toFixed(2)} per run`,
+            label: 'Subject',
+            value: `${group.subject.name} · ${group.subject.kind} ${group.subject.version}`,
           },
-          { label: 'Requested by', value: run.requestedBy },
+          { label: 'Requests', value: `${requestLabel} with matching authority requirements` },
+          { label: 'Authority', value: scopes.join(', ') },
+          { label: 'Retry policy', value: retrySummary },
+          {
+            label: 'Approval changes',
+            value: `Queues ${decisionTarget} under one revocable, expiring grant.`,
+          },
+          { label: 'Without approval', value: 'The matching runs stay paused and do no work.' },
         ],
         metadata: {
+          membership,
+          runIds: group.approvals.map(({ run }) => run.id),
+          approvalRequestIds: group.approvals.map(({ id }) => id),
+          releaseId: run.releaseId,
+          releaseDigest: run.releaseDigest,
+          entryResourceVersionId: run.entryResourceVersionId,
+          requestedBy: group.approvals.map(({ requestedBy }) => requestedBy),
+          requiredToolScopes: runScopes(run),
+          requiredPluginScopes: run.requiredPluginScopes as JsonValue,
           reasons: parseJson(
             stringArraySchema,
             run.approvalReasons,
@@ -983,41 +1676,300 @@ export class AttentionService {
     });
   }
 
-  private releasePromotionItem(evaluation: {
-    id: string;
-    releaseId: string;
-    corpusVersion: number;
-    executorKind: string;
-    executorVersion: string;
-    evaluationMode: string;
-    gateScores: Prisma.JsonValue;
-    evidence: Prisma.JsonValue;
-    requestedBy: string;
-    finishedAt: Date;
-    release: { projectId: string | null; digest: string };
+  private adminRequiredExecutionApprovalItem(group: ExecutionApprovalGroup): AttentionItem {
+    const approval = group.approvals[0];
+    if (approval === undefined) {
+      throw new AppError(500, 'ATTENTION_GROUP_EMPTY', 'An authority group has no requests');
+    }
+    const { run } = approval;
+    const scopePresentation = approvalScopePresentation(run);
+    const requestCount = group.approvals.length;
+    const requestLabel = requestCount === 1 ? 'One pending run' : `${requestCount} pending runs`;
+    const membership = exactMembership(
+      group.approvals.map((member, index) => ({
+        label: `Authority request ${String(index + 1).padStart(2, '0')}`,
+        subject: group.subject,
+        occurredAt: iso(member.createdAt),
+        evidence: [
+          {
+            label: 'Decision match',
+            value: 'Exact authority, input, retry, and cost requirements match this group.',
+          },
+          { label: 'Decision owner', value: 'Workspace admin required.' },
+        ],
+        technicalReferences: [
+          { label: 'Approval request', value: member.id },
+          { label: 'Execution run', value: member.run.id },
+        ],
+      })),
+    );
+    return attentionItemSchema.parse({
+      id: itemId('safety_stop', `workspace-admin:${group.groupKey}`),
+      kind: 'safety_stop',
+      shelf: 'degraded',
+      headline: boundedHeadline(`${group.subject.name} needs workspace-admin review.`),
+      delta: `${requestLabel} · workspace-global authority`,
+      status: 'safety_stop',
+      primaryAction: {
+        kind: 'open_details',
+        ...consoleActionCopy.reviewFlightRecorder,
+        resourceId: run.id,
+        requiresRationale: false,
+      },
+      secondaryAction: null,
+      cost: {
+        period: 'run',
+        usd: run.estimatedUpperCostUsd.toNumber(),
+        budgetUsd: run.maxEstimatedCostUsd.toNumber(),
+      },
+      reason:
+        'This request is workspace-global. Only a workspace admin can grant or reject it; opening details changes nothing.',
+      provenance: {
+        sourceType: 'ApprovalRequestGroup',
+        sourceId: group.groupKey,
+        actorId: null,
+        requestId: null,
+        explanation:
+          'The request is visible in this department but remains outside its exact mutation scope.',
+      },
+      occurredAt: iso(approval.createdAt),
+      payload: {
+        sourceType: 'ApprovalRequestGroup',
+        sourceId: group.groupKey,
+        detailPath: `/v1/execution-runs/${run.id}`,
+        scopes: scopePresentation.labels,
+        runId: run.id,
+        candidateId: null,
+        channelKey: null,
+        releaseId: run.releaseId,
+        evaluationId: null,
+        expiresAt: null,
+        approvalGroupKey: null,
+        requestCount,
+        subject: group.subject,
+        reviewFacts: [
+          {
+            label: 'Subject',
+            value: `${group.subject.name} · ${group.subject.kind} ${group.subject.version}`,
+          },
+          { label: 'Authority', value: scopePresentation.labels.join(', ') },
+          { label: 'Decision owner', value: 'Workspace admin required' },
+          { label: 'Current effect', value: 'The pending runs remain paused and do no work.' },
+        ],
+        metadata: {
+          membership,
+          adminRequired: true,
+          approvalGroupKey: group.groupKey,
+          runIds: group.approvals.map(({ run: memberRun }) => memberRun.id),
+          approvalRequestIds: group.approvals.map(({ id }) => id),
+          requiredToolScopes: runScopes(run),
+          requiredPluginScopes: run.requiredPluginScopes as JsonValue,
+        },
+      },
+    });
+  }
+
+  private unresolvedExecutionApprovalItem(approval: ExecutionApprovalRecord): AttentionItem {
+    const { run } = approval;
+    const estimated = run.estimatedUpperCostUsd.toNumber();
+    return attentionItemSchema.parse({
+      id: itemId('safety_stop', approval.id),
+      kind: 'safety_stop',
+      shelf: 'degraded',
+      headline: 'Approval stopped: the governed subject is unavailable.',
+      delta: 'Exact entrypoint missing · no work can begin',
+      status: 'safety_stop',
+      primaryAction: {
+        kind: 'open_details',
+        ...consoleActionCopy.reviewFlightRecorder,
+        resourceId: run.id,
+        requiresRationale: false,
+      },
+      secondaryAction: null,
+      cost: { period: 'run', usd: estimated, budgetUsd: run.maxEstimatedCostUsd.toNumber() },
+      reason:
+        'Paul OS cannot name or verify the exact Agent or Skill, so it offers no approval action.',
+      provenance: {
+        sourceType: 'ApprovalRequest',
+        sourceId: approval.id,
+        actorId: null,
+        requestId: null,
+        explanation: 'The pending run has no exact governed entry resource.',
+      },
+      occurredAt: iso(approval.createdAt),
+      payload: {
+        sourceType: 'ApprovalRequest',
+        sourceId: approval.id,
+        detailPath: `/v1/execution-runs/${run.id}`,
+        scopes: [],
+        runId: run.id,
+        candidateId: null,
+        channelKey: null,
+        releaseId: run.releaseId,
+        evaluationId: null,
+        expiresAt: null,
+        approvalGroupKey: null,
+        requestCount: 1,
+        subject: null,
+        reviewFacts: [
+          { label: 'Subject', value: 'Exact governed entrypoint unavailable' },
+          { label: 'Effect', value: 'The run remains paused and performs no work.' },
+        ],
+        metadata: {
+          state: 'awaiting_approval',
+          legacyEntrypointUnresolved: run.legacyEntrypointUnresolved,
+        },
+      },
+    });
+  }
+
+  private unresolvedSubjectItem(input: {
+    sourceType: string;
+    sourceId: string;
+    sourceLabel: string;
+    originalKind: AttentionItem['kind'];
+    occurredAt: Date;
+    detailPath: string;
+    runId?: string | null;
+    candidateId?: string | null;
+    releaseId?: string | null;
+    evaluationId?: string | null;
+    requestCount?: number;
+    decisionGroupKey?: string | null;
+    metadata?: Record<string, JsonValue>;
   }): AttentionItem {
+    const detailAction = consoleCriticalCopy.attention.actions[0];
+    if (detailAction === undefined) {
+      throw new AppError(500, 'ATTENTION_COPY_MISSING', 'Attention detail copy is unavailable');
+    }
+    return attentionItemSchema.parse({
+      // Presentation may fail closed to a safety stop, but the durable item identity
+      // must remain stable so an existing acknowledgement cannot reappear.
+      id: itemId(input.originalKind, input.sourceId),
+      kind: 'safety_stop',
+      shelf: 'degraded',
+      headline: 'Review stopped: the governed subject is unavailable.',
+      delta: 'Subject identity missing · details are read-only',
+      status: 'safety_stop',
+      primaryAction: {
+        kind: 'open_details',
+        ...detailAction,
+        resourceId: input.sourceId,
+        requiresRationale: false,
+      },
+      secondaryAction: null,
+      cost: null,
+      reason: `Paul OS cannot name a trustworthy subject for this ${input.sourceLabel}, so it offers no decision until the source record is repaired.`,
+      provenance: {
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        actorId: null,
+        requestId: null,
+        explanation: `The ${input.sourceLabel} has no safe, human-recognizable governed subject.`,
+      },
+      occurredAt: iso(input.occurredAt),
+      payload: {
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        detailPath: input.detailPath,
+        scopes: [],
+        runId: input.runId ?? null,
+        candidateId: input.candidateId ?? null,
+        channelKey: null,
+        releaseId: input.releaseId ?? null,
+        evaluationId: input.evaluationId ?? null,
+        expiresAt: null,
+        approvalGroupKey: null,
+        decisionGroupKey: input.decisionGroupKey ?? null,
+        requestCount: input.requestCount ?? 1,
+        subject: null,
+        reviewFacts: [
+          { label: 'Subject', value: 'Safe governed name unavailable' },
+          { label: 'Effect', value: 'No decision is available; opening details changes nothing.' },
+        ],
+        metadata: {
+          originalKind: input.originalKind,
+          ...(input.metadata ?? {}),
+        },
+      },
+    });
+  }
+
+  private releasePromotionItem(
+    group: AttentionDecisionGroup<AttentionReleaseEvaluationRecord>,
+  ): AttentionItem {
+    const { representative: evaluation, members, requestCount } = group;
     const channelKey = evaluation.release.projectId ?? 'default';
+    const subject = subjectFromRelease(evaluation.release.resources, evaluation.release.projectId);
+    const membership = exactMembership(
+      members.map((member, index) => ({
+        label: `Release evaluation ${String(index + 1).padStart(2, '0')}`,
+        subject,
+        occurredAt: iso(member.finishedAt),
+        evidence: [
+          { label: 'Corpus', value: `Version ${member.corpusVersion}` },
+          {
+            label: 'Decision match',
+            value: 'Release, corpus, executor, mode, and gate scores match this group.',
+          },
+        ],
+        technicalReferences: [
+          { label: 'Release evaluation', value: member.id },
+          { label: 'Release', value: member.releaseId },
+        ],
+      })),
+    );
+    if (subject === null) {
+      return this.unresolvedSubjectItem({
+        sourceType: 'ReleaseEvaluation',
+        sourceId: evaluation.id,
+        sourceLabel: 'release promotion',
+        originalKind: 'release_promotion',
+        occurredAt: evaluation.finishedAt,
+        detailPath: `/evidence/releases/${evaluation.id}`,
+        releaseId: evaluation.releaseId,
+        evaluationId: evaluation.id,
+        requestCount,
+        metadata: {
+          membership,
+          corpusVersion: evaluation.corpusVersion,
+          evaluationMode: evaluation.evaluationMode,
+        },
+      });
+    }
     return attentionItemSchema.parse({
       id: itemId('release_promotion', evaluation.id),
       kind: 'release_promotion',
       shelf: 'decide',
-      headline: 'A certified release is ready for your decision.',
+      headline: boundedHeadline(`${subject.name} is ready for a production decision.`),
       delta: `Corpus ${evaluation.corpusVersion} passed · production has not changed`,
       status: 'decide',
       primaryAction: {
         kind: 'promote_release',
         ...consoleActionCopy.promoteRelease,
+        ...(requestCount === 1
+          ? {}
+          : {
+              consequence: `Promotes the governed release once and resolves all ${requestCount} byte-equivalent evaluation requests together.`,
+              undo: 'Use the governed rollback action to restore the prior production release.',
+            }),
         resourceId: evaluation.id,
         requiresRationale: true,
       },
       secondaryAction: {
         kind: 'decline_release',
         ...consoleActionCopy.declineRelease,
+        ...(requestCount === 1
+          ? {}
+          : {
+              consequence: `Declines the release once and closes all ${requestCount} byte-equivalent evaluation requests together.`,
+              undo: 'Run a new governed evaluation before proposing this release again.',
+            }),
         resourceId: evaluation.id,
         requiresRationale: true,
       },
       cost: null,
-      reason: 'Passing evidence needs a human decision before production can change.',
+      reason: `Production remains unchanged until a human promotes or declines ${subject.name}.`,
       provenance: {
         sourceType: 'ReleaseEvaluation',
         sourceId: evaluation.id,
@@ -1037,12 +1989,15 @@ export class AttentionService {
         releaseId: evaluation.releaseId,
         evaluationId: evaluation.id,
         expiresAt: null,
+        approvalGroupKey: null,
+        requestCount,
+        subject,
         reviewFacts: [
-          { label: 'Release digest', value: evaluation.release.digest },
+          { label: 'Subject', value: `${subject.name} · ${subject.kind} ${subject.version}` },
           { label: 'Corpus', value: `Version ${evaluation.corpusVersion}` },
           {
             label: 'Executor',
-            value: `${evaluation.executorKind}@${evaluation.executorVersion} · ${evaluation.evaluationMode}`,
+            value: `${evaluation.executorKind} · ${evaluation.evaluationMode}`,
           },
           { label: 'Gate scores', value: boundedReviewValue(evaluation.gateScores) },
           {
@@ -1052,6 +2007,7 @@ export class AttentionService {
           },
         ],
         metadata: {
+          membership,
           releaseDigest: evaluation.release.digest,
           corpusVersion: evaluation.corpusVersion,
           executorKind: evaluation.executorKind,
@@ -1066,36 +2022,77 @@ export class AttentionService {
     });
   }
 
-  private memoryItem(candidate: {
-    id: string;
-    sourceRunId: string;
-    namespace: string;
-    stagedBy: string;
-    stagedAt: Date;
-    proposedValue: Prisma.JsonValue;
-    provenance: Prisma.JsonValue;
-  }): AttentionItem {
+  private memoryItem(group: AttentionDecisionGroup<AttentionMemoryRecord>): AttentionItem {
+    const { representative: candidate, members, requestCount, decisionGroupKey } = group;
+    const subject = subjectFromRun(candidate.sourceRun);
+    const membership = exactMembership(
+      members.map((member, index) => ({
+        label: `Memory proposal ${String(index + 1).padStart(2, '0')}`,
+        subject: subjectFromRun(member.sourceRun),
+        occurredAt: iso(member.stagedAt),
+        evidence: [
+          {
+            label: 'Decision match',
+            value:
+              'Workspace, department, project, namespace, and proposed value match this group.',
+          },
+          { label: 'Current state', value: 'Staged; durable memory has not changed.' },
+        ],
+        technicalReferences: [
+          { label: 'Memory proposal', value: member.id },
+          { label: 'Source run', value: member.sourceRunId },
+        ],
+      })),
+    );
+    if (subject === null) {
+      return this.unresolvedSubjectItem({
+        sourceType: 'MemoryCandidate',
+        sourceId: candidate.id,
+        sourceLabel: 'durable memory proposal',
+        originalKind: 'memory_review',
+        occurredAt: candidate.stagedAt,
+        detailPath: `/v1/memory-candidates?sourceRunId=${candidate.sourceRunId}`,
+        runId: candidate.sourceRunId,
+        candidateId: candidate.id,
+        releaseId: candidate.sourceRun.releaseId,
+        requestCount,
+        decisionGroupKey,
+        metadata: { membership, namespace: candidate.namespace },
+      });
+    }
     return attentionItemSchema.parse({
       id: itemId('memory_review', candidate.id),
       kind: 'memory_review',
       shelf: 'decide',
-      headline: 'A run proposed a durable memory.',
-      delta: `Namespace ${candidate.namespace} · nothing is stored yet`,
+      headline: boundedHeadline(`${subject.name} proposed a durable memory.`),
+      delta: 'Nothing is stored yet · review before this value persists',
       status: 'decide',
       primaryAction: {
         kind: 'accept_memory',
         ...consoleActionCopy.acceptMemory,
+        ...(requestCount === 1
+          ? {}
+          : {
+              consequence: `Accepts all ${requestCount} exact matching proposals as one governed decision; every source record remains preserved for audit.`,
+              undo: `Submit a new governed memory proposal to supersede the ${requestCount} accepted records.`,
+            }),
         resourceId: candidate.id,
         requiresRationale: true,
       },
       secondaryAction: {
         kind: 'reject_memory',
         ...consoleActionCopy.rejectMemory,
+        ...(requestCount === 1
+          ? {}
+          : {
+              consequence: `Rejects all ${requestCount} exact matching proposals while preserving every source record as evidence.`,
+              undo: 'Stage a new proposal from retained evidence.',
+            }),
         resourceId: candidate.id,
         requiresRationale: true,
       },
       cost: null,
-      reason: 'Durable memory never changes without your review.',
+      reason: `Without approval, ${subject.name}'s proposed value remains staged and does not change durable memory.`,
       provenance: {
         sourceType: 'MemoryCandidate',
         sourceId: candidate.id,
@@ -1115,12 +2112,17 @@ export class AttentionService {
         releaseId: null,
         evaluationId: null,
         expiresAt: null,
+        approvalGroupKey: null,
+        decisionGroupKey,
+        requestCount,
+        subject,
         reviewFacts: [
+          { label: 'Subject', value: `${subject.name} · ${subject.kind} ${subject.version}` },
           { label: 'Namespace', value: candidate.namespace },
-          { label: 'Source run', value: candidate.sourceRunId },
           { label: 'Proposed value', value: boundedReviewValue(candidate.proposedValue) },
         ],
         metadata: {
+          membership,
           namespace: candidate.namespace,
           proposedValue: redactReviewValue(candidate.proposedValue) as JsonValue,
           provenance: redactReviewValue(candidate.provenance) as JsonValue,
@@ -1129,37 +2131,82 @@ export class AttentionService {
     });
   }
 
-  private improvementItem(candidate: {
-    id: string;
-    title: string;
-    proposedTarget: string;
-    createdBy: string;
-    createdAt: Date;
-    observationId: string;
-    proposedChange: string;
-    evidenceRefs: Prisma.JsonValue;
-  }): AttentionItem {
+  private improvementItem(
+    group: AttentionDecisionGroup<AttentionImprovementRecord>,
+    governedTarget: GovernedImprovementTarget | null,
+  ): AttentionItem {
+    const { representative: candidate, members, requestCount, decisionGroupKey } = group;
+    const membership = exactMembership(
+      members.map((member, index) => ({
+        label: `Improvement proposal ${String(index + 1).padStart(2, '0')}`,
+        subject: governedTarget?.subject ?? null,
+        occurredAt: iso(member.createdAt),
+        evidence: [
+          {
+            label: 'Decision match',
+            value: 'Scope, governed target, title, and proposed change match this group.',
+          },
+          { label: 'Current state', value: 'Proposed; no repository change exists.' },
+        ],
+        technicalReferences: [
+          { label: 'Improvement proposal', value: member.id },
+          { label: 'Observation', value: member.observationId },
+          ...(member.observation.sourceRunId === null
+            ? []
+            : [{ label: 'Source run', value: member.observation.sourceRunId }]),
+        ],
+      })),
+    );
+    if (governedTarget === null) {
+      return this.unresolvedSubjectItem({
+        sourceType: 'ImprovementCandidate',
+        sourceId: candidate.id,
+        sourceLabel: 'improvement proposal',
+        originalKind: 'improvement_review',
+        occurredAt: candidate.createdAt,
+        detailPath: `/incubator?candidateId=${candidate.id}`,
+        candidateId: candidate.id,
+        runId: candidate.observation.sourceRunId,
+        releaseId: candidate.observation.sourceRun?.releaseId ?? null,
+        requestCount,
+        decisionGroupKey,
+        metadata: { membership, observationId: candidate.observationId },
+      });
+    }
+    const { subject } = governedTarget;
     return attentionItemSchema.parse({
       id: itemId('improvement_review', candidate.id),
       kind: 'improvement_review',
       shelf: 'decide',
-      headline: candidate.title,
-      delta: `Proposed for ${candidate.proposedTarget} · no repository change exists`,
+      headline: boundedHeadline(`${subject.name} has an improvement proposal.`),
+      delta: 'No repository change exists · review before exploration begins',
       status: 'decide',
       primaryAction: {
         kind: 'incubate_candidate',
         ...consoleActionCopy.incubateCandidate,
+        ...(requestCount === 1
+          ? {}
+          : {
+              consequence: `Moves all ${requestCount} exact matching proposals into governed exploration without applying or committing a patch.`,
+              undo: `Reject the ${requestCount} grouped proposals before any repository import.`,
+            }),
         resourceId: candidate.id,
         requiresRationale: true,
       },
       secondaryAction: {
         kind: 'reject_candidate',
         ...consoleActionCopy.rejectCandidate,
+        ...(requestCount === 1
+          ? {}
+          : {
+              consequence: `Closes all ${requestCount} exact matching proposals while retaining every observation as evidence.`,
+              undo: 'Create a new candidate from the retained evidence.',
+            }),
         resourceId: candidate.id,
         requiresRationale: true,
       },
       cost: null,
-      reason: 'A repeated signal was converted into a candidate improvement for review.',
+      reason: `A repeated signal suggests a change to ${subject.name}; no change exists until a human moves it to the Incubator.`,
       provenance: {
         sourceType: 'ImprovementCandidate',
         sourceId: candidate.id,
@@ -1179,13 +2226,19 @@ export class AttentionService {
         releaseId: null,
         evaluationId: null,
         expiresAt: null,
+        approvalGroupKey: null,
+        decisionGroupKey,
+        requestCount,
+        subject,
         reviewFacts: [
+          { label: 'Subject', value: `${subject.name} · ${subject.kind} ${subject.version}` },
+          { label: 'Target intent', value: governedTarget.intentLabel },
           { label: 'Target', value: candidate.proposedTarget },
-          { label: 'Observation', value: candidate.observationId },
           { label: 'Proposed change', value: boundedReviewValue(candidate.proposedChange) },
           { label: 'Evidence', value: boundedReviewValue(candidate.evidenceRefs) },
         ],
         metadata: {
+          membership,
           observationId: candidate.observationId,
           proposedTarget: candidate.proposedTarget,
           proposedChange: candidate.proposedChange,
@@ -1195,7 +2248,7 @@ export class AttentionService {
     });
   }
 
-  private degradedRunItem(run: ExecutionRun, now: Date): AttentionItem {
+  private degradedRunItem(run: AttentionRunRecord, now: Date): AttentionItem {
     const budgetStop = run.state === ExecutionRunState.PAUSED_BUDGET;
     const pluginPaused = run.state === ExecutionRunState.PAUSED_PLUGIN;
     const stalled =
@@ -1206,18 +2259,32 @@ export class AttentionService {
       : pluginPaused
         ? 'plugin_health'
         : 'stalled_run';
+    const subject = subjectFromRun(run);
+    if (subject === null) {
+      return this.unresolvedSubjectItem({
+        sourceType: 'ExecutionRun',
+        sourceId: run.id,
+        sourceLabel: 'degraded run',
+        originalKind: kind,
+        occurredAt: run.updatedAt,
+        detailPath: `/v1/execution-runs/${run.id}`,
+        runId: run.id,
+        releaseId: run.releaseId,
+        metadata: { state: run.state.toLowerCase() },
+      });
+    }
     return attentionItemSchema.parse({
       id: itemId(kind, run.id),
       kind,
       shelf: 'degraded',
       headline: budgetStop
-        ? 'Safety stop: this run exceeds its cost limit.'
+        ? boundedHeadline(`Safety stop: ${subject.name} reached its cost limit.`)
         : pluginPaused
-          ? 'A required Plugin is unavailable.'
+          ? boundedHeadline(`${subject.name} is waiting for a required Plugin.`)
           : stalled
-            ? 'A run stopped sending heartbeats.'
-            : 'A run failed before it produced an outcome.',
-      delta: `${run.progress}% complete · ${run.message}`,
+            ? boundedHeadline(`${subject.name} stopped sending heartbeats.`)
+            : boundedHeadline(`${subject.name} failed before producing an outcome.`),
+      delta: `${run.progress}% complete · no new work can proceed`,
       status: budgetStop ? 'safety_stop' : 'degraded',
       primaryAction: {
         kind: 'open_details',
@@ -1240,12 +2307,12 @@ export class AttentionService {
         budgetUsd: run.maxEstimatedCostUsd.toNumber(),
       },
       reason: budgetStop
-        ? 'The configured cost ceiling stopped execution before more could be spent.'
+        ? `The configured cost ceiling stopped ${subject.name} before more could be spent.`
         : pluginPaused
-          ? 'The run is held. It will not perform late work while its required Plugin is unavailable.'
+          ? `${subject.name} is held and will not perform late work while its required Plugin is unavailable.`
           : stalled
-            ? 'The worker lease expired. Recovery must decide whether to retry.'
-            : 'The execution service recorded a terminal failure.',
+            ? `${subject.name}'s worker lease expired; recovery must decide whether to retry.`
+            : `${subject.name} produced no outcome, and acknowledgement is available only after reviewing its recorder.`,
       provenance: {
         sourceType: 'ExecutionRun',
         sourceId: run.id,
@@ -1265,11 +2332,14 @@ export class AttentionService {
         releaseId: run.releaseId,
         evaluationId: null,
         expiresAt: run.leaseExpiresAt?.toISOString() ?? null,
+        approvalGroupKey: null,
+        requestCount: 1,
+        subject,
         reviewFacts: [
-          { label: 'Run', value: run.id },
-          { label: 'Release', value: run.releaseDigest },
+          { label: 'Subject', value: `${subject.name} · ${subject.kind} ${subject.version}` },
           { label: 'Recorded state', value: run.state.toLowerCase() },
           { label: 'Cost limit', value: `$${run.maxEstimatedCostUsd.toNumber().toFixed(2)}` },
+          { label: 'Last message', value: run.message },
         ],
         metadata: { state: run.state.toLowerCase(), message: run.message },
       },
@@ -1278,14 +2348,30 @@ export class AttentionService {
 
   private degradedPluginItem(installation: DegradedPluginRecord): AttentionItem {
     const state = installation.state.toLowerCase();
+    const subject = subjectFromNamedVersion(
+      installation.pluginVersion.family.name,
+      'plugin',
+      installation.pluginVersion.version,
+    );
+    if (subject === null) {
+      return this.unresolvedSubjectItem({
+        sourceType: 'PluginInstallation',
+        sourceId: installation.id,
+        sourceLabel: 'Plugin health record',
+        originalKind: 'plugin_health',
+        occurredAt: installation.updatedAt,
+        detailPath: `/v1/plugin-installations/${installation.id}`,
+        metadata: { state },
+      });
+    }
     return attentionItemSchema.parse({
       id: itemId('plugin_health', installation.id),
       kind: 'plugin_health',
       shelf: 'degraded',
       headline:
         installation.state === PluginInstallationState.DISABLED
-          ? `${installation.pluginVersion.family.name} is disabled.`
-          : `${installation.pluginVersion.family.name} is degraded.`,
+          ? `${subject.name} is disabled.`
+          : `${subject.name} is degraded.`,
       delta: 'Required calls are held · no silent fallback is allowed',
       status: 'degraded',
       primaryAction: {
@@ -1298,8 +2384,8 @@ export class AttentionService {
       cost: null,
       reason:
         installation.state === PluginInstallationState.DISABLED
-          ? 'The kill switch is active. New calls fail closed until a human enables this Plugin.'
-          : 'The latest governed health evidence did not pass. New calls fail closed.',
+          ? `${subject.name}'s kill switch is active; new calls fail closed until a human enables this Plugin.`
+          : `${subject.name}'s latest governed health evidence did not pass, so new calls fail closed.`,
       provenance: {
         sourceType: 'PluginInstallation',
         sourceId: installation.id,
@@ -1319,9 +2405,12 @@ export class AttentionService {
         releaseId: null,
         evaluationId: null,
         expiresAt: null,
+        approvalGroupKey: null,
+        requestCount: 1,
+        subject,
         reviewFacts: [
-          { label: 'Plugin', value: installation.pluginVersion.family.name },
-          { label: 'Version', value: installation.pluginVersion.version },
+          { label: 'Plugin', value: subject.name },
+          { label: 'Version', value: subject.version },
           { label: 'Recorded state', value: state },
         ],
         metadata: {

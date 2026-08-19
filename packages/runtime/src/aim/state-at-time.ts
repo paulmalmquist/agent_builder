@@ -6,13 +6,16 @@ import type {
 } from '@agent-builder/contracts/aim';
 import { ageHours, evaluatePartEvidence, isEvidenceFresh } from './evidence-policy.js';
 import type {
+  AimAgentState,
   AimDecisionLoopState,
+  AimGroupState,
   AimInterfaceState,
   AimMetricState,
   AimMilestoneState,
   AimPartState,
   AimProgramState,
   AimProgramViewModel,
+  AimWorkstreamState,
 } from './program-view-model.js';
 import { deriveVisualState } from './visual-state.js';
 
@@ -135,6 +138,41 @@ function milestoneStates(manifest: AimProgramManifest, selectedAt: string): AimM
   }));
 }
 
+function workstreamStates(manifest: AimProgramManifest, selectedAt: string): AimWorkstreamState[] {
+  const selected = Date.parse(selectedAt);
+  const sourceById = new Map(manifest.sources.map((source) => [source.id, source] as const));
+
+  return manifest.workstreams.flatMap((workstream) => {
+    if (workstream.sourceRefs.length === 0) return [];
+    const sources = workstream.sourceRefs.flatMap((sourceId) => {
+      const source = sourceById.get(sourceId);
+      return source === undefined ? [] : [source];
+    });
+    if (
+      sources.length !== workstream.sourceRefs.length ||
+      sources.some(
+        (source) =>
+          source.reconciliationStatus === 'conflicting' ||
+          Date.parse(source.observedAt) > selected ||
+          ageHours(source.observedAt, selectedAt) >
+            (source.freshnessSlaHours ?? manifest.displayPolicy.defaultEvidenceFreshnessSlaHours),
+      )
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        ...workstream,
+        affectedPartIds: [...workstream.affectedPartIds],
+        sourceRefs: [...workstream.sourceRefs],
+        milestoneIds: [...workstream.milestoneIds],
+        sourceSynthetic: sources.some(({ synthetic }) => synthetic),
+      },
+    ];
+  });
+}
+
 function interfaceStates(manifest: AimProgramManifest, selectedAt: string): AimInterfaceState[] {
   return manifest.interfaces.map((contract) => {
     const status = latestAt(contract.statusHistory, selectedAt);
@@ -191,6 +229,47 @@ export function stateAt(
     .filter((metric): metric is AimMetricState => metric !== null);
   const metrics = new Map(metricStates.map((metric) => [metric.id, metric] as const));
   const capabilityById = new Map(manifest.capabilities.map((item) => [item.id, item] as const));
+  const evidenceById = new Map(manifest.evidence.map((item) => [item.id, item] as const));
+  const sourceById = new Map(manifest.sources.map((item) => [item.id, item] as const));
+  const agents: AimAgentState[] = manifest.agents.map((agent) => {
+    const certificationSourcesUsable = agent.sourceRefs.every((sourceId) => {
+      const source = sourceById.get(sourceId);
+      return (
+        source !== undefined &&
+        source.reconciliationStatus !== 'conflicting' &&
+        (manifest.program.synthetic || !source.synthetic)
+      );
+    });
+    const certificationEvidenceFresh =
+      certificationSourcesUsable &&
+      agent.certificationEvidenceRefs.length > 0 &&
+      agent.certificationEvidenceRefs.every((evidenceId) => {
+        const item = evidenceById.get(evidenceId);
+        const source = item === undefined ? undefined : sourceById.get(item.sourceId);
+        return (
+          item !== undefined &&
+          source !== undefined &&
+          source.reconciliationStatus !== 'conflicting' &&
+          (manifest.program.synthetic || !source.synthetic) &&
+          isEvidenceFresh(item, manifest, selectedAt)
+        );
+      });
+    return {
+      id: agent.id,
+      label: agent.label,
+      description: agent.description,
+      tier: agent.tier,
+      certificationStatus: agent.certificationStatus,
+      certificationEvidenceFresh,
+      synthetic: agent.synthetic,
+      groupIds: [...agent.groupIds],
+      partIds: [...agent.partIds],
+      connectors: agent.connectors.map((connector) => ({ ...connector })),
+      certificationEvidenceRefs: [...agent.certificationEvidenceRefs],
+      sourceRefs: [...agent.sourceRefs],
+    };
+  });
+  const agentById = new Map(agents.map((agent) => [agent.id, agent] as const));
 
   const parts: AimPartState[] = manifest.parts.map((part) => {
     const status = latestAt(part.statusHistory, selectedAt);
@@ -201,6 +280,31 @@ export function stateAt(
       label: part.label,
       anchorId: part.anchorId,
       fallbackRegion: part.fallbackRegion ?? null,
+      makeMethod: part.makeMethod,
+      process: part.process,
+      ownerGroupId: part.ownerGroupId,
+      coverage: {
+        agentIds: [...part.coverage.agentIds],
+        evidenceRefs: [...part.coverage.evidenceRefs],
+        agentCount: part.coverage.agentIds.length,
+        certifiedAgentCount: part.coverage.agentIds.filter((agentId) => {
+          const agent = agentById.get(agentId);
+          return (
+            agent?.certificationStatus === 'certified' &&
+            agent.certificationEvidenceFresh &&
+            (manifest.program.synthetic || !agent.synthetic)
+          );
+        }).length,
+        evidenceFreshnessHours: (() => {
+          const ages = part.coverage.evidenceRefs.flatMap((evidenceId) => {
+            const item = evidenceById.get(evidenceId);
+            return item === undefined || Date.parse(item.observedAt) > Date.parse(selectedAt)
+              ? []
+              : [ageHours(item.observedAt, selectedAt)];
+          });
+          return ages.length === 0 ? null : Math.max(...ages);
+        })(),
+      },
       capabilityIds: [...part.capabilityIds],
       capabilityLayers: [
         ...new Set(
@@ -211,7 +315,6 @@ export function stateAt(
         ),
       ],
       participatingGroupIds: [...part.participatingGroupIds],
-      primaryGroupId: part.primaryGroupId ?? null,
       problem: part.problem,
       decisionLoopIds: [...part.decisionLoopIds],
       unlocksPartIds: [...part.unlocksPartIds],
@@ -233,6 +336,29 @@ export function stateAt(
     };
   });
 
+  const groups: AimGroupState[] = manifest.groups.map((group) => {
+    const groupAgents = agents.filter((agent) => agent.groupIds.includes(group.id));
+    const certifiedAgentCount = groupAgents.filter(
+      (agent) =>
+        agent.certificationStatus === 'certified' &&
+        agent.certificationEvidenceFresh &&
+        (manifest.program.synthetic || !agent.synthetic),
+    ).length;
+    return {
+      id: group.id,
+      label: group.label,
+      description: group.description ?? null,
+      kind: group.kind,
+      displayOrder: group.displayOrder,
+      ownedAnchorIds: [...group.ownedAnchorIds],
+      ownedPartIds: parts.filter((part) => part.ownerGroupId === group.id).map(({ id }) => id),
+      agentIds: groupAgents.map(({ id }) => id),
+      certifiedAgentCount,
+      hasCertifiedAgent: certifiedAgentCount > 0,
+    };
+  });
+  const primaryGroups = groups.filter(({ kind }) => kind === 'primary');
+
   const factoryMaturity = metricValue(metrics, manifest.displayPolicy.factoryMaturityMetricId);
   const semanticState: AimProgramState = {
     schemaVersion: manifest.schemaVersion,
@@ -242,8 +368,17 @@ export function stateAt(
     outsideTimeline:
       Date.parse(selectedAt) < Date.parse(manifest.timeline.startAt) ||
       Date.parse(selectedAt) > Date.parse(manifest.timeline.endAt),
+    groups,
+    agents,
+    groupCoverage: {
+      primaryGroupCount: primaryGroups.length,
+      groupsWithoutCertifiedAgentIds: primaryGroups
+        .filter(({ hasCertifiedAgent }) => !hasCertifiedAgent)
+        .map(({ id }) => id),
+    },
     parts,
     milestones: milestoneStates(manifest, selectedAt),
+    workstreams: workstreamStates(manifest, selectedAt),
     decisionLoops: decisionLoopStates(manifest, selectedAt, metrics),
     interfaces: interfaceStates(manifest, selectedAt),
     metrics: metricStates,

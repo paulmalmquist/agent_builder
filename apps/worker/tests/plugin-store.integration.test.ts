@@ -448,6 +448,15 @@ class ContextCapturingDailyBriefProvider extends DeterministicDailyBriefProvider
   }
 }
 
+class MalformedAfterPluginProvider extends ContextCapturingDailyBriefProvider {
+  override async *stream(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'text_delta', text: 'not-json' };
+    yield { type: 'usage', usage: { inputTokens: 10, outputTokens: 2 } };
+    yield { type: 'complete', stopReason: 'end_turn' };
+  }
+}
+
 function daemonConfig(): WorkerConfig {
   return {
     environment: 'test',
@@ -592,6 +601,57 @@ describeDatabase('PrismaWorkerPluginExecutionStore integration', () => {
     expect(terminal.errorCode).toBe('PLUGIN_DISABLED');
   });
 
+  it('terminalizes an expired lease after a Plugin invocation instead of requeueing a blind replay', async () => {
+    const fixture = await pluginFixture();
+    let effects = 0;
+    const executor = new WorkerPluginExecutor(
+      new PrismaWorkerPluginExecutionStore(prisma),
+      registry(async () => {
+        effects += 1;
+        return { value: 'ephemeral-result' };
+      }),
+      1_000,
+    );
+    await executor.execute(fixture.call);
+    await prisma.executionRun.update({
+      where: { id: fixture.runId },
+      data: {
+        attempts: 1,
+        maxAttempts: 3,
+        leaseOwner: 'plugin-worker-test',
+        leaseExpiresAt: new Date(Date.now() - 1_000),
+        heartbeatAt: new Date(Date.now() - 2_000),
+      },
+    });
+
+    await expect(new PrismaWorkerStore(prisma).recoverExpiredLeases()).resolves.toMatchObject({
+      requeued: 0,
+      failed: 1,
+    });
+
+    const run = await prisma.executionRun.findUniqueOrThrow({ where: { id: fixture.runId } });
+    expect(effects).toBe(1);
+    expect(run).toMatchObject({
+      state: ExecutionRunState.FAILED,
+      attempts: 1,
+      error: {
+        code: 'PLUGIN_INVOCATION_RETRY_BLOCKED',
+        retrySuppressedBy: 'plugin_invocation_started',
+      },
+    });
+    expect(
+      await prisma.executionRunEvent.findFirst({
+        where: {
+          runId: fixture.runId,
+          phase: 'worker-recovery',
+          state: 'failed',
+        },
+      }),
+    ).toMatchObject({
+      metadata: { retrySuppressedBy: 'plugin_invocation_started' },
+    });
+  });
+
   it('has the production daemon claim and execute an immutable plan before model execution', async () => {
     const fixture = await pluginFixture({ daemon: true });
     const provider = new ContextCapturingDailyBriefProvider();
@@ -620,6 +680,52 @@ describeDatabase('PrismaWorkerPluginExecutionStore integration', () => {
     expect(invocationRows.map(({ state }) => state)).toEqual(['RUNNING', 'SUCCEEDED']);
     expect(invocationRows.every(({ planId }) => planId === fixture.call.planId)).toBe(true);
     expect(await prisma.outcomeRecord.count({ where: { runId: fixture.runId } })).toBe(1);
+  });
+
+  it('terminalizes a retryable model failure after Plugin hydration without replaying the invocation', async () => {
+    const fixture = await pluginFixture({ daemon: true });
+    const provider = new MalformedAfterPluginProvider();
+    let effects = 0;
+    const daemon = daemonWithPlugin(provider, async () => {
+      effects += 1;
+      return { value: 'transient-plugin-result' };
+    });
+
+    await daemon.start();
+    try {
+      await waitForRunState(fixture.runId, ExecutionRunState.FAILED);
+    } finally {
+      await daemon.stop();
+    }
+
+    const [run, invocationRows, failureEvent] = await Promise.all([
+      prisma.executionRun.findUniqueOrThrow({ where: { id: fixture.runId } }),
+      prisma.pluginInvocation.findMany({
+        where: { invocationKey: fixture.call.invocationKey },
+        orderBy: { sequence: 'asc' },
+      }),
+      prisma.executionRunEvent.findFirstOrThrow({
+        where: { runId: fixture.runId, phase: 'outcome', state: 'failed' },
+        orderBy: { sequence: 'desc' },
+      }),
+    ]);
+    expect(effects).toBe(1);
+    expect(provider.requests).toHaveLength(1);
+    expect(run).toMatchObject({
+      state: ExecutionRunState.FAILED,
+      attempts: 1,
+      maxAttempts: 3,
+      error: {
+        code: 'MODEL_OUTPUT_INVALID_JSON',
+        retrySuppressedBy: 'plugin_invocation_started',
+      },
+    });
+    expect(invocationRows.map(({ state }) => state)).toEqual(['RUNNING', 'SUCCEEDED']);
+    expect(failureEvent.metadata).toMatchObject({
+      code: 'MODEL_OUTPUT_INVALID_JSON',
+      retrySuppressedBy: 'plugin_invocation_started',
+    });
+    expect(await prisma.outcomeRecord.count({ where: { runId: fixture.runId } })).toBe(0);
   });
 
   it('pauses the durable run when the exact Plugin is disabled during a call', async () => {

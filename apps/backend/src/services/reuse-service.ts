@@ -56,6 +56,7 @@ import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { currentRequestPrincipal } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere, isInPrincipalScope } from '../scope.js';
 import { appendPlatformEvent } from './attention-service.js';
+import { userFacingResourceVersionWhere } from './user-facing-records.js';
 
 const stringArraySchema = z.array(z.string());
 const finiteVectorSchema = z.array(z.number().finite()).min(8).max(4096);
@@ -484,25 +485,31 @@ export class ReuseService {
     const query = catalogPublicationListQuerySchema.parse(rawQuery);
     const records = await this.prisma.catalogPublication.findMany({
       where: {
-        ...visiblePublicationWhere(),
-        state: query.includeRetired
-          ? { in: [DatabasePublicationState.ACTIVE, DatabasePublicationState.RETIRED] }
-          : DatabasePublicationState.ACTIVE,
-        ...(query.subjectKind === undefined
-          ? {}
-          : {
-              subjectKind: query.subjectKind === 'agent' ? ResourceKind.AGENT : ResourceKind.SKILL,
-            }),
-        ...(query.catalogVisibility === undefined
-          ? {}
-          : {
-              catalogVisibility:
-                query.catalogVisibility === 'private'
-                  ? DatabaseCatalogVisibility.PRIVATE
-                  : query.catalogVisibility === 'department'
-                    ? DatabaseCatalogVisibility.DEPARTMENT
-                    : DatabaseCatalogVisibility.ORGANIZATION,
-            }),
+        AND: [
+          visiblePublicationWhere(),
+          { resourceVersion: { is: userFacingResourceVersionWhere } },
+          {
+            state: query.includeRetired
+              ? { in: [DatabasePublicationState.ACTIVE, DatabasePublicationState.RETIRED] }
+              : DatabasePublicationState.ACTIVE,
+            ...(query.subjectKind === undefined
+              ? {}
+              : {
+                  subjectKind:
+                    query.subjectKind === 'agent' ? ResourceKind.AGENT : ResourceKind.SKILL,
+                }),
+            ...(query.catalogVisibility === undefined
+              ? {}
+              : {
+                  catalogVisibility:
+                    query.catalogVisibility === 'private'
+                      ? DatabaseCatalogVisibility.PRIVATE
+                      : query.catalogVisibility === 'department'
+                        ? DatabaseCatalogVisibility.DEPARTMENT
+                        : DatabaseCatalogVisibility.ORGANIZATION,
+                }),
+          },
+        ],
       },
       include: publicationInclude,
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
@@ -633,7 +640,13 @@ export class ReuseService {
     const indexRecords = await this.prisma.catalogIndexRecord.findMany({
       where: {
         retired: false,
-        publication: { ...visiblePublicationWhere(), state: DatabasePublicationState.ACTIVE },
+        publication: {
+          AND: [
+            visiblePublicationWhere(),
+            { state: DatabasePublicationState.ACTIVE },
+            { resourceVersion: { is: userFacingResourceVersionWhere } },
+          ],
+        },
       },
       include: { publication: { include: publicationInclude } },
       take: 200,

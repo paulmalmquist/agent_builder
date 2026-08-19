@@ -9,6 +9,7 @@ import {
   ExecutionRunState,
   ImprovementCandidateState,
   MemoryCandidateState,
+  ResourceKind,
   type PrismaClient,
 } from '@prisma/client';
 import { createApp } from '../src/app.js';
@@ -19,6 +20,14 @@ import {
 import type { ExecutionService } from '../src/services/execution-service.js';
 import type { ServiceBundle } from '../src/services/types.js';
 import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
+import { learningDecisionGroupKey } from '../src/services/learning-decision-groups.js';
+import {
+  userFacingImprovementCandidateWhere,
+  userFacingMemoryCandidateWhere,
+  userFacingObservationWhere,
+  userFacingResourceVersionWhere,
+} from '../src/services/user-facing-records.js';
+import { canonicalJson, sha256 } from '@paul-os/runtime';
 
 const now = new Date('2026-08-16T12:00:00.000Z');
 const scheduleId = randomUUID();
@@ -34,6 +43,10 @@ const dispatchId = randomUUID();
 const VISIBLE_SCOPE = {
   workspaceId: LOCAL_WORKSPACE_ID,
   OR: [{ departmentId: null }, { departmentId: LOCAL_DEPARTMENT_ID }],
+};
+const USER_FACING_SCHEDULE_INDEX = {
+  ...VISIBLE_SCOPE,
+  entryResourceVersion: userFacingResourceVersionWhere,
 };
 
 const schedule = {
@@ -62,7 +75,7 @@ const schedule = {
   maxCatchUpRuns: 10,
   deduplicationWindowSeconds: 300,
   maximumAttempts: 3,
-  backoff: AutomationBackoff.EXPONENTIAL,
+  backoff: AutomationBackoff.EXPONENTIAL as AutomationBackoff,
   maxInputTokens: 4000,
   maxOutputTokens: 1000,
   maxEstimatedCostUsd: 0.5,
@@ -73,6 +86,17 @@ const schedule = {
   updatedBy: 'local-user',
   createdAt: now,
   updatedAt: now,
+};
+const scheduleWithSubject = {
+  ...schedule,
+  entryResourceVersion: {
+    version: '1.0.0',
+    family: {
+      id: randomUUID(),
+      name: 'Daily Brief',
+      kind: ResourceKind.SKILL,
+    },
+  },
 };
 const observation = {
   id: observationId,
@@ -116,19 +140,36 @@ const memory = {
 };
 
 function harness() {
-  const scheduleFind = jest.fn(() => Promise.resolve(schedule));
-  const improvementFind = jest.fn(() => Promise.resolve(improvement));
-  const memoryFind = jest.fn(() => Promise.resolve(memory));
+  const scheduleFind = jest.fn(() => Promise.resolve(scheduleWithSubject));
+  let currentImprovement = {
+    ...improvement,
+    observation: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      departmentId: LOCAL_DEPARTMENT_ID,
+      sourceRunId: runId,
+      sourceRun: { projectId: null, entryResourceVersionId },
+    },
+  };
+  let currentMemory = {
+    ...memory,
+    sourceRun: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      departmentId: LOCAL_DEPARTMENT_ID,
+      projectId: null,
+    },
+  };
+  const improvementFind = jest.fn(() => Promise.resolve(currentImprovement));
+  const memoryFind = jest.fn(() => Promise.resolve(currentMemory));
   const transaction = {
     automationSchedule: {
-      create: jest.fn(() => Promise.resolve(schedule)),
+      create: jest.fn(() => Promise.resolve(scheduleWithSubject)),
       findUnique: scheduleFind,
       findFirst: scheduleFind,
       findMany: jest.fn(() =>
-        Promise.resolve([{ ...schedule, channel: { currentReleaseId: releaseId } }]),
+        Promise.resolve([{ ...scheduleWithSubject, channel: { currentReleaseId: releaseId } }]),
       ),
       update: jest.fn(({ data }: { data: Record<string, unknown> }) =>
-        Promise.resolve({ ...schedule, ...data, updatedAt: now }),
+        Promise.resolve({ ...scheduleWithSubject, ...data, updatedAt: now }),
       ),
     },
     automationDispatch: {
@@ -141,7 +182,13 @@ function harness() {
     improvementCandidate: {
       create: jest.fn(() => Promise.resolve(improvement)),
       findUnique: improvementFind,
+      findUniqueOrThrow: jest.fn(() => Promise.resolve(currentImprovement)),
       findFirst: improvementFind,
+      findMany: jest.fn(() => Promise.resolve([{ id: improvementId }])),
+      updateMany: jest.fn(({ data }: { data: Record<string, unknown> }) => {
+        currentImprovement = { ...currentImprovement, ...data };
+        return Promise.resolve({ count: 1 });
+      }),
       update: jest.fn(({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({ ...improvement, ...data }),
       ),
@@ -149,7 +196,12 @@ function harness() {
     memoryCandidate: {
       create: jest.fn(() => Promise.resolve(memory)),
       findUnique: memoryFind,
+      findUniqueOrThrow: jest.fn(() => Promise.resolve(currentMemory)),
       findFirst: memoryFind,
+      updateMany: jest.fn(({ data }: { data: Record<string, unknown> }) => {
+        currentMemory = { ...currentMemory, ...data };
+        return Promise.resolve({ count: 1 });
+      }),
       update: jest.fn(({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({ ...memory, ...data }),
       ),
@@ -182,7 +234,7 @@ function harness() {
       releaseDigest: 'a'.repeat(64),
     }),
   );
-  const topScheduleFind = jest.fn(() => Promise.resolve(schedule));
+  const topScheduleFind = jest.fn(() => Promise.resolve(scheduleWithSubject));
   const outcomeFind = jest.fn(() => Promise.resolve({ id: outcomeId, runId }));
   const runFind = jest.fn(() => Promise.resolve({ id: runId, state: ExecutionRunState.SUCCEEDED }));
   const observationFind = jest.fn(() => Promise.resolve(observation));
@@ -200,7 +252,7 @@ function harness() {
       findFirst: grantFind,
     },
     automationSchedule: {
-      findMany: jest.fn(() => Promise.resolve([schedule])),
+      findMany: jest.fn(() => Promise.resolve([scheduleWithSubject])),
       groupBy: jest.fn(() =>
         Promise.resolve([
           { state: AutomationScheduleState.ACTIVE, _count: { _all: 6 } },
@@ -330,16 +382,33 @@ describe('AutomationLearningService', () => {
   it('maps schedules and executes a restart-safe due scheduling pass', async () => {
     const { service, execution, prisma, transaction } = harness();
     await expect(service.listSchedules({ state: 'active', limit: 20 })).resolves.toMatchObject({
-      items: [{ id: scheduleId, state: 'active', retry: { backoff: 'exponential' } }],
+      items: [
+        {
+          id: scheduleId,
+          state: 'active',
+          entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
+          retry: { backoff: 'exponential' },
+        },
+      ],
       total: 8,
       activeTotal: 6,
     });
     expect(prisma.automationSchedule.groupBy).toHaveBeenCalledWith({
       by: ['state'],
-      where: VISIBLE_SCOPE,
+      where: USER_FACING_SCHEDULE_INDEX,
       _count: { _all: true },
     });
+    expect(prisma.automationSchedule.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { ...USER_FACING_SCHEDULE_INDEX, state: AutomationScheduleState.ACTIVE },
+        include: { entryResourceVersion: { include: { family: true } } },
+      }),
+    );
     await expect(service.getSchedule(scheduleId)).resolves.toMatchObject({ id: scheduleId });
+    expect(prisma.automationSchedule.findFirst).toHaveBeenCalledWith({
+      where: { id: scheduleId, ...VISIBLE_SCOPE },
+      include: { entryResourceVersion: { include: { family: true } } },
+    });
     const result = await service.scheduleDue(now, 25);
     expect(result).toMatchObject({
       lockAcquired: true,
@@ -349,21 +418,50 @@ describe('AutomationLearningService', () => {
       awaitingApproval: 1,
     });
     expect(execution.createRun).toHaveBeenCalledWith(
-      expect.objectContaining({ releaseId, authorityGrantId: grantId }),
+      expect.objectContaining({
+        releaseId,
+        authorityGrantId: grantId,
+        maxAttempts: 3,
+        retryBackoff: 'exponential',
+      }),
       { digestSnapshotId: null },
     );
-    expect(transaction.executionRun.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { maxAttempts: 3 } }),
-    );
+    expect(transaction.executionRun.update).not.toHaveBeenCalled();
+  });
+
+  it('creates a scheduled run with its declared retry ceiling atomically', async () => {
+    const previousMaximumAttempts = schedule.maximumAttempts;
+    const previousBackoff = schedule.backoff;
+    schedule.maximumAttempts = 1;
+    schedule.backoff = AutomationBackoff.FIXED;
+    try {
+      const { service, execution, transaction } = harness();
+      await expect(service.scheduleDue(now, 25)).resolves.toMatchObject({ runsCreated: 1 });
+      expect(execution.createRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotencyKey: expect.any(String),
+          maxAttempts: 1,
+          retryBackoff: 'fixed',
+        }),
+        { digestSnapshotId: null },
+      );
+      expect(transaction.executionRun.update).not.toHaveBeenCalled();
+    } finally {
+      schedule.maximumAttempts = previousMaximumAttempts;
+      schedule.backoff = previousBackoff;
+    }
   });
 
   it('records traceable observations and creates human-curated improvement candidates', async () => {
-    const { service } = harness();
+    const { service, prisma } = harness();
     await expect(
       service.listObservations({ sourceRunId: runId, limit: 20 }),
     ).resolves.toMatchObject({
       items: [{ id: observationId }],
     });
+    expect((prisma.observation.findMany as jest.Mock).mock.calls[0]?.[0].where.AND).toContainEqual(
+      userFacingObservationWhere,
+    );
     await expect(
       service.createObservation({
         signalKey: observation.signalKey,
@@ -378,6 +476,9 @@ describe('AutomationLearningService', () => {
     await expect(service.listImprovementCandidates({ limit: 20 })).resolves.toMatchObject({
       items: [{ id: improvementId, state: 'proposed' }],
     });
+    expect(
+      (prisma.improvementCandidate.findMany as jest.Mock).mock.calls[0]?.[0].where.AND,
+    ).toContainEqual(userFacingImprovementCandidateWhere);
     await expect(
       service.createImprovementCandidate({
         observationId,
@@ -390,12 +491,15 @@ describe('AutomationLearningService', () => {
   });
 
   it('stages memory only from a succeeded run and never accepts it automatically', async () => {
-    const { service } = harness();
+    const { service, prisma } = harness();
     await expect(
       service.listMemoryCandidates({ sourceRunId: runId, limit: 20 }),
     ).resolves.toMatchObject({
       items: [{ id: memoryId, state: 'staged', acceptedValue: null }],
     });
+    expect(
+      (prisma.memoryCandidate.findMany as jest.Mock).mock.calls[0]?.[0].where.AND,
+    ).toContainEqual(userFacingMemoryCandidateWhere);
     await expect(
       service.createMemoryCandidate({
         sourceRunId: runId,
@@ -430,6 +534,137 @@ describe('AutomationLearningService', () => {
       })
       .expect(200);
     expect(transaction.auditEvent.create).toHaveBeenCalled();
+  });
+
+  it('reviews every exact improvement request under one grouped decision', async () => {
+    const { service, transaction } = harness();
+    const secondCandidateId = randomUUID();
+    transaction.improvementCandidate.findMany.mockResolvedValueOnce([
+      { id: improvementId },
+      { id: secondCandidateId },
+    ]);
+    transaction.improvementCandidate.updateMany.mockResolvedValueOnce({ count: 2 });
+    const semanticDecisionKey = sha256(
+      canonicalJson({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        projectId: null,
+        entryResourceVersionId,
+        title: improvement.title,
+        proposedTarget: improvement.proposedTarget,
+        proposedChange: improvement.proposedChange,
+      }),
+    );
+    const decisionGroupKey = learningDecisionGroupKey('improvement', semanticDecisionKey, [
+      improvementId,
+      secondCandidateId,
+    ]);
+
+    await request(appFor(service))
+      .post(`/v1/improvement-candidates/${improvementId}/review`)
+      .send({
+        decision: 'incubate',
+        rationale: 'Review the two exact proposals as one governed decision.',
+        decisionGroupKey,
+        expectedRequestCount: 2,
+      })
+      .expect(200);
+
+    expect(transaction.improvementCandidate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          state: ImprovementCandidateState.PROPOSED,
+          title: improvement.title,
+          proposedTarget: improvement.proposedTarget,
+          proposedChange: improvement.proposedChange,
+        }),
+        take: 251,
+      }),
+    );
+    expect(transaction.improvementCandidate.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: { in: [improvementId, secondCandidateId] },
+          state: ImprovementCandidateState.PROPOSED,
+        },
+      }),
+    );
+    expect(transaction.auditEvent.create).toHaveBeenCalledTimes(2);
+    expect(transaction.auditEvent.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          entityId: improvementId,
+          details: expect.objectContaining({ decisionGroupKey, expectedRequestCount: 2 }),
+        }),
+      }),
+    );
+    expect(transaction.auditEvent.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          entityId: secondCandidateId,
+          details: expect.objectContaining({ decisionGroupKey, expectedRequestCount: 2 }),
+        }),
+      }),
+    );
+  });
+
+  it('fails closed when an Attention learning group changes after it was displayed', async () => {
+    const { service, transaction } = harness();
+    const secondCandidateId = randomUUID();
+    const insertedAfterLoadId = randomUUID();
+    const semanticDecisionKey = sha256(
+      canonicalJson({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        projectId: null,
+        entryResourceVersionId,
+        title: improvement.title,
+        proposedTarget: improvement.proposedTarget,
+        proposedChange: improvement.proposedChange,
+      }),
+    );
+    const displayedGroupKey = learningDecisionGroupKey('improvement', semanticDecisionKey, [
+      improvementId,
+      secondCandidateId,
+    ]);
+    transaction.improvementCandidate.findMany.mockResolvedValueOnce([
+      { id: improvementId },
+      { id: secondCandidateId },
+      { id: insertedAfterLoadId },
+    ]);
+
+    await request(appFor(service))
+      .post(`/v1/improvement-candidates/${improvementId}/review`)
+      .send({
+        decision: 'reject',
+        rationale: 'Reject only after the displayed membership is revalidated.',
+        decisionGroupKey: displayedGroupKey,
+        expectedRequestCount: 2,
+      })
+      .expect(409);
+
+    expect(transaction.improvementCandidate.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps ungrouped Incubator review scoped to the named candidate', async () => {
+    const { service, transaction } = harness();
+
+    await request(appFor(service))
+      .post(`/v1/improvement-candidates/${improvementId}/review`)
+      .send({
+        decision: 'incubate',
+        rationale: 'Review this individual Incubator proposal without hidden siblings.',
+      })
+      .expect(200);
+
+    expect(transaction.improvementCandidate.findMany).not.toHaveBeenCalled();
+    expect(transaction.improvementCandidate.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: [improvementId] }, state: ImprovementCandidateState.PROPOSED },
+      }),
+    );
   });
 
   it('fails closed for invalid schedule constraints, authority, release, and channel state', async () => {
@@ -503,7 +738,7 @@ describe('AutomationLearningService', () => {
 
     const superseded = harness();
     superseded.transaction.automationSchedule.findMany.mockResolvedValueOnce([
-      { ...schedule, channel: { currentReleaseId: randomUUID() } },
+      { ...scheduleWithSubject, channel: { currentReleaseId: randomUUID() } },
     ]);
     superseded.prisma.automationDispatch.findMany.mockResolvedValueOnce([]);
     await expect(superseded.service.scheduleDue(now, 25)).resolves.toMatchObject({
@@ -579,14 +814,25 @@ describe('AutomationLearningService', () => {
     ).rejects.toMatchObject({ code: 'MEMORY_SOURCE_NOT_SUCCEEDED' });
 
     const terminal = harness();
-    terminal.transaction.improvementCandidate.findUnique.mockResolvedValueOnce({
+    terminal.transaction.improvementCandidate.findFirst.mockResolvedValue({
       ...improvement,
       state: ImprovementCandidateState.REJECTED,
+      observation: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        sourceRunId: runId,
+        sourceRun: { projectId: null, entryResourceVersionId },
+      },
     } as never);
-    terminal.transaction.memoryCandidate.findUnique.mockResolvedValueOnce({
+    terminal.transaction.memoryCandidate.findFirst.mockResolvedValue({
       ...memory,
       state: MemoryCandidateState.ACCEPTED,
       acceptedValue: memory.proposedValue,
+      sourceRun: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        projectId: null,
+      },
     } as never);
     await request(appFor(terminal.service))
       .post(`/v1/improvement-candidates/${improvementId}/review`)

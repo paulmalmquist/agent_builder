@@ -46,6 +46,7 @@ import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { requireHumanActor } from './actors.js';
 import { appendExecutionRunEvent } from './attention-service.js';
 import { loadPluginMarkAsset, type PluginMarkAsset } from '../plugins/mark-asset.js';
+import { userFacingResourceVersionWhere } from './user-facing-records.js';
 
 const installationStateWire = {
   [PluginInstallationState.INSTALLED]: 'installed',
@@ -363,7 +364,10 @@ export class PluginService {
     const [versions, grants, invocationCosts] = await Promise.all([
       this.prisma.resourceVersion.findMany({
         where: {
-          family: { kind: ResourceKind.PLUGIN, ...aggregateScopeWhere() },
+          AND: [
+            userFacingResourceVersionWhere,
+            { family: { kind: ResourceKind.PLUGIN, ...aggregateScopeWhere() } },
+          ],
         },
         include: {
           family: true,

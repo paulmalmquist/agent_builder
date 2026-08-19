@@ -14,6 +14,12 @@ interface ApprovalDialogProps {
   isApproving: boolean;
   onApprove: (value: ApproveRunInput) => void;
   onClose: () => void;
+  requestCount?: number;
+  subject?: {
+    name: string;
+    kind: string;
+    version: string;
+  } | null;
 }
 
 function tomorrowLocalInput() {
@@ -105,12 +111,16 @@ export function ApprovalDialog({
   isApproving,
   onApprove,
   onClose,
+  requestCount = 1,
+  subject = null,
 }: ApprovalDialogProps) {
+  const reviewedRequestCount = Math.max(1, requestCount);
   const perRunFloor = Math.max(run.estimatedUpperCostUsd, run.maxEstimatedCostUsd, 0.01);
+  const reviewedCostFloor = run.estimatedUpperCostUsd * reviewedRequestCount;
   const [validUntil, setValidUntil] = useState(tomorrowLocalInput);
-  const [maxRuns, setMaxRuns] = useState(1);
+  const [maxRuns, setMaxRuns] = useState(reviewedRequestCount);
   const [perRunCost, setPerRunCost] = useState(perRunFloor);
-  const [totalCost, setTotalCost] = useState(perRunFloor);
+  const [totalCost, setTotalCost] = useState(() => Math.max(perRunFloor, reviewedCostFloor));
   const [toolScopes, setToolScopes] = useState(() => run.requiredToolScopes.map(() => true));
   const [pluginScopes, setPluginScopes] = useState(() =>
     run.requiredPluginScopes.map((scope) => ({ ...scope, limits: { ...scope.limits } })),
@@ -118,8 +128,13 @@ export function ApprovalDialog({
   const [selectedPluginScopes, setSelectedPluginScopes] = useState(() =>
     run.requiredPluginScopes.map(() => true),
   );
-  const [rationale, setRationale] = useState('Approve the bounded first run of this release.');
+  const [rationale, setRationale] = useState(() =>
+    reviewedRequestCount === 1
+      ? 'Approve the bounded first run of this release.'
+      : `Approve bounded authority for ${reviewedRequestCount} reviewed matching runs.`,
+  );
   const selectedToolScopes = run.requiredToolScopes.filter((_scope, index) => toolScopes[index]);
+  const totalCostFloor = Math.max(perRunCost, reviewedCostFloor);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -157,8 +172,26 @@ export function ApprovalDialog({
         This grant applies only to release <code>{run.releaseDigest.slice(0, 14)}…</code>. Scope,
         expiry, run count, or budget changes require a new human decision.
       </p>
+      {subject ? (
+        <p className="os-disclosure">
+          SUBJECT · {subject.name} · {subject.kind.toUpperCase()} {subject.version}
+        </p>
+      ) : null}
+      {reviewedRequestCount > 1 ? (
+        <Notice>
+          One decision covers {reviewedRequestCount} exact matching pending runs
+          {subject ? ` of ${subject.name}` : ''}. The envelope must cover all of them before any
+          work queues.
+        </Notice>
+      ) : null}
       <p className="os-disclosure">
         PROJECT · {run.projectId ?? 'UNSCOPED'} · INPUT CONSTRAINTS DEFAULT TO THIS EXACT RUN
+      </p>
+      <p className="os-disclosure">
+        RETRY ·{' '}
+        {run.maxAttempts === 1
+          ? 'ONE ATTEMPT · NO AUTOMATIC RETRY'
+          : `UP TO ${run.maxAttempts} TOTAL ATTEMPTS · ${run.retryBackoff.toUpperCase()} BACKOFF`}
       </p>
       {run.approvalReasons.length > 0 ? <Notice>{run.approvalReasons.join(' · ')}</Notice> : null}
       {run.legacyEntrypointUnresolved ? (
@@ -183,7 +216,7 @@ export function ApprovalDialog({
           Maximum runs
           <input
             max={1_000_000}
-            min={1}
+            min={reviewedRequestCount}
             onChange={(event) => setMaxRuns(event.currentTarget.valueAsNumber)}
             required
             type="number"
@@ -204,7 +237,7 @@ export function ApprovalDialog({
         <label>
           Total budget · USD
           <input
-            min={perRunCost}
+            min={totalCostFloor}
             onChange={(event) => setTotalCost(event.currentTarget.valueAsNumber)}
             required
             step="0.01"
@@ -274,7 +307,12 @@ export function ApprovalDialog({
           </button>
           <button
             className="primary-button"
-            disabled={isApproving || totalCost < perRunCost || run.legacyEntrypointUnresolved}
+            disabled={
+              isApproving ||
+              maxRuns < reviewedRequestCount ||
+              totalCost < totalCostFloor ||
+              run.legacyEntrypointUnresolved
+            }
             type="submit"
           >
             {isApproving ? 'Binding authority…' : consoleCriticalCopy.runApproval.actions[0].label}

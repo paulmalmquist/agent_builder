@@ -14,6 +14,7 @@ function renderShell(path = '/', attentionElement: ReactNode = <div>Attention ro
         <Route index element={<div>Today route</div>} />
         <Route element={attentionElement} path="attention" />
         <Route element={<div>Knowledge route</div>} path="knowledge" />
+        <Route element={<div>AIM route</div>} path="aim" />
         <Route element={<div>Build route</div>} path="build" />
         <Route element={<div>Catalog route</div>} path="catalog" />
         <Route element={<div>Library route</div>} path="library" />
@@ -24,6 +25,7 @@ function renderShell(path = '/', attentionElement: ReactNode = <div>Attention ro
         <Route element={<div>Evidence route</div>} path="evidence" />
         <Route element={<div>Certification route</div>} path="certification/:agentId" />
         <Route element={<div>Incubator route</div>} path="incubator" />
+        <Route element={<div>Roadmaps route</div>} path="roadmaps" />
         <Route element={<div>Settings route</div>} path="settings" />
       </Route>
     </Routes>,
@@ -34,7 +36,7 @@ function renderShell(path = '/', attentionElement: ReactNode = <div>Attention ro
 describe('Paul OS platform shell', () => {
   beforeEach(() => window.localStorage.clear());
 
-  it('uses the numbered 00–08 rail and reserves its only count badge for Attention', async () => {
+  it('uses the numbered 00–10 rail and reserves its only count badge for Attention', async () => {
     const user = userEvent.setup();
     renderShell();
 
@@ -43,17 +45,19 @@ describe('Paul OS platform shell', () => {
 
     const navigation = screen.getByRole('navigation', { name: 'Paul OS' });
     const links = within(navigation).getAllByRole('link');
-    expect(links).toHaveLength(10);
+    expect(links).toHaveLength(12);
     expect(links.map((link) => link.textContent?.trim())).toEqual([
       '00TODAY',
       '01ATTENTION',
       '02KNOWLEDGE',
-      '03BUILD',
-      '04CATALOG',
-      '05OPERATE',
-      '06CONNECTIONS',
-      '07EVIDENCE',
-      '08INCUBATOR',
+      '03AIM',
+      '04BUILD',
+      '05CATALOG',
+      '06OPERATE',
+      '07CONNECTIONS',
+      '08EVIDENCE',
+      '09INCUBATOR',
+      '10ROADMAPS',
       '—SETTINGS',
     ]);
     expect(within(navigation).getByRole('link', { name: /TODAY/i })).toHaveAttribute(
@@ -82,6 +86,14 @@ describe('Paul OS platform shell', () => {
       'aria-pressed',
       'true',
     );
+
+    const todayLink = screen.getByRole('link', { name: 'TODAY' });
+    expect(todayLink).toHaveAttribute('title', 'TODAY');
+    await user.hover(todayLink);
+    expect(todayLink).toHaveAttribute('aria-describedby', 'platform-rail-tooltip');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('TODAY');
+    await user.unhover(todayLink);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
     first.unmount();
     renderShell();
@@ -130,6 +142,7 @@ describe('Paul OS platform shell', () => {
   it.each([
     ['/', 'TODAY'],
     ['/attention', 'ATTENTION'],
+    ['/aim', 'AIM'],
     ['/library', 'CATALOG'],
     ['/registry', 'CATALOG'],
     ['/runs', 'OPERATE'],
@@ -239,7 +252,7 @@ describe('Paul OS platform shell', () => {
       await screen.findByRole('option', { name: /Supplier Risk Analyst/i }),
     ).toBeInTheDocument();
     expect(await screen.findByRole('status')).toHaveTextContent(
-      '2 results available across agents and governed definitions.',
+      '2 results available across governed agents, legacy agents, and other definitions.',
     );
 
     await user.keyboard('{Enter}');

@@ -3,7 +3,7 @@ kind: Protocol
 metadata:
   id: 70000000-0000-4000-8000-000000000002
   slug: console-grammar
-  version: 1.1.0
+  version: 1.3.0
   owner: local-platform-owner
   purpose: Enforce decision-grade attention, plain language, provenance, and accessible review.
   lifecycle: candidate
@@ -38,8 +38,31 @@ spec:
     - motion_honors_reduced_motion
     - numbered_navigation_precedes_generic_app_icons
     - navigation_uses_no_sparkle_wand_or_robot_glyphs
+    - surface_hierarchy_starts_with_the_users_current_operating_question
+    - domain_specific_structure_precedes_generic_feature_cards
+    - dense_layouts_preserve_reflow_visible_focus_and_target_spacing
+    - decorative_assets_never_replace_operational_evidence
     - today_is_read_only_and_attention_remains_the_only_decision_action_surface
     - timeline_facts_name_their_source_and_missing_sources_stay_explicitly_unavailable
     - connector_marks_use_one_standard_chassis
     - connector_marks_use_local_assets_with_monogram_and_accent_fallbacks
     - connector_effect_and_authority_are_never_conveyed_by_color_alone
+    - attention_cards_name_the_subject_and_state_the_consequence_of_each_decision
+    - attention_card_faces_never_render_raw_identifiers_or_request_actors
+    - identical_pending_authority_requests_share_one_atomic_decision
+    - approval_required_plugin_actions_always_keep_run_specific_human_decisions
+    - zero_tool_requests_name_the_actual_run_and_spend_authority_instead_of_showing_zero_scopes
+    - aim_starts_with_group_before_hardware_or_agent_detail
+    - aim_hardware_labels_remain_literal_and_platform_coverage_is_an_attribute
+    - aim_capability_map_orders_group_hardware_method_and_agent_coverage
+    - aim_make_method_and_agent_certification_never_rely_on_color_alone
+    - aim_synthetic_and_declared_provenance_are_explicit
+    - home_uses_one_stable_vertical_selection_across_health_plan_and_action
+    - metric_source_state_derives_from_binding_and_sample_provenance
+    - synthetic_inputs_never_produce_live_derived_metrics
+    - awaiting_transfer_never_presents_a_current_value_or_verdict
+    - home_partial_failures_never_imply_zero_or_nominal_state
+    - home_vertical_filters_never_hide_global_decision_or_safety_counts
+    - home_tasks_state_the_rule_that_made_them_visible
+    - home_drill_through_resolves_the_exact_governed_subject
+    - gantt_rows_name_dates_state_and_source_without_relying_on_color

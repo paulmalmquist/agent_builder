@@ -7,7 +7,7 @@ import {
   ExecutionRunState,
   ImprovementCandidateState,
   MemoryCandidateState,
-  type Prisma,
+  Prisma,
   type PrismaClient,
 } from '@prisma/client';
 import {
@@ -36,19 +36,154 @@ import {
   type Observation,
 } from '@agent-builder/contracts';
 import type { z } from 'zod';
+import { canonicalJson, sha256 } from '@paul-os/runtime';
 import { AppError } from '../errors.js';
 import { appendAuditEvent } from '../audit.js';
-import { currentActorId } from '../request-context.js';
+import { hasMinimumRole } from '../authorization.js';
+import { currentActorId, currentRequestPrincipal } from '../request-context.js';
 import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
 import { requireHumanActor } from './actors.js';
 import type { ExecutionService } from './execution-service.js';
 import type { AttentionService } from './attention-service.js';
 import { appendPlatformEvent } from './attention-service.js';
+import { learningDecisionGroupKey } from './learning-decision-groups.js';
+import { subjectFromResourceVersion } from './attention-subject.js';
+import {
+  userFacingImprovementCandidateWhere,
+  userFacingMemoryCandidateWhere,
+  userFacingObservationWhere,
+  userFacingResourceVersionWhere,
+} from './user-facing-records.js';
 
 const stringListSchema = createImprovementCandidateRequestSchema.shape.evidenceRefs;
 const MAX_DAILY_BRIEF_SIGNALS = 100;
 const MAX_DAILY_BRIEF_SIGNAL_LENGTH = 1_000;
+const MAX_GROUPED_LEARNING_DECISIONS = 250;
+const SERIALIZABLE_TRANSACTION_ATTEMPTS = 3;
+
+function isSerializableTransactionConflict(error: unknown): boolean {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2034' ||
+      (error.code === 'P2010' &&
+        (error.meta?.['code'] === '40001' || error.meta?.['code'] === '40P01')))
+  ) {
+    return true;
+  }
+  return (
+    error instanceof Error && /could not serialize access|deadlock detected/i.test(error.message)
+  );
+}
+
+async function retrySerializableTransaction<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        attempt >= SERIALIZABLE_TRANSACTION_ATTEMPTS ||
+        !isSerializableTransactionConflict(error)
+      ) {
+        throw error;
+      }
+    }
+  }
+}
+
+const improvementDecisionInclude = {
+  observation: {
+    include: {
+      sourceRun: { select: { projectId: true, entryResourceVersionId: true } },
+    },
+  },
+} satisfies Prisma.ImprovementCandidateInclude;
+
+type ImprovementDecisionRecord = Prisma.ImprovementCandidateGetPayload<{
+  include: typeof improvementDecisionInclude;
+}>;
+
+function governedLearningDecision(): {
+  actor: string;
+  scope: { workspaceId: string; departmentId: string | null };
+} {
+  const actor = requireHumanActor();
+  const principal = currentRequestPrincipal();
+  if (!hasMinimumRole(principal, 'owner')) {
+    throw new AppError(403, 'AUTHORIZATION_REQUIRED', 'This operation requires the owner role', {
+      requiredRole: 'owner',
+    });
+  }
+  if (principal.departmentId === null && !hasMinimumRole(principal, 'admin')) {
+    throw new AppError(
+      403,
+      'AUTHORIZATION_REQUIRED',
+      'Workspace-global learning decisions require the admin role',
+      { requiredRole: 'admin' },
+    );
+  }
+  return {
+    actor,
+    scope: { workspaceId: principal.workspaceId, departmentId: principal.departmentId },
+  };
+}
+
+function memoryDecisionKey(record: {
+  namespace: string;
+  proposedValue: Prisma.JsonValue;
+  sourceRun: { workspaceId: string; departmentId: string | null; projectId: string | null };
+}): string {
+  return sha256(
+    canonicalJson({
+      workspaceId: record.sourceRun.workspaceId,
+      departmentId: record.sourceRun.departmentId,
+      projectId: record.sourceRun.projectId,
+      namespace: record.namespace,
+      proposedValue: record.proposedValue,
+    }),
+  );
+}
+
+function improvementDecisionKey(record: ImprovementDecisionRecord): string {
+  return sha256(
+    canonicalJson({
+      workspaceId: record.observation.workspaceId,
+      departmentId: record.observation.departmentId,
+      projectId: record.observation.sourceRun?.projectId ?? null,
+      entryResourceVersionId: record.observation.sourceRun?.entryResourceVersionId ?? null,
+      title: record.title,
+      proposedTarget: record.proposedTarget,
+      proposedChange: record.proposedChange,
+    }),
+  );
+}
+
+function improvementGroupWhere(
+  record: ImprovementDecisionRecord,
+): Prisma.ImprovementCandidateWhereInput {
+  return {
+    state: ImprovementCandidateState.PROPOSED,
+    title: record.title,
+    proposedTarget: record.proposedTarget,
+    proposedChange: record.proposedChange,
+    observation: {
+      workspaceId: record.observation.workspaceId,
+      departmentId: record.observation.departmentId,
+      ...(record.observation.sourceRun === null
+        ? { sourceRunId: null }
+        : {
+            sourceRun: {
+              projectId: record.observation.sourceRun.projectId,
+              entryResourceVersionId: record.observation.sourceRun.entryResourceVersionId,
+            },
+          }),
+    },
+  };
+}
+
+function sameJson(left: Prisma.JsonValue | null, right: Prisma.JsonValue | null): boolean {
+  return canonicalJson(left) === canonicalJson(right);
+}
 
 function packDigestEventLines(lines: readonly string[]): string[] {
   const prefix = 'Platform activity: ';
@@ -134,15 +269,25 @@ const memoryStateWire = {
   [MemoryCandidateState.REJECTED]: 'rejected',
 } as const;
 
+const automationScheduleSubjectInclude = {
+  entryResourceVersion: { include: { family: true } },
+} satisfies Prisma.AutomationScheduleInclude;
+
 type DatabaseSchedule = Prisma.AutomationScheduleGetPayload<Record<string, never>>;
+type SubjectBearingDatabaseSchedule = Prisma.AutomationScheduleGetPayload<{
+  include: typeof automationScheduleSubjectInclude;
+}>;
+type PossiblyUnjoinedDatabaseSchedule = DatabaseSchedule &
+  Partial<Pick<SubjectBearingDatabaseSchedule, 'entryResourceVersion'>>;
 type DatabaseObservation = Prisma.ObservationGetPayload<Record<string, never>>;
 type DatabaseImprovement = Prisma.ImprovementCandidateGetPayload<Record<string, never>>;
 type DatabaseMemory = Prisma.MemoryCandidateGetPayload<Record<string, never>>;
 
-function toSchedule(record: DatabaseSchedule): AutomationSchedule {
+function toSchedule(record: PossiblyUnjoinedDatabaseSchedule): AutomationSchedule {
   return automationScheduleSchema.parse({
     id: record.id,
     name: record.name,
+    entrySubject: subjectFromResourceVersion(record.entryResourceVersion ?? null),
     channelKey: record.channelKey,
     releaseId: record.releaseId,
     entryResourceVersionId: record.entryResourceVersionId,
@@ -299,10 +444,14 @@ export class AutomationLearningService {
     limit: number;
   }): Promise<z.infer<typeof automationScheduleListResponseSchema>> {
     const scopeWhere = aggregateScopeWhere();
+    const indexWhere = {
+      ...scopeWhere,
+      entryResourceVersion: userFacingResourceVersionWhere,
+    } satisfies Prisma.AutomationScheduleWhereInput;
     const [records, stateTotals] = await Promise.all([
       this.prisma.automationSchedule.findMany({
         where: {
-          ...scopeWhere,
+          ...indexWhere,
           ...(query.state === undefined
             ? {}
             : {
@@ -312,12 +461,13 @@ export class AutomationLearningService {
                     : AutomationScheduleState.PAUSED,
               }),
         },
+        include: automationScheduleSubjectInclude,
         orderBy: { nextRunAt: 'asc' },
         take: query.limit,
       }),
       this.prisma.automationSchedule.groupBy({
         by: ['state'],
-        where: scopeWhere,
+        where: indexWhere,
         _count: { _all: true },
       }),
     ]);
@@ -334,6 +484,7 @@ export class AutomationLearningService {
   async getSchedule(scheduleId: string): Promise<AutomationSchedule> {
     const record = await this.prisma.automationSchedule.findFirst({
       where: { id: scheduleId, ...aggregateScopeWhere() },
+      include: automationScheduleSubjectInclude,
     });
     if (record === null)
       throw new AppError(404, 'AUTOMATION_NOT_FOUND', 'Automation schedule was not found');
@@ -456,6 +607,7 @@ export class AutomationLearningService {
           createdBy: actor,
           updatedBy: actor,
         },
+        include: automationScheduleSubjectInclude,
       });
       await appendAuditEvent(transaction, {
         action: 'automation.created',
@@ -492,6 +644,7 @@ export class AutomationLearningService {
       const updated = await transaction.automationSchedule.update({
         where: { id: scheduleId },
         data: { state, updatedBy: actor },
+        include: automationScheduleSubjectInclude,
       });
       await appendAuditEvent(transaction, {
         action: parsed.state === 'active' ? 'automation.resumed' : 'automation.paused',
@@ -697,17 +850,13 @@ export class AutomationLearningService {
             maxInputTokens: dispatch.schedule.maxInputTokens,
             maxOutputTokens: dispatch.schedule.maxOutputTokens,
             maxEstimatedCostUsd: Number(dispatch.schedule.maxEstimatedCostUsd),
+            maxAttempts: dispatch.schedule.maximumAttempts,
+            retryBackoff: backoffWire[dispatch.schedule.backoff],
             idempotencyKey: dispatch.idempotencyKey,
           },
           { digestSnapshotId },
         );
         await this.prisma.$transaction(async (transaction) => {
-          await transaction.executionRun.update({
-            where: { id: run.id },
-            data: {
-              maxAttempts: dispatch.schedule.maximumAttempts,
-            },
-          });
           const completed = await transaction.automationDispatch.updateMany({
             where: { id: dispatch.id, claimToken },
             data: {
@@ -770,8 +919,13 @@ export class AutomationLearningService {
   }): Promise<z.infer<typeof observationListResponseSchema>> {
     const records = await this.prisma.observation.findMany({
       where: {
-        ...aggregateScopeWhere(),
-        ...(query.sourceRunId === undefined ? {} : { sourceRunId: query.sourceRunId }),
+        AND: [
+          userFacingObservationWhere,
+          {
+            ...aggregateScopeWhere(),
+            ...(query.sourceRunId === undefined ? {} : { sourceRunId: query.sourceRunId }),
+          },
+        ],
       },
       orderBy: { observedAt: 'desc' },
       take: query.limit,
@@ -850,8 +1004,13 @@ export class AutomationLearningService {
             : ImprovementCandidateState.REJECTED;
     const records = await this.prisma.improvementCandidate.findMany({
       where: {
-        observation: aggregateScopeWhere(),
-        ...(databaseState === undefined ? {} : { state: databaseState }),
+        AND: [
+          userFacingImprovementCandidateWhere,
+          {
+            observation: aggregateScopeWhere(),
+            ...(databaseState === undefined ? {} : { state: databaseState }),
+          },
+        ],
       },
       orderBy: { createdAt: 'desc' },
       take: query.limit,
@@ -904,41 +1063,120 @@ export class AutomationLearningService {
     candidateId: string,
     input: z.input<typeof reviewImprovementCandidateRequestSchema>,
   ): Promise<ImprovementCandidate> {
-    const actor = requireHumanActor();
+    const { actor, scope } = governedLearningDecision();
     const parsed = reviewImprovementCandidateRequestSchema.parse(input);
-    const record = await this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.improvementCandidate.findFirst({
-        where: { id: candidateId, observation: aggregateScopeWhere() },
-      });
-      if (current === null)
-        throw new AppError(404, 'IMPROVEMENT_NOT_FOUND', 'Improvement candidate was not found');
-      if (current.state !== ImprovementCandidateState.PROPOSED) {
-        throw new AppError(
-          409,
-          'IMPROVEMENT_ALREADY_REVIEWED',
-          'Improvement candidate is already terminal',
-        );
-      }
-      const updated = await transaction.improvementCandidate.update({
-        where: { id: candidateId },
-        data: {
-          state:
+    const record = await retrySerializableTransaction(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          const candidate = await transaction.improvementCandidate.findFirst({
+            where: { id: candidateId, observation: scope },
+            include: improvementDecisionInclude,
+          });
+          if (candidate === null)
+            throw new AppError(404, 'IMPROVEMENT_NOT_FOUND', 'Improvement candidate was not found');
+          const decisionKey = improvementDecisionKey(candidate);
+          await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${
+            'improvement-review:' + decisionKey
+          }))`;
+          const current = await transaction.improvementCandidate.findFirst({
+            where: { id: candidateId, observation: scope },
+            include: improvementDecisionInclude,
+          });
+          if (current === null)
+            throw new AppError(404, 'IMPROVEMENT_NOT_FOUND', 'Improvement candidate was not found');
+          if (improvementDecisionKey(current) !== decisionKey) {
+            throw new AppError(
+              409,
+              'IMPROVEMENT_CANDIDATE_CHANGED',
+              'Improvement candidate changed while the decision was being recorded',
+            );
+          }
+          const targetState =
             parsed.decision === 'incubate'
               ? ImprovementCandidateState.INCUBATING
-              : ImprovementCandidateState.REJECTED,
-          reviewedBy: actor,
-          reviewRationale: parsed.rationale,
-          reviewedAt: new Date(),
+              : ImprovementCandidateState.REJECTED;
+          if (current.state !== ImprovementCandidateState.PROPOSED) {
+            if (current.state === targetState && current.reviewRationale === parsed.rationale) {
+              return current;
+            }
+            throw new AppError(
+              409,
+              'IMPROVEMENT_ALREADY_REVIEWED',
+              'Improvement candidate has a different terminal decision',
+            );
+          }
+          const pendingMembers =
+            parsed.decisionGroupKey === undefined
+              ? [{ id: current.id }]
+              : await transaction.improvementCandidate.findMany({
+                  where: improvementGroupWhere(current),
+                  select: { id: true },
+                  orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                  take: MAX_GROUPED_LEARNING_DECISIONS + 1,
+                });
+          if (pendingMembers.length > MAX_GROUPED_LEARNING_DECISIONS) {
+            throw new AppError(
+              503,
+              'IMPROVEMENT_DECISION_GROUP_LIMIT_EXCEEDED',
+              'The exact improvement decision group exceeds its safe review limit',
+            );
+          }
+          if (
+            parsed.decisionGroupKey !== undefined &&
+            (pendingMembers.length !== parsed.expectedRequestCount ||
+              learningDecisionGroupKey(
+                'improvement',
+                decisionKey,
+                pendingMembers.map(({ id }) => id),
+              ) !== parsed.decisionGroupKey)
+          ) {
+            throw new AppError(
+              409,
+              'IMPROVEMENT_DECISION_GROUP_CHANGED',
+              'The exact improvement request group changed after review; reload Attention before deciding',
+            );
+          }
+          const decision = await transaction.improvementCandidate.updateMany({
+            where: {
+              id: { in: pendingMembers.map(({ id }) => id) },
+              state: ImprovementCandidateState.PROPOSED,
+            },
+            data: {
+              state: targetState,
+              reviewedBy: actor,
+              reviewRationale: parsed.rationale,
+              reviewedAt: new Date(),
+            },
+          });
+          if (decision.count !== pendingMembers.length || decision.count < 1) {
+            throw new AppError(
+              409,
+              'IMPROVEMENT_ALREADY_REVIEWED',
+              'Improvement candidate changed while the decision was being recorded',
+            );
+          }
+          const updated = await transaction.improvementCandidate.findUniqueOrThrow({
+            where: { id: candidateId },
+          });
+          for (const member of pendingMembers) {
+            await appendAuditEvent(transaction, {
+              action:
+                parsed.decision === 'incubate' ? 'improvement.incubated' : 'improvement.rejected',
+              entityType: 'ImprovementCandidate',
+              entityId: member.id,
+              details: {
+                rationale: parsed.rationale,
+                decisionGroupKey: parsed.decisionGroupKey ?? null,
+                expectedRequestCount: pendingMembers.length,
+                representativeCandidateId: candidateId,
+              },
+            });
+          }
+          return updated;
         },
-      });
-      await appendAuditEvent(transaction, {
-        action: parsed.decision === 'incubate' ? 'improvement.incubated' : 'improvement.rejected',
-        entityType: 'ImprovementCandidate',
-        entityId: candidateId,
-        details: { rationale: parsed.rationale },
-      });
-      return updated;
-    });
+        { isolationLevel: 'Serializable' },
+      ),
+    );
     return toImprovement(record);
   }
 
@@ -957,9 +1195,14 @@ export class AutomationLearningService {
             : MemoryCandidateState.REJECTED;
     const records = await this.prisma.memoryCandidate.findMany({
       where: {
-        sourceRun: aggregateScopeWhere(),
-        ...(databaseState === undefined ? {} : { state: databaseState }),
-        ...(query.sourceRunId === undefined ? {} : { sourceRunId: query.sourceRunId }),
+        AND: [
+          userFacingMemoryCandidateWhere,
+          {
+            sourceRun: aggregateScopeWhere(),
+            ...(databaseState === undefined ? {} : { state: databaseState }),
+            ...(query.sourceRunId === undefined ? {} : { sourceRunId: query.sourceRunId }),
+          },
+        ],
       },
       orderBy: { stagedAt: 'desc' },
       take: query.limit,
@@ -1016,53 +1259,162 @@ export class AutomationLearningService {
     candidateId: string,
     input: z.input<typeof reviewMemoryCandidateRequestSchema>,
   ): Promise<MemoryCandidate> {
-    const actor = requireHumanActor();
+    const { actor, scope } = governedLearningDecision();
     const parsed = reviewMemoryCandidateRequestSchema.parse(input);
-    const record = await this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.memoryCandidate.findFirst({
-        where: { id: candidateId, sourceRun: aggregateScopeWhere() },
-      });
-      if (current === null)
-        throw new AppError(404, 'MEMORY_CANDIDATE_NOT_FOUND', 'Memory candidate was not found');
-      if (current.state !== MemoryCandidateState.STAGED) {
-        throw new AppError(409, 'MEMORY_ALREADY_REVIEWED', 'Memory candidate is already terminal');
-      }
-      const accepted = parsed.decision !== 'reject';
-      const acceptedValue =
-        parsed.decision === 'edit_accept'
-          ? parsed.editedValue
-          : parseJson(jsonObjectSchema, current.proposedValue, 'MemoryCandidate.proposedValue');
-      const updated = await transaction.memoryCandidate.update({
-        where: { id: candidateId },
-        data: {
-          state: accepted ? MemoryCandidateState.ACCEPTED : MemoryCandidateState.REJECTED,
-          ...(accepted
-            ? {
-                acceptedValue: toPrismaJson(
-                  jsonObjectSchema,
-                  acceptedValue,
-                  'MemoryCandidate.acceptedValue',
-                ),
-              }
-            : {}),
-          reviewedBy: actor,
-          reviewRationale: parsed.rationale,
-          reviewedAt: new Date(),
+    const record = await retrySerializableTransaction(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          const candidate = await transaction.memoryCandidate.findFirst({
+            where: { id: candidateId, sourceRun: scope },
+            include: {
+              sourceRun: { select: { workspaceId: true, departmentId: true, projectId: true } },
+            },
+          });
+          if (candidate === null)
+            throw new AppError(404, 'MEMORY_CANDIDATE_NOT_FOUND', 'Memory candidate was not found');
+          const decisionKey = memoryDecisionKey(candidate);
+          await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${
+            'memory-review:' + decisionKey
+          }))`;
+          const current = await transaction.memoryCandidate.findFirst({
+            where: { id: candidateId, sourceRun: scope },
+            include: {
+              sourceRun: { select: { workspaceId: true, departmentId: true, projectId: true } },
+            },
+          });
+          if (current === null)
+            throw new AppError(404, 'MEMORY_CANDIDATE_NOT_FOUND', 'Memory candidate was not found');
+          if (memoryDecisionKey(current) !== decisionKey) {
+            throw new AppError(
+              409,
+              'MEMORY_CANDIDATE_CHANGED',
+              'Memory candidate changed while the decision was being recorded',
+            );
+          }
+          const accepted = parsed.decision !== 'reject';
+          const acceptedValue = accepted
+            ? parsed.decision === 'edit_accept'
+              ? jsonObjectSchema.parse(parsed.editedValue)
+              : parseJson(jsonObjectSchema, current.proposedValue, 'MemoryCandidate.proposedValue')
+            : null;
+          const targetState = accepted
+            ? MemoryCandidateState.ACCEPTED
+            : MemoryCandidateState.REJECTED;
+          if (current.state !== MemoryCandidateState.STAGED) {
+            if (
+              current.state === targetState &&
+              current.reviewRationale === parsed.rationale &&
+              sameJson(current.acceptedValue, acceptedValue)
+            ) {
+              return current;
+            }
+            throw new AppError(
+              409,
+              'MEMORY_ALREADY_REVIEWED',
+              'Memory candidate has a different terminal decision',
+            );
+          }
+          const reviewedAt = new Date();
+          const proposedValue = toPrismaJson(
+            jsonObjectSchema,
+            current.proposedValue,
+            'MemoryCandidate.proposedValue',
+          );
+          const pendingMembers =
+            parsed.decisionGroupKey === undefined
+              ? [{ id: current.id }]
+              : await transaction.memoryCandidate.findMany({
+                  where: {
+                    state: MemoryCandidateState.STAGED,
+                    namespace: current.namespace,
+                    proposedValue: { equals: proposedValue },
+                    sourceRun: {
+                      workspaceId: current.sourceRun.workspaceId,
+                      departmentId: current.sourceRun.departmentId,
+                      projectId: current.sourceRun.projectId,
+                    },
+                  },
+                  select: { id: true },
+                  orderBy: [{ stagedAt: 'asc' }, { id: 'asc' }],
+                  take: MAX_GROUPED_LEARNING_DECISIONS + 1,
+                });
+          if (pendingMembers.length > MAX_GROUPED_LEARNING_DECISIONS) {
+            throw new AppError(
+              503,
+              'MEMORY_DECISION_GROUP_LIMIT_EXCEEDED',
+              'The exact memory decision group exceeds its safe review limit',
+            );
+          }
+          if (
+            parsed.decisionGroupKey !== undefined &&
+            (pendingMembers.length !== parsed.expectedRequestCount ||
+              learningDecisionGroupKey(
+                'memory',
+                decisionKey,
+                pendingMembers.map(({ id }) => id),
+              ) !== parsed.decisionGroupKey)
+          ) {
+            throw new AppError(
+              409,
+              'MEMORY_DECISION_GROUP_CHANGED',
+              'The exact memory request group changed after review; reload Attention before deciding',
+            );
+          }
+          const decision = await transaction.memoryCandidate.updateMany({
+            where: {
+              id: { in: pendingMembers.map(({ id }) => id) },
+              state: MemoryCandidateState.STAGED,
+            },
+            data: {
+              state: targetState,
+              ...(accepted
+                ? {
+                    acceptedValue: toPrismaJson(
+                      jsonObjectSchema,
+                      acceptedValue ?? {},
+                      'MemoryCandidate.acceptedValue',
+                    ),
+                  }
+                : {}),
+              reviewedBy: actor,
+              reviewRationale: parsed.rationale,
+              reviewedAt,
+            },
+          });
+          if (decision.count !== pendingMembers.length || decision.count < 1) {
+            throw new AppError(
+              409,
+              'MEMORY_ALREADY_REVIEWED',
+              'Memory candidate changed while the decision was being recorded',
+            );
+          }
+          const updated = await transaction.memoryCandidate.findUniqueOrThrow({
+            where: { id: candidateId },
+          });
+          for (const member of pendingMembers) {
+            await appendAuditEvent(transaction, {
+              action:
+                parsed.decision === 'reject'
+                  ? 'memory.rejected'
+                  : parsed.decision === 'edit_accept'
+                    ? 'memory.edited_and_accepted'
+                    : 'memory.accepted',
+              entityType: 'MemoryCandidate',
+              entityId: member.id,
+              details: {
+                rationale: parsed.rationale,
+                sourceRunId: current.sourceRunId,
+                decisionGroupKey: parsed.decisionGroupKey ?? null,
+                expectedRequestCount: pendingMembers.length,
+                representativeCandidateId: candidateId,
+              },
+            });
+          }
+          return updated;
         },
-      });
-      await appendAuditEvent(transaction, {
-        action:
-          parsed.decision === 'reject'
-            ? 'memory.rejected'
-            : parsed.decision === 'edit_accept'
-              ? 'memory.edited_and_accepted'
-              : 'memory.accepted',
-        entityType: 'MemoryCandidate',
-        entityId: candidateId,
-        details: { rationale: parsed.rationale, sourceRunId: current.sourceRunId },
-      });
-      return updated;
-    });
+        { isolationLevel: 'Serializable' },
+      ),
+    );
     return toMemory(record);
   }
 }

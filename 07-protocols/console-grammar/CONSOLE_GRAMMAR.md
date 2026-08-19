@@ -16,6 +16,17 @@ Paul OS is an instrument for resolving exceptions, not a feed to consume.
 - L2 adds cost, authority, one primary action, one secondary action, and provenance.
 - L3 contains the full instrument view, evidence, and raw technical detail.
 
+## Home
+
+- One stable vertical selection scopes health, plan, and action together.
+- A vertical filter never hides global decisions or safety state.
+- Every metric names whether its source is live, synthetic, or awaiting transfer.
+- Synthetic inputs never produce a live derived metric.
+- Awaiting-transfer and unavailable sources show no current value or nominal verdict.
+- Every visible task states why it qualified for today.
+- Gantt rows name their dates, state, and source without relying on color.
+- Drill-through resolves the exact governed subject represented on Home.
+
 ## Language
 
 The first two lines answer: what is this, what happened, and what should the reviewer do. Use
