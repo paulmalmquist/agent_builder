@@ -5289,6 +5289,100 @@
           "details": {
             "type": "object",
             "additionalProperties": true
+          },
+          "membership": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "exactCount": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "subject": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        }
+                      },
+                      "required": ["name", "kind", "version"],
+                      "additionalProperties": false
+                    },
+                    "occurredAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "evidence": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": ["label", "value"]
+                      },
+                      "minItems": 1,
+                      "maxItems": 8
+                    },
+                    "technicalReferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "value": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "required": ["label", "value"]
+                      },
+                      "minItems": 1,
+                      "maxItems": 4
+                    }
+                  },
+                  "required": ["label", "subject", "occurredAt", "evidence", "technicalReferences"]
+                }
+              }
+            },
+            "required": ["exactCount", "records"]
           }
         },
         "required": ["item", "timeline", "details"]

@@ -51,6 +51,24 @@ function signRawFixturePayload(payload: unknown): string {
   return `${encoded}.${signature}`;
 }
 
+function nonCanonicalSignatureAlias(token: string): string {
+  const [encoded, signature] = token.split('.');
+  if (encoded === undefined || signature === undefined) throw new Error('Expected fixture token');
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const finalCharacter = signature.at(-1);
+  const canonicalIndex = finalCharacter === undefined ? -1 : alphabet.indexOf(finalCharacter);
+  if (canonicalIndex < 0 || canonicalIndex % 4 !== 0) {
+    throw new Error('Expected a canonical SHA-256 base64url signature');
+  }
+  const aliasCharacter = alphabet[canonicalIndex + 1];
+  if (aliasCharacter === undefined) throw new Error('Expected an equivalent signature alias');
+  const alias = `${signature.slice(0, -1)}${aliasCharacter}`;
+  if (!Buffer.from(alias, 'base64url').equals(Buffer.from(signature, 'base64url'))) {
+    throw new Error('Expected alias to decode to the same signature bytes');
+  }
+  return `${encoded}.${alias}`;
+}
+
 describe('identity authentication adapters', () => {
   it('uses a fixture token only to prove issuer/subject and resolves authority from the directory', async () => {
     const { identityDirectory, resolveExternal } = directory();
@@ -129,9 +147,10 @@ describe('identity authentication adapters', () => {
       { exp: Math.floor(Date.now() / 1000) + 60, sub: 'opaque-fixture-subject' },
       fixtureSecret,
     );
+    const tampered = `${valid[0] === 'A' ? 'B' : 'A'}${valid.slice(1)}`;
     await request(app)
       .get('/v1/session-probe')
-      .set('authorization', `Bearer ${valid.slice(0, -1)}x`)
+      .set('authorization', `Bearer ${tampered}`)
       .expect(401, { code: 'AUTHENTICATION_REQUIRED' });
     const expired = createFixtureOidcToken(
       { exp: Math.floor(Date.now() / 1000) - 1, sub: 'opaque-fixture-subject' },
@@ -141,6 +160,29 @@ describe('identity authentication adapters', () => {
       .get('/v1/session-probe')
       .set('authorization', `Bearer ${expired}`)
       .expect(401, { code: 'AUTHENTICATION_REQUIRED' });
+  });
+
+  it('rejects a non-canonical signature encoding that decodes to valid HMAC bytes', async () => {
+    const { identityDirectory, resolveExternal } = directory();
+    const token = createFixtureOidcToken(
+      { exp: Math.floor(Date.now() / 1000) + 60, sub: 'opaque-fixture-subject' },
+      fixtureSecret,
+    );
+    await request(
+      appFor(
+        {
+          enabled: true,
+          mode: 'fixture_oidc',
+          actorId: 'unused-fixture-actor',
+          fixtureOidcSecret: fixtureSecret,
+        },
+        { identityDirectory },
+      ),
+    )
+      .get('/v1/session-probe')
+      .set('authorization', `Bearer ${nonCanonicalSignatureAlias(token)}`)
+      .expect(401, { code: 'AUTHENTICATION_REQUIRED' });
+    expect(resolveExternal).not.toHaveBeenCalled();
   });
 
   it('fails closed by default and resolves injected verifier output through DB authority', async () => {

@@ -148,6 +148,12 @@ function fixtureSignature(encodedPayload: string, secret: string): Buffer {
   return createHmac('sha256', secret).update(encodedPayload).digest();
 }
 
+function decodeCanonicalBase64Url(value: string): Buffer | null {
+  if (value.length === 0 || !/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  const decoded = Buffer.from(value, 'base64url');
+  return decoded.toString('base64url') === value ? decoded : null;
+}
+
 export function createFixtureOidcToken(
   input: Omit<FixtureOidcPayload, 'iss' | 'aud'>,
   secret: string,
@@ -168,9 +174,10 @@ function verifyFixtureToken(token: string, secret: string): VerifiedExternalIden
   if (encoded === undefined || signature === undefined || extra !== undefined) {
     throw new AppError(401, 'AUTHENTICATION_REQUIRED', 'Fixture OIDC token is malformed');
   }
-  const providedSignature = Buffer.from(signature, 'base64url');
+  const providedSignature = decodeCanonicalBase64Url(signature);
   const expectedSignature = fixtureSignature(encoded, secret);
   if (
+    providedSignature === null ||
     providedSignature.length !== expectedSignature.length ||
     !timingSafeEqual(providedSignature, expectedSignature)
   ) {
@@ -178,9 +185,9 @@ function verifyFixtureToken(token: string, secret: string): VerifiedExternalIden
   }
   let payload: FixtureOidcPayload;
   try {
-    payload = fixturePayloadSchema.parse(
-      JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as unknown,
-    );
+    const decodedPayload = decodeCanonicalBase64Url(encoded);
+    if (decodedPayload === null) throw new Error('Non-canonical base64url payload');
+    payload = fixturePayloadSchema.parse(JSON.parse(decodedPayload.toString('utf8')) as unknown);
   } catch {
     throw new AppError(401, 'AUTHENTICATION_REQUIRED', 'Fixture OIDC token payload is invalid');
   }
