@@ -1,0 +1,641 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:paul-os:aim:program:v2",
+  "title": "AIM Program Manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "program",
+    "displayPolicy",
+    "timeline",
+    "anchors",
+    "groups",
+    "agents",
+    "capabilities",
+    "parts",
+    "milestones",
+    "workstreams",
+    "decisionLoops",
+    "interfaces",
+    "evidence",
+    "sources",
+    "metrics"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "aim.program/v2" },
+    "program": { "$ref": "#/$defs/program" },
+    "displayPolicy": { "$ref": "#/$defs/displayPolicy" },
+    "timeline": { "$ref": "#/$defs/timeline" },
+    "anchors": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/anchor" }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/group" }
+    },
+    "agents": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/agent" }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/capability" }
+    },
+    "parts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/part" }
+    },
+    "milestones": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/milestone" } },
+    "workstreams": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/workstream" }
+    },
+    "decisionLoops": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/decisionLoop" }
+    },
+    "interfaces": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/interface" } },
+    "evidence": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/evidence" } },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "metrics": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/metric" } }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 120,
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+    },
+    "label": { "type": "string", "minLength": 2, "maxLength": 160 },
+    "description": { "type": "string", "minLength": 10, "maxLength": 2000 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "idList": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/id" } },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "asOf", "geometryDisclaimer", "synthetic"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "description": { "$ref": "#/$defs/description" },
+        "asOf": { "$ref": "#/$defs/timestamp" },
+        "geometryDisclaimer": { "const": "CONCEPTUAL GEOMETRY — NOT VEHICLE CAD" },
+        "synthetic": { "type": "boolean" }
+      }
+    },
+    "displayPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "showOwnerNames",
+        "groupGranularity",
+        "showNoGoAsFailure",
+        "showEvidenceLinks",
+        "showInternalSourceIds",
+        "showDetailedAgentLists",
+        "showDecisionLoopPerformance",
+        "defaultEvidenceFreshnessSlaHours"
+      ],
+      "properties": {
+        "showOwnerNames": { "type": "boolean" },
+        "groupGranularity": { "enum": ["aggregate", "detailed"] },
+        "showNoGoAsFailure": { "type": "boolean" },
+        "showEvidenceLinks": { "type": "boolean" },
+        "showInternalSourceIds": { "type": "boolean" },
+        "showDetailedAgentLists": { "type": "boolean" },
+        "showDecisionLoopPerformance": { "type": "boolean" },
+        "defaultEvidenceFreshnessSlaHours": { "type": "integer", "minimum": 1, "maximum": 8760 },
+        "factoryMaturityMetricId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startAt", "endAt", "markers"],
+      "properties": {
+        "startAt": { "$ref": "#/$defs/timestamp" },
+        "endAt": { "$ref": "#/$defs/timestamp" },
+        "markers": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "at", "kind"],
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "label": { "$ref": "#/$defs/label" },
+              "at": { "$ref": "#/$defs/timestamp" },
+              "kind": { "enum": ["today", "relative", "quarter", "custom"] }
+            }
+          }
+        }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "aliases"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "kind": { "enum": ["vehicle", "ground", "region"] },
+        "description": { "$ref": "#/$defs/description" },
+        "aliases": { "$ref": "#/$defs/idList" },
+        "fallbackRegion": { "$ref": "#/$defs/id" }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "kind",
+        "displayOrder",
+        "ownedAnchorIds",
+        "participatingCapabilityIds",
+        "decisionLoopIds",
+        "sourceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "description": { "$ref": "#/$defs/description" },
+        "kind": { "enum": ["primary", "supporting"] },
+        "displayOrder": { "type": "integer", "minimum": 0, "maximum": 999 },
+        "lead": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "ownedAnchorIds": { "$ref": "#/$defs/idList" },
+        "participatingCapabilityIds": { "$ref": "#/$defs/idList" },
+        "decisionLoopIds": { "$ref": "#/$defs/idList" },
+        "agentBuilderQuery": { "type": "string", "minLength": 2, "maxLength": 500 },
+        "sourceRefs": { "$ref": "#/$defs/idList" }
+      }
+    },
+    "agentConnector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "monogram", "accent", "access"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "monogram": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "accent": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "assetSrc": {
+          "type": "string",
+          "pattern": "^/v1/plugins/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/mark/[a-f0-9]{64}\\.svg$"
+        },
+        "access": { "enum": ["read", "write"] }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "description",
+        "tier",
+        "certificationStatus",
+        "synthetic",
+        "groupIds",
+        "partIds",
+        "connectors",
+        "certificationEvidenceRefs",
+        "sourceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "description": { "$ref": "#/$defs/description" },
+        "tier": { "enum": [0, 1, 2, 3, 4] },
+        "certificationStatus": { "enum": ["candidate", "certified"] },
+        "synthetic": { "type": "boolean" },
+        "groupIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "partIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "connectors": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/agentConnector" }
+        },
+        "certificationEvidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRefs": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "layer", "dependencyIds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "layer": {
+          "enum": [
+            "foundation",
+            "connectivity",
+            "knowledge",
+            "simulation",
+            "decision",
+            "agent",
+            "outcome"
+          ]
+        },
+        "description": { "$ref": "#/$defs/description" },
+        "dependencyIds": { "$ref": "#/$defs/idList" }
+      }
+    },
+    "statusEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effectiveAt", "lifecycle", "readiness", "evidenceRefs", "sourceRef"],
+      "properties": {
+        "effectiveAt": { "$ref": "#/$defs/timestamp" },
+        "lifecycle": { "enum": ["planned", "poc", "pilot", "production", "retired"] },
+        "readiness": { "enum": ["unknown", "no_go", "conditional", "go"] },
+        "note": { "type": "string", "minLength": 2, "maxLength": 1000 },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRef": { "$ref": "#/$defs/id" }
+      }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "anchorId",
+        "makeMethod",
+        "process",
+        "ownerGroupId",
+        "coverage",
+        "capabilityIds",
+        "participatingGroupIds",
+        "problem",
+        "decisionLoopIds",
+        "unlocksPartIds",
+        "dependencyPartIds",
+        "statusHistory",
+        "evidenceRefs",
+        "sourceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "anchorId": { "$ref": "#/$defs/id" },
+        "fallbackRegion": { "$ref": "#/$defs/id" },
+        "makeMethod": { "enum": ["printed", "purchased", "facility"] },
+        "process": { "$ref": "#/$defs/description" },
+        "ownerGroupId": { "$ref": "#/$defs/id" },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["agentIds", "evidenceRefs"],
+          "properties": {
+            "agentIds": { "$ref": "#/$defs/idList" },
+            "evidenceRefs": { "$ref": "#/$defs/idList" }
+          }
+        },
+        "capabilityIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "participatingGroupIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "problem": { "type": "string", "minLength": 10, "maxLength": 2000 },
+        "decisionLoopIds": { "$ref": "#/$defs/idList" },
+        "unlocksPartIds": { "$ref": "#/$defs/idList" },
+        "dependencyPartIds": { "$ref": "#/$defs/idList" },
+        "statusHistory": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/statusEvent" }
+        },
+        "knowledgeCoverageMetricId": { "$ref": "#/$defs/id" },
+        "agentStatusMetricId": { "$ref": "#/$defs/id" },
+        "baselineLatencyMetricId": { "$ref": "#/$defs/id" },
+        "currentLatencyMetricId": { "$ref": "#/$defs/id" },
+        "targetLatencyMetricId": { "$ref": "#/$defs/id" },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRefs": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 }
+      }
+    },
+    "criterionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effectiveAt", "state", "evidenceRefs", "sourceRef"],
+      "properties": {
+        "effectiveAt": { "$ref": "#/$defs/timestamp" },
+        "state": { "enum": ["unknown", "unsatisfied", "satisfied"] },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRef": { "$ref": "#/$defs/id" }
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "required",
+        "affectedPartIds",
+        "requiredMetricIds",
+        "evidenceRefs",
+        "resultHistory"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "required": { "type": "boolean" },
+        "affectedPartIds": { "$ref": "#/$defs/idList" },
+        "requiredMetricIds": { "$ref": "#/$defs/idList" },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "resultHistory": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/criterionResult" }
+        }
+      }
+    },
+    "milestone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "date",
+        "ownerGroupIds",
+        "affectedPartIds",
+        "gateCriteria",
+        "evidenceRefs",
+        "sourceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "date": { "$ref": "#/$defs/timestamp" },
+        "ownerGroupIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "affectedPartIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "gateCriteria": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/criterion" }
+        },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRefs": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 }
+      }
+    },
+    "workstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "ownerGroupId",
+        "affectedPartIds",
+        "startAt",
+        "endAt",
+        "state",
+        "sourceRefs",
+        "milestoneIds"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "ownerGroupId": { "$ref": "#/$defs/id" },
+        "affectedPartIds": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "startAt": { "$ref": "#/$defs/timestamp" },
+        "endAt": { "$ref": "#/$defs/timestamp" },
+        "state": { "enum": ["complete", "in_work", "planned", "at_risk"] },
+        "sourceRefs": { "allOf": [{ "$ref": "#/$defs/idList" }], "minItems": 1 },
+        "milestoneIds": { "$ref": "#/$defs/idList" }
+      }
+    },
+    "decisionStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "phase", "sequence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "phase": {
+          "enum": ["observe", "contextualize", "explain", "simulate", "decide", "act", "measure"]
+        },
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "manualHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "fromStepId", "toStepId", "statusHistory"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "fromStepId": { "$ref": "#/$defs/id" },
+        "toStepId": { "$ref": "#/$defs/id" },
+        "statusHistory": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["effectiveAt", "state", "sourceRef"],
+            "properties": {
+              "effectiveAt": { "$ref": "#/$defs/timestamp" },
+              "state": { "enum": ["manual", "governed", "retired"] },
+              "sourceRef": { "$ref": "#/$defs/id" }
+            }
+          }
+        }
+      }
+    },
+    "decisionLoop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "ownerGroupIds",
+        "sourceSystemIds",
+        "partIds",
+        "baselineLatencyMetricId",
+        "currentLatencyMetricId",
+        "targetLatencyMetricId",
+        "steps",
+        "manualHandoffs",
+        "sourceRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "ownerGroupIds": { "$ref": "#/$defs/idList" },
+        "sourceSystemIds": { "$ref": "#/$defs/idList" },
+        "partIds": { "$ref": "#/$defs/idList" },
+        "baselineLatencyMetricId": { "$ref": "#/$defs/id" },
+        "currentLatencyMetricId": { "$ref": "#/$defs/id" },
+        "targetLatencyMetricId": { "$ref": "#/$defs/id" },
+        "steps": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/decisionStep" }
+        },
+        "manualHandoffs": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/manualHandoff" }
+        },
+        "sourceRefs": { "$ref": "#/$defs/idList" }
+      }
+    },
+    "interfaceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effectiveAt", "state", "evidenceRefs", "sourceRef"],
+      "properties": {
+        "effectiveAt": { "$ref": "#/$defs/timestamp" },
+        "state": { "enum": ["planned", "manual", "governed", "stale", "retired"] },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRef": { "$ref": "#/$defs/id" }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "partIds", "statusHistory", "evidenceRefs", "sourceRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "partIds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "statusHistory": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/interfaceStatus" }
+        },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "sourceRefs": { "$ref": "#/$defs/idList" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "sourceId", "observedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "type": {
+          "enum": [
+            "metric",
+            "report",
+            "test",
+            "deployment",
+            "approval",
+            "artifact",
+            "source-record"
+          ]
+        },
+        "sourceId": { "$ref": "#/$defs/id" },
+        "externalId": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "internalUri": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "freshnessSlaHours": { "type": "integer", "minimum": 1, "maximum": 8760 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "kind",
+        "adapterVersion",
+        "observedAt",
+        "classification",
+        "synthetic",
+        "reconciliationStatus"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "kind": {
+          "enum": [
+            "seed",
+            "file",
+            "csv",
+            "work_item_export",
+            "metric_registry",
+            "deployment_registry",
+            "knowledge_registry",
+            "manual"
+          ]
+        },
+        "adapterVersion": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "freshnessSlaHours": { "type": "integer", "minimum": 1, "maximum": 8760 },
+        "classification": { "enum": ["public", "internal", "restricted"] },
+        "synthetic": { "type": "boolean" },
+        "reconciliationStatus": {
+          "enum": ["authoritative", "corroborated", "conflicting", "unverified"]
+        }
+      }
+    },
+    "metricObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observedAt", "value", "sourceRef", "evidenceRefs", "confidence"],
+      "properties": {
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "value": { "type": "number" },
+        "sourceRef": { "$ref": "#/$defs/id" },
+        "evidenceRefs": { "$ref": "#/$defs/idList" },
+        "confidence": { "enum": ["low", "medium", "high"] }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "unit", "sourceRefs", "observations"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "kind": { "enum": ["percentage", "duration_hours", "maturity", "count", "boolean"] },
+        "unit": { "enum": ["percent", "hours", "score", "count", "boolean"] },
+        "sourceRefs": { "$ref": "#/$defs/idList" },
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": { "$ref": "#/$defs/metricObservation" }
+        }
+      }
+    }
+  }
+}

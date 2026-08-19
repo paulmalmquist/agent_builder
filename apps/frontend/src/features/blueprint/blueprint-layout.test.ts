@@ -60,7 +60,7 @@ describe('layoutBlueprint', () => {
             requiredCitations: true,
           },
           {
-            descriptorId: 'relativity-mes-builds',
+            descriptorId: 'demo-build-records',
             purpose: 'Track production delays',
             requiredCitations: true,
           },
@@ -84,7 +84,7 @@ describe('layoutBlueprint', () => {
     expect(knowledge?.complete).toBe(true);
     expect(knowledge?.lines[0]).toBe('3 SOURCES');
     expect(knowledge?.lines[1]).toContain('supplier risk register');
-    expect(knowledge?.lines[2]).toContain('relativity mes builds');
+    expect(knowledge?.lines[2]).toContain('demo build records');
     expect(layout.stations[2]?.lines).toEqual(['PENDING']);
     expect(layout.watermark.text).toBe('DRAFT');
   });

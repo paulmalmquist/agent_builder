@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Client" />
+    <PackageReference Include="Microsoft.Identity.Client.Broker" />
+    <ProjectReference Include="../PaulOs.WorkstationBroker.Contracts/PaulOs.WorkstationBroker.Contracts.csproj" />
+    <ProjectReference Include="../PaulOs.WorkstationBroker.Core/PaulOs.WorkstationBroker.Core.csproj" />
+  </ItemGroup>
+</Project>

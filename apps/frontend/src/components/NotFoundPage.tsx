@@ -5,13 +5,13 @@ export function NotFoundPage() {
     <main className="not-found-page">
       <p className="page-kicker">ROUTE NOT FOUND</p>
       <h1>That instrument panel does not exist.</h1>
-      <p>Return to the governed builder or browse the agent catalog.</p>
+      <p>Return to Paul OS home or browse the governed agent catalog.</p>
       <div className="not-found-actions">
         <Link className="primary-button" to="/">
-          Open builder
+          Return home
         </Link>
-        <Link className="secondary-button" to="/library">
-          Browse library
+        <Link className="secondary-button" to="/catalog">
+          Browse catalog
         </Link>
       </div>
     </main>

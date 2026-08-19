@@ -84,7 +84,7 @@ export function Modal({ title, kicker, children, onClose, size = 'standard' }: M
           <Icon name="close" size={20} />
         </button>
         <div className="modal-kicker">
-          <Icon name="sparkles" size={18} />
+          <Icon name="draft" size={18} />
           {kicker}
         </div>
         <h2 id={titleId}>{title}</h2>

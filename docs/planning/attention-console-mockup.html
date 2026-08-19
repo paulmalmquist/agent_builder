@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paul OS — Attention (P1 concept mockup)</title>
+    <style>
+      :root {
+        --bg: #05070a;
+        --panel: #0b0e14;
+        --panel-raised: #0e1219;
+        --border: rgba(255, 255, 255, 0.09);
+        --border-bright: rgba(255, 255, 255, 0.18);
+        --ink: #f5f6f8;
+        --ink-2: #aeb4bf;
+        --muted: #8f96a3;
+        --dim: #5c6270;
+        --purple: #9578ff;
+        --purple-soft: #b9aaff;
+        --purple-glow: rgba(149, 120, 255, 0.22);
+        --amber: #e8b34b;
+        --amber-dim: rgba(232, 179, 75, 0.12);
+        --good: #7dd6a1;
+        --ease-precision: cubic-bezier(0.22, 1, 0.36, 1);
+        --dur-hover: 180ms;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      /* ---- starfield (static, per instrument standard fallback) ---- */
+      .noise {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        background-image:
+          radial-gradient(1px 1px at 12% 22%, rgba(255, 255, 255, 0.35) 0, transparent 100%),
+          radial-gradient(1px 1px at 78% 12%, rgba(255, 255, 255, 0.22) 0, transparent 100%),
+          radial-gradient(1.5px 1.5px at 55% 68%, rgba(185, 170, 255, 0.25) 0, transparent 100%),
+          radial-gradient(1px 1px at 33% 84%, rgba(255, 255, 255, 0.18) 0, transparent 100%),
+          radial-gradient(1px 1px at 90% 55%, rgba(255, 255, 255, 0.28) 0, transparent 100%),
+          radial-gradient(1.5px 1.5px at 8% 60%, rgba(255, 255, 255, 0.14) 0, transparent 100%),
+          radial-gradient(1px 1px at 66% 34%, rgba(185, 170, 255, 0.2) 0, transparent 100%),
+          radial-gradient(1px 1px at 42% 8%, rgba(255, 255, 255, 0.25) 0, transparent 100%);
+      }
+      .shell {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        min-height: 100vh;
+        max-width: 1280px;
+        margin: 0 auto;
+      }
+
+      /* ---- rail ---- */
+      .rail {
+        width: 190px;
+        flex: 0 0 190px;
+        padding: 34px 0 24px 28px;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .brand {
+        margin-bottom: 40px;
+      }
+      .brand .word {
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .brand .word .dot {
+        color: var(--purple);
+      }
+      .brand .sub {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        color: var(--muted);
+        margin-top: 3px;
+      }
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 14px 9px 0;
+        text-decoration: none;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        color: var(--dim);
+        border-left: 2px solid transparent;
+        padding-left: 12px;
+        margin-left: -14px;
+        transition: color var(--dur-hover) var(--ease-precision);
+      }
+      .nav a:hover {
+        color: var(--ink-2);
+      }
+      .nav a.active {
+        color: var(--ink);
+        border-left-color: var(--purple);
+      }
+      .nav .badge {
+        min-width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        padding: 0 5px;
+        background: var(--purple);
+        color: #0b0517;
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .rail .spacer {
+        flex: 1;
+      }
+      .rail .foot {
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        color: var(--dim);
+        line-height: 1.9;
+        padding-right: 20px;
+      }
+
+      /* ---- main ---- */
+      .main {
+        flex: 1;
+        padding: 34px 8px 60px 44px;
+        min-width: 0;
+      }
+      .topline {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 6px;
+      }
+      h1 {
+        font-size: 26px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+      }
+      .sysline {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .sysline b {
+        color: var(--ink-2);
+        font-weight: 600;
+      }
+      .sysline .ok {
+        color: var(--good);
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 14px;
+        margin-bottom: 30px;
+      }
+      .lede kbd {
+        font:
+          600 10.5px/1 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        color: var(--ink-2);
+        border: 1px solid var(--border);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 2px 5px;
+        margin: 0 1px;
+      }
+
+      .shelf {
+        margin-bottom: 34px;
+      }
+      .shelf-kicker {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .shelf-kicker::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .shelf-kicker .n {
+        color: var(--purple-soft);
+      }
+
+      /* ---- decision cards ---- */
+      .queue {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .card {
+        position: relative;
+        display: flex;
+        gap: 18px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 20px 16px 18px;
+        transition:
+          transform var(--dur-hover) var(--ease-precision),
+          border-color var(--dur-hover) var(--ease-precision),
+          opacity 300ms var(--ease-precision),
+          max-height 340ms var(--ease-precision),
+          margin 340ms var(--ease-precision),
+          padding 340ms var(--ease-precision);
+        max-height: 640px;
+        overflow: hidden;
+      }
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: var(--border-bright);
+      }
+      .card.focused {
+        border-color: var(--purple);
+        box-shadow:
+          0 0 0 1px var(--purple) inset,
+          0 0 24px -8px var(--purple-glow);
+      }
+      .card.leaving {
+        opacity: 0;
+        max-height: 0;
+        margin-bottom: -14px;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-color: transparent;
+      }
+      .num {
+        flex: 0 0 46px;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: #fff;
+        color: #0a0a0f;
+        font-weight: 800;
+        font-size: 17px;
+        letter-spacing: -0.02em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 2px;
+      }
+      .card.focused .num {
+        animation: breathe 4s ease-in-out infinite;
+      }
+      @keyframes breathe {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(149, 120, 255, 0);
+        }
+        50% {
+          box-shadow: 0 0 0 7px rgba(149, 120, 255, 0.22);
+        }
+      }
+      .body {
+        flex: 1;
+        min-width: 0;
+      }
+      .kicker {
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        color: var(--purple-soft);
+        margin-bottom: 6px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .kicker .sep {
+        color: var(--dim);
+      }
+      .headline {
+        font-size: 16.5px;
+        font-weight: 620;
+        letter-spacing: -0.005em;
+        margin-bottom: 4px;
+      }
+      .delta {
+        font-size: 13.5px;
+        color: var(--ink-2);
+      }
+      .delta .up {
+        color: var(--good);
+      }
+      .metaline {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        font-size: 10.5px;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 3px 10px;
+        white-space: nowrap;
+      }
+      .chip.trust {
+        color: var(--purple-soft);
+        border-color: rgba(149, 120, 255, 0.35);
+      }
+      .chip.cost {
+        color: var(--ink-2);
+      }
+      .why {
+        margin-left: auto;
+        background: none;
+        border: none;
+        color: var(--dim);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        cursor: pointer;
+        padding: 3px 2px;
+        text-decoration: underline dotted;
+        text-underline-offset: 3px;
+      }
+      .why:hover {
+        color: var(--muted);
+      }
+      .whytext {
+        display: none;
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-top: 10px;
+        padding-left: 12px;
+        border-left: 2px solid var(--border);
+      }
+      .card[data-why='1'] .whytext {
+        display: block;
+      }
+
+      /* expanded evidence (L3 peek) */
+      .evidence {
+        display: none;
+        margin-top: 14px;
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
+      }
+      .card[data-open='1'] .evidence {
+        display: block;
+      }
+      .evidence h4 {
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        color: var(--muted);
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      .scopes {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .scopes td {
+        padding: 6px 14px 6px 0;
+        color: var(--ink-2);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        vertical-align: top;
+      }
+      .scopes td:first-child {
+        color: var(--ink);
+        font-weight: 560;
+        white-space: nowrap;
+      }
+      .scopes td.lim {
+        color: var(--muted);
+      }
+      .difflist {
+        list-style: none;
+        font-size: 13.5px;
+      }
+      .difflist li {
+        padding: 5px 0;
+        color: var(--ink-2);
+      }
+      .difflist .plus {
+        color: var(--good);
+        font-family: ui-monospace, Menlo, monospace;
+        margin-right: 8px;
+      }
+      .gaterow {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 13px;
+      }
+      .gaterow .g {
+        color: var(--ink-2);
+      }
+      .gaterow .v {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .gaterow .v .up {
+        color: var(--good);
+      }
+      .gaterow .v .same {
+        color: var(--dim);
+      }
+      .forecast {
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+
+      /* actions */
+      .actions {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        justify-content: flex-start;
+        padding-top: 4px;
+      }
+      .btn {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        font-weight: 650;
+        border-radius: 9px;
+        padding: 10px 16px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          transform var(--dur-hover) var(--ease-precision),
+          background var(--dur-hover) var(--ease-precision),
+          border-color var(--dur-hover) var(--ease-precision);
+      }
+      .btn:active {
+        transform: translateY(1px);
+      }
+      .btn.primary {
+        background: var(--purple);
+        border: 1px solid var(--purple);
+        color: #0b0517;
+      }
+      .btn.primary:hover {
+        background: var(--purple-soft);
+        border-color: var(--purple-soft);
+      }
+      .btn.ghost {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .btn.ghost:hover {
+        border-color: var(--border-bright);
+        color: var(--ink-2);
+      }
+      .btn:focus-visible,
+      .why:focus-visible,
+      .nav a:focus-visible {
+        outline: 2px solid var(--purple-soft);
+        outline-offset: 2px;
+      }
+
+      /* ---- degraded shelf ---- */
+      .degraded {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: var(--amber-dim);
+        border: 1px solid rgba(232, 179, 75, 0.3);
+        border-radius: 12px;
+        padding: 13px 18px;
+      }
+      .degraded .icon {
+        flex: 0 0 auto;
+        color: var(--amber);
+        font-size: 15px;
+      }
+      .degraded .label {
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        color: var(--amber);
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .degraded .text {
+        font-size: 13.5px;
+        color: var(--ink-2);
+        flex: 1;
+        min-width: 0;
+      }
+      .degraded .text b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      /* ---- digest shelf ---- */
+      .digest {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        flex-wrap: wrap;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        padding: 14px 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .digest .k {
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        color: var(--dim);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .digest .stat {
+        white-space: nowrap;
+      }
+      .digest .stat b {
+        color: var(--ink-2);
+        font-weight: 620;
+        font-variant-numeric: tabular-nums;
+      }
+      .digest svg {
+        display: block;
+      }
+      .digest .spark-label {
+        font-size: 10.5px;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+      }
+      .digest .more {
+        margin-left: auto;
+        color: var(--dim);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      /* ---- all quiet ---- */
+      .quiet {
+        display: none;
+        text-align: center;
+        padding: 90px 20px 60px;
+      }
+      .quiet.show {
+        display: block;
+        animation: fadeup 600ms var(--ease-precision);
+      }
+      @keyframes fadeup {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .quiet .ring {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        margin: 0 auto 22px;
+        border: 1px solid var(--border-bright);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--purple-soft);
+        font-size: 22px;
+        box-shadow: 0 0 40px -12px var(--purple-glow);
+      }
+      .quiet h2 {
+        font-size: 22px;
+        font-weight: 640;
+        letter-spacing: 0.01em;
+        margin-bottom: 8px;
+      }
+      .quiet p {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .mocknote {
+        margin-top: 56px;
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        color: var(--dim);
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
+      }
+
+      @media (max-width: 900px) {
+        .rail {
+          display: none;
+        }
+        .main {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
+        .card {
+          flex-wrap: wrap;
+        }
+        .actions {
+          flex-direction: row;
+          width: 100%;
+          padding-left: 64px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <div class="shell">
+      <aside class="rail">
+        <div class="brand">
+          <div class="word">Paul OS<span class="dot">.</span></div>
+          <div class="sub">OPERATIONS CONSOLE</div>
+        </div>
+        <nav class="nav" aria-label="Console sections">
+          <a class="active" href="#" aria-current="page"
+            >ATTENTION <span class="badge" id="navBadge">3</span></a
+          >
+          <a href="#">BUILD</a>
+          <a href="#">REGISTRY</a>
+          <a href="#">RUNS</a>
+          <a href="#">EVIDENCE</a>
+          <a href="#">INCUBATOR</a>
+        </nav>
+        <div class="spacer"></div>
+        <div class="foot">
+          J / K — NAVIGATE<br />
+          A — APPROVE&nbsp;&nbsp;R — REJECT<br />
+          E — EVIDENCE
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="topline">
+          <h1>Attention</h1>
+          <div class="sysline">
+            <span class="ok">●</span> SYSTEMS NOMINAL &nbsp;·&nbsp;
+            <b id="countLine">3 DECISIONS</b> &nbsp;·&nbsp; 1 DEGRADED &nbsp;·&nbsp; LAST BRIEFING
+            07:00
+          </div>
+        </div>
+        <p class="lede">
+          The only place that asks for you. Everything else waits for tomorrow's briefing.
+          <kbd>J</kbd><kbd>K</kbd> to move, <kbd>A</kbd> approve, <kbd>R</kbd> reject,
+          <kbd>E</kbd> details.
+        </p>
+
+        <!-- ================= DECIDE ================= -->
+        <section class="shelf" id="decideShelf">
+          <div class="shelf-kicker">DECIDE <span class="n" id="shelfCount">— 3 ITEMS</span></div>
+          <ul class="queue" id="queue" role="list">
+            <!-- 01 · envelope grant -->
+            <li
+              class="card focused"
+              data-open="0"
+              data-why="0"
+              role="listitem"
+              aria-label="Permission request from Daily Briefing"
+            >
+              <div class="num">01</div>
+              <div class="body">
+                <div class="kicker">
+                  PERMISSION <span class="sep">·</span> DAILY BRIEFING
+                  <span class="sep">·</span> v1.4.0
+                </div>
+                <div class="headline">
+                  Daily Briefing asks to run every morning at 7:00 without asking each time
+                </div>
+                <div class="delta">
+                  It can read Gmail and Calendar and fetch approved sites. It can't send, write, or
+                  delete anything.
+                </div>
+                <div class="metaline">
+                  <span class="chip trust">READ-ONLY</span>
+                  <span class="chip cost">≈ $0.40 / RUN · $12.60 / MONTH</span>
+                  <span class="chip">30 DAYS · REVOKE ANYTIME</span>
+                  <button class="why" data-act="why">why am I seeing this?</button>
+                </div>
+                <div class="whytext">
+                  A new version went live at 8:12 this morning. Permissions don't carry over to new
+                  versions, so it's asking again.
+                </div>
+                <div class="evidence">
+                  <h4>EXACTLY WHAT IT CAN TOUCH</h4>
+                  <table class="scopes">
+                    <tr>
+                      <td>Gmail</td>
+                      <td>search and read messages</td>
+                      <td class="lim">read only</td>
+                    </tr>
+                    <tr>
+                      <td>Calendar</td>
+                      <td>list your events</td>
+                      <td class="lim">read only</td>
+                    </tr>
+                    <tr>
+                      <td>Web</td>
+                      <td>fetch pages</td>
+                      <td class="lim">approved sites only</td>
+                    </tr>
+                    <tr>
+                      <td>Claude</td>
+                      <td>write the brief</td>
+                      <td class="lim">$0.40 per run · $18 total</td>
+                    </tr>
+                  </table>
+                  <div class="forecast">
+                    If it ever needs more than this, the run pauses and comes back here.
+                  </div>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="btn primary" data-act="approve">ALLOW</button>
+                <button class="btn ghost" data-act="reject">DENY</button>
+              </div>
+            </li>
+
+            <!-- 02 · promotion -->
+            <li
+              class="card"
+              data-open="0"
+              data-why="0"
+              role="listitem"
+              aria-label="New version of Competitor Scan ready"
+            >
+              <div class="num">02</div>
+              <div class="body">
+                <div class="kicker">
+                  NEW VERSION <span class="sep">·</span> COMPETITOR SCAN
+                  <span class="sep">·</span> v0.9.2
+                </div>
+                <div class="headline">
+                  The new version passed all 12 tests — better on 2, worse on none
+                </div>
+                <div class="delta">
+                  <span class="up">▲ 2 improved</span> · 0 worse · 18% cheaper per run
+                </div>
+                <div class="metaline">
+                  <span class="chip trust">TESTED ON 240 REAL CASES</span>
+                  <span class="chip cost">$0.31 / RUN</span>
+                  <button class="why" data-act="why">why am I seeing this?</button>
+                </div>
+                <div class="whytext">
+                  Testing finished at 6:47 this morning with a pass. A new version never goes live
+                  without your OK.
+                </div>
+                <div class="evidence">
+                  <h4>WHAT CHANGED VS THE VERSION RUNNING NOW</h4>
+                  <div class="gaterow">
+                    <span class="g">accuracy</span
+                    ><span class="v">0.98 → <span class="up">0.99 ▲</span></span>
+                  </div>
+                  <div class="gaterow">
+                    <span class="g">every claim cited</span
+                    ><span class="v"><span class="same">1.00 — unchanged</span></span>
+                  </div>
+                  <div class="gaterow">
+                    <span class="g">cost per run</span
+                    ><span class="v">$0.38 → <span class="up">$0.31 ▼</span></span>
+                  </div>
+                  <div class="forecast">
+                    The other 9 checks are unchanged and passing. If anything looks wrong later, one
+                    click brings the current version back.
+                  </div>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="btn primary" data-act="approve">USE NEW VERSION</button>
+                <button class="btn ghost" data-act="reject">KEEP CURRENT</button>
+              </div>
+            </li>
+
+            <!-- 03 · memory acceptance -->
+            <li
+              class="card"
+              data-open="0"
+              data-why="0"
+              role="listitem"
+              aria-label="Daily Briefing wants to remember two things"
+            >
+              <div class="num">03</div>
+              <div class="body">
+                <div class="kicker">
+                  MEMORY <span class="sep">·</span> DAILY BRIEFING <span class="sep">·</span> THIS
+                  MORNING'S RUN
+                </div>
+                <div class="headline">Daily Briefing wants to remember 2 things</div>
+                <ul class="difflist" style="margin-top: 6px">
+                  <li><span class="plus">+</span>Expect 2–3 GLG screening invitations per week</li>
+                  <li>
+                    <span class="plus">+</span>Show build status before market news in the morning
+                    brief
+                  </li>
+                </ul>
+                <div class="metaline">
+                  <button class="why" data-act="why" style="margin-left: 0">
+                    why am I seeing this?
+                  </button>
+                </div>
+                <div class="whytext">
+                  Agents can't remember anything about you without your OK. This is that check.
+                </div>
+                <div class="evidence">
+                  <h4>WHERE THIS CAME FROM</h4>
+                  <div class="forecast">
+                    Both learned from 4 weeks of your morning runs. If you discard them, it won't
+                    ask again for 30 days.
+                  </div>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="btn primary" data-act="approve">REMEMBER BOTH</button>
+                <button class="btn ghost" data-act="reject">DISCARD</button>
+              </div>
+            </li>
+          </ul>
+
+          <!-- all-quiet state -->
+          <div class="quiet" id="quiet">
+            <div class="ring">✓</div>
+            <h2>All quiet</h2>
+            <p>Nothing needs you. Next briefing 07:00 tomorrow.</p>
+          </div>
+        </section>
+
+        <!-- ================= DEGRADED ================= -->
+        <section class="shelf">
+          <div class="shelf-kicker">DEGRADED <span class="n">— 1 ITEM</span></div>
+          <div class="degraded" role="status">
+            <span class="icon" aria-hidden="true">▲</span>
+            <span class="label">DEGRADED</span>
+            <span class="text"
+              ><b>BigQuery stopped responding</b> — paused after 3 failed tries at 6:12. Two agents
+              use it; their runs will wait.</span
+            >
+            <button class="btn ghost">SEE DETAILS</button>
+          </div>
+        </section>
+
+        <!-- ================= DIGEST ================= -->
+        <section class="shelf">
+          <div class="shelf-kicker">DIGEST — FOLDED INTO TOMORROW'S BRIEFING</div>
+          <div class="digest">
+            <span class="k">THIS WEEK</span>
+            <span class="stat"><b>34</b> runs</span>
+            <span class="stat"><b>$2.10</b> spend</span>
+            <span class="stat"><b>2</b> promotions</span>
+            <span class="stat"><b>0</b> escalations</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px">
+              <svg
+                width="110"
+                height="26"
+                viewBox="0 0 110 26"
+                role="img"
+                aria-label="Runs per day, last 7 days, trending steady"
+              >
+                <polyline
+                  points="4,17 21,14 38,18 55,10 72,12 89,7 106,9"
+                  fill="none"
+                  stroke="#9578ff"
+                  stroke-opacity=".75"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <circle cx="106" cy="9" r="2.5" fill="#b9aaff" />
+              </svg>
+              <span class="spark-label">RUNS / DAY</span>
+            </span>
+            <span class="more">everything else, tomorrow at 7:00 →</span>
+          </div>
+        </section>
+
+        <div class="mocknote">
+          P1 CONCEPT MOCKUP · SYNTHETIC DATA · EVERY CARD MUST PASS THE COLD-READ TEST · NOTHING
+          OUTSIDE THIS QUEUE MAY NOTIFY
+        </div>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        var queue = document.getElementById('queue');
+        var navBadge = document.getElementById('navBadge');
+        var countLine = document.getElementById('countLine');
+        var shelfCount = document.getElementById('shelfCount');
+        var quiet = document.getElementById('quiet');
+
+        function cards() {
+          return Array.prototype.slice.call(queue.querySelectorAll('.card:not(.leaving)'));
+        }
+        function focusedIndex() {
+          return cards().findIndex(function (c) {
+            return c.classList.contains('focused');
+          });
+        }
+
+        function setFocus(i) {
+          var list = cards();
+          if (!list.length) return;
+          i = Math.max(0, Math.min(list.length - 1, i));
+          list.forEach(function (c) {
+            c.classList.remove('focused');
+          });
+          list[i].classList.add('focused');
+          list[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        function updateCounts() {
+          var n = cards().length;
+          navBadge.textContent = n;
+          navBadge.style.display = n ? 'inline-flex' : 'none';
+          countLine.textContent = n + (n === 1 ? ' DECISION' : ' DECISIONS');
+          shelfCount.textContent = '— ' + n + (n === 1 ? ' ITEM' : ' ITEMS');
+          if (n === 0) {
+            quiet.classList.add('show');
+          }
+        }
+
+        function resolve(card) {
+          var wasFocused = card.classList.contains('focused');
+          var idx = cards().indexOf(card);
+          card.classList.add('leaving');
+          card.setAttribute('aria-hidden', 'true');
+          setTimeout(function () {
+            card.remove();
+            updateCounts();
+            if (wasFocused) setFocus(idx);
+          }, 360);
+        }
+
+        queue.addEventListener('click', function (e) {
+          var btn = e.target.closest('[data-act]');
+          var card = e.target.closest('.card');
+          if (!card) return;
+          setFocus(cards().indexOf(card));
+          if (!btn) return;
+          var act = btn.getAttribute('data-act');
+          if (act === 'approve' || act === 'reject') {
+            resolve(card);
+          }
+          if (act === 'why') {
+            card.setAttribute('data-why', card.getAttribute('data-why') === '1' ? '0' : '1');
+          }
+        });
+
+        document.addEventListener('keydown', function (e) {
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          var list = cards();
+          if (!list.length) return;
+          var i = focusedIndex();
+          if (i < 0) i = 0;
+          var k = e.key.toLowerCase();
+          if (k === 'j') {
+            setFocus(i + 1);
+            e.preventDefault();
+          } else if (k === 'k') {
+            setFocus(i - 1);
+            e.preventDefault();
+          } else if (k === 'a') {
+            resolve(list[i]);
+            e.preventDefault();
+          } else if (k === 'r') {
+            resolve(list[i]);
+            e.preventDefault();
+          } else if (k === 'e') {
+            var c = list[i];
+            c.setAttribute('data-open', c.getAttribute('data-open') === '1' ? '0' : '1');
+            e.preventDefault();
+          }
+        });
+
+        updateCounts();
+      })();
+    </script>
+  </body>
+</html>

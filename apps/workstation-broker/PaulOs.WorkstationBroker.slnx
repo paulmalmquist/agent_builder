@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PaulOs.WorkstationBroker.Contracts/PaulOs.WorkstationBroker.Contracts.csproj" />
+    <Project Path="src/PaulOs.WorkstationBroker.Core/PaulOs.WorkstationBroker.Core.csproj" />
+    <Project Path="src/PaulOs.WorkstationBroker.Service/PaulOs.WorkstationBroker.Service.csproj" />
+    <Project Path="src/PaulOs.WorkstationBroker.Companion/PaulOs.WorkstationBroker.Companion.csproj" />
+    <Project Path="src/PaulOs.ControlPlane.Client/PaulOs.ControlPlane.Client.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PaulOs.WorkstationBroker.Tests/PaulOs.WorkstationBroker.Tests.csproj" />
+  </Folder>
+</Solution>

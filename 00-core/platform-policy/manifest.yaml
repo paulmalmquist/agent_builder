@@ -1,0 +1,30 @@
+apiVersion: paul-os/v1
+kind: CorePolicy
+metadata:
+  id: 00000000-0000-4000-8000-000000000001
+  slug: platform-safety
+  version: 1.0.0
+  owner: local-platform-owner
+  purpose: Define fail-closed defaults shared by every Paul OS execution.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies: []
+spec:
+  providerPolicy: direct_allowed
+  productionRequiresReleaseDigest: true
+  firstProductionRunRequiresApproval: true
+  denyRulesAreMonotonic: true
+  stageDurableMemoryWrites: true
+  logPolicy:
+    allow:
+      - identifiers
+      - digests
+      - state_transitions
+      - timing
+      - usage_totals
+    deny:
+      - credentials
+      - prompts
+      - model_responses
+      - retrieved_content
+      - tool_payloads

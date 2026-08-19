@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Paul OS — Today</title>
+    <style>
+      :root {
+        --bg: #05070a;
+        --panel: #0b0e14;
+        --p2: #0e1219;
+        --bd: rgba(255, 255, 255, 0.09);
+        --bdb: rgba(255, 255, 255, 0.18);
+        --ink: #f5f6f8;
+        --i2: #aeb4bf;
+        --mut: #8f96a3;
+        --dim: #5c6270;
+        --faint: #333944;
+        --pur: #9578ff;
+        --purs: #b9aaff;
+        --teal: #2f9d82;
+        --amb: #e8b34b;
+        --red: #e0645f;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          400 14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Inter,
+          Roboto,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+      }
+      .noise {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        background-image:
+          radial-gradient(1px 1px at 14% 20%, rgba(255, 255, 255, 0.28) 0, transparent 100%),
+          radial-gradient(1px 1px at 76% 14%, rgba(255, 255, 255, 0.16) 0, transparent 100%),
+          radial-gradient(1.3px 1.3px at 52% 66%, rgba(185, 170, 255, 0.2) 0, transparent 100%),
+          radial-gradient(1px 1px at 31% 86%, rgba(255, 255, 255, 0.13) 0, transparent 100%),
+          radial-gradient(1px 1px at 91% 52%, rgba(255, 255, 255, 0.2) 0, transparent 100%);
+      }
+      .rail {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 74px;
+        z-index: 20;
+        background: #080b10;
+        border-right: 1px solid var(--bd);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 18px 0;
+      }
+      .rail .mk {
+        width: 26px;
+        height: 26px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--purs);
+        font: 800 11px/1 sans-serif;
+        margin-bottom: 26px;
+      }
+      .rail a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 34px;
+        color: var(--faint);
+        font: 700 11px/1 sans-serif;
+        text-decoration: none;
+        position: relative;
+      }
+      .rail a.on {
+        color: var(--pur);
+      }
+      .rail a.on::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 7px;
+        bottom: 7px;
+        width: 2px;
+        background: var(--pur);
+      }
+      .rail .pip {
+        position: absolute;
+        right: 14px;
+        top: 5px;
+        min-width: 14px;
+        height: 14px;
+        padding: 0 4px;
+        border-radius: 7px;
+        background: var(--pur);
+        color: #0b0517;
+        font: 700 9px/14px sans-serif;
+        text-align: center;
+      }
+      .wrap {
+        position: relative;
+        z-index: 1;
+        margin-left: 74px;
+        padding: 22px 30px 60px;
+        max-width: 1480px;
+      }
+
+      .top {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-bottom: 4px;
+      }
+      h1 {
+        font-size: 24px;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+      }
+      .top .d {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--dim);
+      }
+      .away {
+        font-size: 13px;
+        color: var(--mut);
+        margin-bottom: 18px;
+      }
+      .away b {
+        color: var(--i2);
+        font-weight: 600;
+      }
+      .away a {
+        color: var(--purs);
+        text-decoration: none;
+        border-bottom: 1px solid rgba(185, 170, 255, 0.3);
+      }
+
+      /* filter */
+      .filt {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--bd);
+      }
+      .filt .lb {
+        font-size: 9.5px;
+        letter-spacing: 0.19em;
+        color: var(--dim);
+        margin-right: 5px;
+      }
+      .chip {
+        font-size: 11.5px;
+        letter-spacing: 0.02em;
+        color: var(--mut);
+        background: var(--panel);
+        border: 1px solid var(--bd);
+        border-radius: 7px;
+        padding: 6px 12px;
+        cursor: pointer;
+        transition: all 170ms var(--ease);
+        white-space: nowrap;
+      }
+      .chip:hover {
+        border-color: var(--bdb);
+        color: var(--i2);
+      }
+      .chip.on {
+        border-color: var(--pur);
+        color: var(--ink);
+        background: rgba(149, 120, 255, 0.12);
+      }
+      .filt .scope {
+        margin-left: auto;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        color: var(--dim);
+      }
+
+      h2.band {
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        color: var(--mut);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin: 0 0 13px;
+      }
+      h2.band::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--bd);
+      }
+      h2.band .n {
+        color: var(--purs);
+      }
+      section {
+        margin-bottom: 30px;
+      }
+
+      /* KPI */
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 11px;
+      }
+      .k {
+        background: var(--panel);
+        border: 1px solid var(--bd);
+        border-radius: 12px;
+        padding: 13px 14px 12px;
+        cursor: pointer;
+        transition: all 180ms var(--ease);
+        position: relative;
+        overflow: hidden;
+      }
+      .k:hover {
+        transform: translateY(-2px);
+        border-color: var(--bdb);
+      }
+      .k:hover .drill {
+        opacity: 1;
+      }
+      .k .hd {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 9px;
+      }
+      .k .nm {
+        font-size: 11.5px;
+        letter-spacing: 0.03em;
+        color: var(--i2);
+        font-weight: 560;
+      }
+      .k .src {
+        margin-left: auto;
+        font-size: 8.5px;
+        letter-spacing: 0.13em;
+        padding: 2px 5px;
+        border-radius: 3px;
+        white-space: nowrap;
+      }
+      .src.live {
+        color: var(--teal);
+        border: 1px solid rgba(47, 157, 130, 0.35);
+      }
+      .src.syn {
+        color: var(--purs);
+        border: 1px solid rgba(149, 120, 255, 0.3);
+      }
+      .src.wait {
+        color: var(--dim);
+        border: 1px solid var(--faint);
+      }
+      .k .v {
+        font-size: 25px;
+        font-weight: 640;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.05;
+      }
+      .k .v small {
+        font-size: 12px;
+        color: var(--mut);
+        font-weight: 400;
+        letter-spacing: 0;
+        margin-left: 3px;
+      }
+      .k .tgt {
+        font-size: 11px;
+        color: var(--dim);
+        margin-top: 3px;
+      }
+      .k .bar {
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.07);
+        margin-top: 10px;
+        overflow: hidden;
+      }
+      .k .bar i {
+        display: block;
+        height: 100%;
+        border-radius: 2px;
+      }
+      .k .st {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 9px;
+        font-size: 9.5px;
+        letter-spacing: 0.13em;
+        font-weight: 600;
+      }
+      .k .st .g {
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+      }
+      .st.ok {
+        color: var(--teal);
+      }
+      .st.ok .g {
+        border-bottom: 6px solid var(--teal);
+      }
+      .st.risk {
+        color: var(--amb);
+      }
+      .st.risk .g {
+        border-bottom: 6px solid var(--amb);
+      }
+      .st.off {
+        color: var(--red);
+      }
+      .st.off .g {
+        border-top: 6px solid var(--red);
+      }
+      .k .drill {
+        position: absolute;
+        right: 11px;
+        bottom: 10px;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--purs);
+        opacity: 0;
+        transition: opacity 180ms var(--ease);
+      }
+
+      /* GANTT */
+      .gantt {
+        background: var(--panel);
+        border: 1px solid var(--bd);
+        border-radius: 12px;
+        padding: 14px 16px 12px;
+      }
+      .gmeta {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 10px;
+        letter-spacing: 0.13em;
+        color: var(--dim);
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+      .gmeta .lg {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .gmeta .sw {
+        width: 14px;
+        height: 6px;
+        border-radius: 2px;
+        display: block;
+      }
+      .grid {
+        position: relative;
+      }
+      .months {
+        display: grid;
+        grid-template-columns: 190px repeat(10, 1fr);
+        font-size: 9.5px;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+        padding-bottom: 7px;
+        border-bottom: 1px solid var(--bd);
+      }
+      .months div {
+        text-align: center;
+      }
+      .months div:first-child {
+        text-align: left;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 190px 1fr;
+        align-items: center;
+        gap: 0;
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        transition: opacity 200ms var(--ease);
+      }
+      .row.hide {
+        display: none;
+      }
+      .row .lab {
+        font-size: 12px;
+        color: var(--i2);
+        padding-right: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .row .lab span {
+        color: var(--dim);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        display: block;
+        margin-top: 1px;
+      }
+      .track {
+        position: relative;
+        height: 22px;
+      }
+      .b {
+        position: absolute;
+        top: 5px;
+        height: 12px;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        padding: 0 6px;
+        font-size: 9px;
+        letter-spacing: 0.06em;
+        color: #08090c;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .b.done {
+        background: var(--teal);
+      }
+      .b.now {
+        background: var(--pur);
+      }
+      .b.plan {
+        background: rgba(149, 120, 255, 0.28);
+        color: var(--purs);
+        border: 1px solid rgba(149, 120, 255, 0.45);
+      }
+      .b.risk {
+        background: var(--amb);
+      }
+      .ms {
+        position: absolute;
+        top: 4px;
+        width: 11px;
+        height: 11px;
+        transform: rotate(45deg);
+        background: var(--bg);
+        border: 1.4px solid var(--purs);
+      }
+      .today {
+        position: absolute;
+        top: -4px;
+        bottom: 0;
+        width: 1px;
+        background: var(--pur);
+        z-index: 3;
+      }
+      .today::after {
+        content: 'TODAY';
+        position: absolute;
+        bottom: -3px;
+        left: 4px;
+        font-size: 8.5px;
+        letter-spacing: 0.13em;
+        color: var(--pur);
+        font-weight: 700;
+      }
+
+      /* NEXT */
+      .two {
+        display: grid;
+        grid-template-columns: 1.25fr 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--bd);
+        border-radius: 12px;
+        padding: 14px 16px;
+      }
+      .t {
+        display: flex;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        cursor: pointer;
+      }
+      .t:last-child {
+        border-bottom: none;
+      }
+      .t:hover .tt {
+        color: var(--purs);
+      }
+      .t .when {
+        flex: 0 0 62px;
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+        color: var(--dim);
+        padding-top: 2px;
+        font-variant-numeric: tabular-nums;
+      }
+      .t .when.due {
+        color: var(--amb);
+      }
+      .t .tt {
+        font-size: 13.5px;
+        font-weight: 520;
+        line-height: 1.35;
+        transition: color 170ms var(--ease);
+      }
+      .t .tm {
+        font-size: 11.5px;
+        color: var(--mut);
+        margin-top: 2px;
+      }
+      .t .vtag {
+        font-size: 9px;
+        letter-spacing: 0.12em;
+        color: var(--dim);
+        border: 1px solid var(--bd);
+        border-radius: 3px;
+        padding: 1px 5px;
+        margin-left: 7px;
+        vertical-align: 1.5px;
+      }
+      .dec {
+        display: flex;
+        gap: 11px;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .dec:last-of-type {
+        border-bottom: none;
+      }
+      .dec .ix {
+        flex: 0 0 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #fff;
+        color: #0a0a0f;
+        font: 800 10px/24px sans-serif;
+        text-align: center;
+        margin-top: 1px;
+      }
+      .dec .dt {
+        font-size: 13px;
+        font-weight: 530;
+        line-height: 1.35;
+      }
+      .dec .dd {
+        font-size: 11.5px;
+        color: var(--mut);
+        margin-top: 2px;
+      }
+      .go {
+        display: block;
+        width: 100%;
+        margin-top: 12px;
+        padding: 9px;
+        border-radius: 8px;
+        background: transparent;
+        border: 1px solid var(--bd);
+        color: var(--mut);
+        font: 600 10.5px/1 sans-serif;
+        letter-spacing: 0.15em;
+        cursor: pointer;
+        transition: all 170ms var(--ease);
+      }
+      .go:hover {
+        border-color: var(--pur);
+        color: var(--purs);
+      }
+      .foot {
+        margin-top: 28px;
+        padding-top: 13px;
+        border-top: 1px solid var(--bd);
+        font-size: 9px;
+        letter-spacing: 0.18em;
+        color: var(--faint);
+      }
+      @media (max-width: 1180px) {
+        .kpis {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .two {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="noise"></div>
+    <aside class="rail">
+      <div class="mk">P</div>
+      <a href="#" class="on">00</a><a href="#">01<span class="pip">2</span></a
+      ><a href="#">02</a><a href="#">03</a> <a href="#">04</a><a href="#">05</a><a href="#">06</a
+      ><a href="#">07</a><a href="#">08</a><a href="#">09</a>
+    </aside>
+
+    <div class="wrap">
+      <div class="top">
+        <h1>Today</h1>
+        <span class="d">TUESDAY 18 AUGUST 2026 · WEEK 34</span>
+      </div>
+      <p class="away">
+        Since Friday: <b>12 runs</b> completed, <b>2</b> need you, <b>1</b> milestone slipped.
+        Detail in <a href="#">this morning's brief</a>.
+      </p>
+
+      <div class="filt" id="filt">
+        <span class="lb">VERTICAL</span>
+        <button class="chip on" data-v="all">All</button>
+        <button class="chip" data-v="str">Structures</button>
+        <button class="chip" data-v="pro">Propulsion</button>
+        <button class="chip" data-v="fac">Factory ops</button>
+        <button class="chip" data-v="int">Integration &amp; test</button>
+        <button class="chip" data-v="qua">Quality</button>
+        <button class="chip" data-v="avi">Avionics</button>
+        <span class="scope" id="scope">ONE FILTER DRIVES ALL THREE BANDS</span>
+      </div>
+
+      <!-- KPI -->
+      <section>
+        <h2 class="band">
+          <span class="n">01</span> ARE WE ON TRACK
+          <span
+            style="color: var(--dim); letter-spacing: 0.06em; text-transform: none; font-size: 11px"
+            >— click a tile to open its OKR and the agents assigned to it</span
+          >
+        </h2>
+        <div class="kpis" id="kpis"></div>
+      </section>
+
+      <!-- GANTT -->
+      <section>
+        <h2 class="band">
+          <span class="n">02</span> AIM MANUFACTURING BUILD
+          <span
+            style="color: var(--dim); letter-spacing: 0.06em; text-transform: none; font-size: 11px"
+            >— program plan, stock data until transfer</span
+          >
+        </h2>
+        <div class="gantt">
+          <div class="gmeta">
+            <span class="lg"><i class="sw" style="background: var(--teal)"></i>Complete</span>
+            <span class="lg"><i class="sw" style="background: var(--pur)"></i>In work</span>
+            <span class="lg"
+              ><i
+                class="sw"
+                style="
+                  background: rgba(149, 120, 255, 0.28);
+                  border: 1px solid rgba(149, 120, 255, 0.45);
+                "
+              ></i
+              >Planned</span
+            >
+            <span class="lg"><i class="sw" style="background: var(--amb)"></i>At risk</span>
+            <span class="lg"
+              ><i
+                class="sw"
+                style="
+                  width: 9px;
+                  height: 9px;
+                  transform: rotate(45deg);
+                  background: var(--bg);
+                  border: 1.4px solid var(--purs);
+                  border-radius: 0;
+                "
+              ></i
+              >Milestone</span
+            >
+            <span style="margin-left: auto">SOURCE · SYNTHETIC PROGRAM SEED</span>
+          </div>
+          <div class="grid">
+            <div class="months">
+              <div>WORKSTREAM</div>
+              <div>AUG</div>
+              <div>SEP</div>
+              <div>OCT</div>
+              <div>NOV</div>
+              <div>DEC</div>
+              <div>JAN</div>
+              <div>FEB</div>
+              <div>MAR</div>
+              <div>APR</div>
+              <div>MAY</div>
+            </div>
+            <div id="rows" style="position: relative"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NEXT -->
+      <section>
+        <h2 class="band"><span class="n">03</span> WHAT MOVES IT</h2>
+        <div class="two">
+          <div class="card">
+            <h2 class="band" style="margin-bottom: 6px">
+              YOUR NEXT MOVES
+              <span
+                style="
+                  color: var(--dim);
+                  letter-spacing: 0.06em;
+                  text-transform: none;
+                  font-size: 11px;
+                "
+                id="tcount"
+              ></span>
+            </h2>
+            <div id="tasks"></div>
+          </div>
+          <div class="card">
+            <h2 class="band" style="margin-bottom: 6px">NEEDS YOU — 2 DECISIONS</h2>
+            <div class="dec">
+              <div class="ix">01</div>
+              <div>
+                <div class="dt">Daily Brief proposed a durable memory</div>
+                <div class="dd">3 identical requests · nothing stored yet</div>
+              </div>
+            </div>
+            <div class="dec">
+              <div class="ix">02</div>
+              <div>
+                <div class="dt">Daily Brief has an improvement proposal</div>
+                <div class="dd">3 identical requests · no repository change yet</div>
+              </div>
+            </div>
+            <button class="go">OPEN ATTENTION →</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="foot">
+        CONCEPT · ONE VERTICAL FILTER DRIVES KPIs, PLAN, AND WORK · EVERY KPI DECLARES ITS SOURCE
+      </div>
+    </div>
+
+    <script>
+      const V = {
+        all: 'All',
+        str: 'Structures',
+        pro: 'Propulsion',
+        fac: 'Factory ops',
+        int: 'Integration & test',
+        qua: 'Quality',
+        avi: 'Avionics',
+      };
+
+      // KPI set shown when "All" — one roll-up tile per vertical
+      const ROLLUP = [
+        {
+          v: 'str',
+          nm: 'Structures',
+          val: 74,
+          unit: '%',
+          tgt: 'agent coverage · target 80%',
+          pct: 74,
+          st: 'ok',
+          src: 'syn',
+        },
+        {
+          v: 'pro',
+          nm: 'Propulsion',
+          val: 91,
+          unit: '%',
+          tgt: 'agent coverage · target 80%',
+          pct: 91,
+          st: 'ok',
+          src: 'syn',
+        },
+        {
+          v: 'fac',
+          nm: 'Factory ops',
+          val: 62,
+          unit: '%',
+          tgt: 'agent coverage · target 80%',
+          pct: 62,
+          st: 'risk',
+          src: 'syn',
+        },
+        {
+          v: 'int',
+          nm: 'Integration & test',
+          val: 70,
+          unit: '%',
+          tgt: 'agent coverage · target 80%',
+          pct: 70,
+          st: 'risk',
+          src: 'syn',
+        },
+        {
+          v: 'qua',
+          nm: 'Quality',
+          val: 0,
+          unit: '%',
+          tgt: 'no certified agent yet',
+          pct: 0,
+          st: 'off',
+          src: 'live',
+        },
+        {
+          v: 'avi',
+          nm: 'Avionics',
+          val: 0,
+          unit: '%',
+          tgt: 'no certified agent yet',
+          pct: 0,
+          st: 'off',
+          src: 'live',
+        },
+        {
+          v: 'all',
+          nm: 'Decision latency',
+          val: 6.2,
+          unit: 'h',
+          tgt: 'median arrival → cleared · target 8h',
+          pct: 78,
+          st: 'ok',
+          src: 'live',
+        },
+        {
+          v: 'all',
+          nm: 'Zero-escalation',
+          val: 100,
+          unit: '%',
+          tgt: 'runs finishing inside envelope',
+          pct: 100,
+          st: 'ok',
+          src: 'live',
+        },
+      ];
+      // per-vertical key results
+      const KR = {
+        str: [
+          {
+            nm: 'As-built reconciled',
+            val: 82,
+            unit: '%',
+            tgt: 'serials with zero unpapered deltas · target 95%',
+            pct: 82,
+            st: 'risk',
+            src: 'wait',
+          },
+          {
+            nm: 'Agent coverage',
+            val: 74,
+            unit: '%',
+            tgt: '5 parts · 2 certified agents',
+            pct: 74,
+            st: 'ok',
+            src: 'syn',
+          },
+          {
+            nm: 'Evidence freshness',
+            val: 12,
+            unit: 'h',
+            tgt: 'oldest evidence age · limit 48h',
+            pct: 88,
+            st: 'ok',
+            src: 'live',
+          },
+          {
+            nm: 'Weekly spend',
+            val: 0.42,
+            unit: '$',
+            tgt: 'agent cost this week',
+            pct: 20,
+            st: 'ok',
+            src: 'live',
+          },
+        ],
+        pro: [
+          {
+            nm: 'Hot-fire triage time',
+            val: 41,
+            unit: 'm',
+            tgt: 'test end → ranked hypotheses · target 60m',
+            pct: 85,
+            st: 'ok',
+            src: 'wait',
+          },
+          {
+            nm: 'Agent coverage',
+            val: 91,
+            unit: '%',
+            tgt: '3 parts · 4 certified agents',
+            pct: 91,
+            st: 'ok',
+            src: 'syn',
+          },
+          {
+            nm: 'Evidence freshness',
+            val: 6,
+            unit: 'h',
+            tgt: 'oldest evidence age · limit 48h',
+            pct: 94,
+            st: 'ok',
+            src: 'live',
+          },
+          {
+            nm: 'Weekly spend',
+            val: 0.88,
+            unit: '$',
+            tgt: 'agent cost this week',
+            pct: 35,
+            st: 'ok',
+            src: 'live',
+          },
+        ],
+        fac: [
+          {
+            nm: 'Print first-pass yield',
+            val: 88,
+            unit: '%',
+            tgt: 'target 93%',
+            pct: 88,
+            st: 'risk',
+            src: 'wait',
+          },
+          {
+            nm: 'Lot trace time',
+            val: 9,
+            unit: 'm',
+            tgt: 'suspect lot → affected vehicles · target 15m',
+            pct: 80,
+            st: 'ok',
+            src: 'wait',
+          },
+          {
+            nm: 'Agent coverage',
+            val: 62,
+            unit: '%',
+            tgt: '6 parts · 2 certified agents',
+            pct: 62,
+            st: 'risk',
+            src: 'syn',
+          },
+          {
+            nm: 'Weekly spend',
+            val: 1.1,
+            unit: '$',
+            tgt: 'agent cost this week',
+            pct: 44,
+            st: 'ok',
+            src: 'live',
+          },
+        ],
+        int: [
+          {
+            nm: 'Open items on critical path',
+            val: 14,
+            unit: '',
+            tgt: 'down from 19 last week',
+            pct: 63,
+            st: 'risk',
+            src: 'wait',
+          },
+          {
+            nm: 'Readiness pack build time',
+            val: 2.1,
+            unit: 'h',
+            tgt: 'was 11h by hand',
+            pct: 88,
+            st: 'ok',
+            src: 'wait',
+          },
+          {
+            nm: 'Agent coverage',
+            val: 70,
+            unit: '%',
+            tgt: '5 parts · 3 certified agents',
+            pct: 70,
+            st: 'risk',
+            src: 'syn',
+          },
+          {
+            nm: 'Evidence freshness',
+            val: 31,
+            unit: 'h',
+            tgt: 'oldest evidence age · limit 48h',
+            pct: 65,
+            st: 'risk',
+            src: 'live',
+          },
+        ],
+        qua: [
+          {
+            nm: 'Agent coverage',
+            val: 0,
+            unit: '%',
+            tgt: '1 part · no certified agent',
+            pct: 0,
+            st: 'off',
+            src: 'live',
+          },
+          {
+            nm: 'MRB pack build time',
+            val: 0,
+            unit: '',
+            tgt: 'not measured — no agent assigned',
+            pct: 0,
+            st: 'off',
+            src: 'wait',
+          },
+          {
+            nm: 'Repeat-defect detection',
+            val: 0,
+            unit: '',
+            tgt: 'not measured — no agent assigned',
+            pct: 0,
+            st: 'off',
+            src: 'wait',
+          },
+        ],
+        avi: [
+          {
+            nm: 'Agent coverage',
+            val: 0,
+            unit: '%',
+            tgt: '4 parts · no certified agent',
+            pct: 0,
+            st: 'off',
+            src: 'live',
+          },
+          {
+            nm: 'Harness check time',
+            val: 0,
+            unit: '',
+            tgt: 'not measured — no agent assigned',
+            pct: 0,
+            st: 'off',
+            src: 'wait',
+          },
+          {
+            nm: 'Channel coverage',
+            val: 0,
+            unit: '',
+            tgt: 'not measured — no agent assigned',
+            pct: 0,
+            st: 'off',
+            src: 'wait',
+          },
+        ],
+      };
+
+      const ROWS = [
+        {
+          v: 'fac',
+          lab: 'Print cell qualification',
+          sub: 'FACTORY OPS',
+          bars: [[0, 2.6, 'done', 'Qualified']],
+          ms: [2.6],
+        },
+        {
+          v: 'fac',
+          lab: 'Tank barrel production',
+          sub: 'FACTORY OPS',
+          bars: [[1.2, 4.6, 'now', 'In work']],
+          ms: [],
+        },
+        {
+          v: 'str',
+          lab: 'Thrust structure build',
+          sub: 'STRUCTURES',
+          bars: [
+            [0.6, 3.4, 'done', 'Complete'],
+            [3.4, 5.2, 'now', 'Proof test'],
+          ],
+          ms: [5.2],
+        },
+        {
+          v: 'str',
+          lab: 'Interstage + fairing',
+          sub: 'STRUCTURES',
+          bars: [[3.0, 6.4, 'risk', 'At risk · 2wk slip']],
+          ms: [],
+        },
+        {
+          v: 'pro',
+          lab: 'Engine cluster assembly',
+          sub: 'PROPULSION',
+          bars: [[1.8, 5.0, 'now', 'In work']],
+          ms: [],
+        },
+        {
+          v: 'pro',
+          lab: 'Stage 1 hot fire campaign',
+          sub: 'PROPULSION',
+          bars: [[5.0, 7.2, 'plan', 'Planned']],
+          ms: [7.2],
+        },
+        {
+          v: 'int',
+          lab: 'Stage mate',
+          sub: 'INTEGRATION & TEST',
+          bars: [[6.8, 8.0, 'plan', 'Planned']],
+          ms: [],
+        },
+        {
+          v: 'int',
+          lab: 'Vehicle integrated test',
+          sub: 'INTEGRATION & TEST',
+          bars: [[8.0, 9.4, 'plan', 'Planned']],
+          ms: [9.4],
+        },
+        {
+          v: 'qua',
+          lab: 'NCR burndown to flight',
+          sub: 'QUALITY',
+          bars: [[0.4, 9.4, 'plan', 'Continuous · unagented']],
+          ms: [],
+        },
+        {
+          v: 'avi',
+          lab: 'Avionics integration',
+          sub: 'AVIONICS',
+          bars: [[4.4, 7.6, 'plan', 'Planned']],
+          ms: [],
+        },
+      ];
+
+      const TASKS = [
+        {
+          v: 'int',
+          when: 'TODAY',
+          due: 1,
+          tt: 'Sign off Terran R data readiness inputs',
+          tm: 'Blocks the 16:00 review · 3 sources unconfirmed',
+        },
+        {
+          v: 'fac',
+          when: 'TODAY',
+          due: 1,
+          tt: 'Approve print-cell schema change',
+          tm: 'Freeze at 16:00 · 3 proposals unreviewed',
+        },
+        {
+          v: 'qua',
+          when: 'THU',
+          due: 0,
+          tt: 'Name an owner for the Quality agent gap',
+          tm: 'Only vertical with zero certified coverage',
+        },
+        {
+          v: 'pro',
+          when: 'FRI',
+          due: 0,
+          tt: 'Review hot-fire quicklook eval corpus',
+          tm: 'Needed before the agent can certify',
+        },
+        {
+          v: 'str',
+          when: 'NEXT WK',
+          due: 0,
+          tt: 'Decide interstage slip recovery plan',
+          tm: '2-week slip now on the critical path',
+        },
+      ];
+
+      let cur = 'all';
+      const kpiEl = document.getElementById('kpis'),
+        rowEl = document.getElementById('rows'),
+        taskEl = document.getElementById('tasks');
+
+      function paint() {
+        // KPIs
+        const set = cur === 'all' ? ROLLUP : KR[cur];
+        kpiEl.innerHTML = set
+          .map((k) => {
+            const col =
+              k.st === 'ok' ? 'var(--teal)' : k.st === 'risk' ? 'var(--amb)' : 'var(--red)';
+            const lbl = k.st === 'ok' ? 'ON TRACK' : k.st === 'risk' ? 'AT RISK' : 'NO COVERAGE';
+            const srcL =
+              k.src === 'live' ? 'LIVE' : k.src === 'syn' ? 'SYNTHETIC' : 'AWAITING TRANSFER';
+            const val =
+              k.unit === '$'
+                ? '$' + k.val.toFixed(2)
+                : k.val + (k.unit && k.unit !== '$' ? `<small>${k.unit}</small>` : '');
+            return `<div class="k"><div class="hd"><span class="nm">${k.nm}</span><span class="src ${k.src}">${srcL}</span></div>
+      <div class="v">${val}</div><div class="tgt">${k.tgt}</div>
+      <div class="bar"><i style="width:${k.pct}%;background:${col}"></i></div>
+      <div class="st ${k.st}"><span class="g"></span>${lbl}</div><div class="drill">OKR →</div></div>`;
+          })
+          .join('');
+        // Gantt
+        rowEl.innerHTML =
+          ROWS.map((r) => {
+            const hide = cur !== 'all' && r.v !== cur ? ' hide' : '';
+            const bars = r.bars
+              .map(
+                (b) =>
+                  `<div class="b ${b[2]}" style="left:${(b[0] / 10) * 100}%;width:${((b[1] - b[0]) / 10) * 100}%">${b[3]}</div>`,
+              )
+              .join('');
+            const ms = r.ms
+              .map((m) => `<div class="ms" style="left:calc(${(m / 10) * 100}% - 5px)"></div>`)
+              .join('');
+            return `<div class="row${hide}"><div class="lab">${r.lab}<span>${r.sub}</span></div><div class="track">${bars}${ms}</div></div>`;
+          }).join('') +
+          `<div class="today" style="left:calc(190px + (100% - 190px) * 0.06)"></div>`;
+        // Tasks
+        const ts = cur === 'all' ? TASKS : TASKS.filter((t) => t.v === cur);
+        taskEl.innerHTML = ts.length
+          ? ts
+              .map(
+                (t) => `<div class="t"><div class="when${t.due ? ' due' : ''}">${t.when}</div>
+    <div><div class="tt">${t.tt}${cur === 'all' ? `<span class="vtag">${V[t.v].toUpperCase()}</span>` : ''}</div><div class="tm">${t.tm}</div></div></div>`,
+              )
+              .join('')
+          : `<div style="font-size:12.5px;color:var(--dim);padding:10px 0">Nothing open for ${V[cur]}.</div>`;
+        document.getElementById('tcount').textContent = `— ${ts.length} shown`;
+        document.getElementById('scope').textContent =
+          cur === 'all' ? 'ONE FILTER DRIVES ALL THREE BANDS' : `SCOPED TO ${V[cur].toUpperCase()}`;
+      }
+      document.getElementById('filt').addEventListener('click', (e) => {
+        const b = e.target.closest('.chip');
+        if (!b) return;
+        cur = b.dataset.v;
+        document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b));
+        paint();
+      });
+      paint();
+    </script>
+  </body>
+</html>

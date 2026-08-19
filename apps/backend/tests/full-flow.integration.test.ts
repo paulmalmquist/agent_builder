@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import {
   AgentStatus,
@@ -8,6 +9,7 @@ import {
   CertificationRunState,
   Prisma,
   PrismaClient,
+  ResourceKind,
 } from '@prisma/client';
 import {
   agentSearchResponseSchema,
@@ -21,6 +23,8 @@ import {
   evaluationResponseSchema,
   generationAcceptedSchema,
   generationJobSchema,
+  productionChannelMutationResponseSchema,
+  releaseEvaluationSchema,
   sourceListResponseSchema,
   type GuardrailsSection,
   type KnowledgeSection,
@@ -39,15 +43,17 @@ import type { InterpretationService } from '../src/services/interpretation-servi
 import { MaintenanceService } from '../src/services/maintenance-service.js';
 import { PromotionService } from '../src/services/promotion-service.js';
 import type { ServiceBundle } from '../src/services/types.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 
 const runDatabaseIntegration = process.env['RUN_DATABASE_INTEGRATION'] === 'true';
 const describeDatabase = runDatabaseIntegration ? describe : describe.skip;
-const logger = pino({ level: 'silent' });
+const logger = pino({ level: process.env['DEBUG_INTEGRATION'] === 'true' ? 'error' : 'silent' });
 const passingChallengerId = '84357d19-acf2-435d-a8aa-959d493aa8c2';
 const passingRunId = 'a2e8dc44-f48f-44fa-951b-e91a2f710882';
 const supplierChampionId = '4a40357e-924f-46db-86ac-b8ed920be486';
 const rejectedChallengerId = '7e2ab2cc-52e8-4cb8-92c3-256626cdade7';
 const inventoryChampionId = 'fbcbcd95-15be-49c0-a8a7-a2bc361b7521';
+const fullFlowActorId = 'human:governance-full-flow';
 
 const knowledge: KnowledgeSection = {
   sources: [
@@ -146,6 +152,7 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     port: 3000,
     logLevel: 'silent',
     generatorCliPath,
+    repositoryRoot: workspaceRoot,
     generatorVersion: '0.2.0',
     generatorConcurrency: 2,
     certificationConcurrency: 2,
@@ -154,18 +161,32 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     certificationFullRunRetention: 20,
     interpretationTtlHours: 24,
     maintenance: { enabled: false, hourUtc: 2 },
+    automationScheduler: { enabled: false, intervalMs: 30_000, batchSize: 25 },
+    profilePath: '.local/profile/profile.yaml',
     generatorTimeoutMs: 30_000,
     generatorMaxOutputBytes: 1_000_000,
     shutdownTimeoutMs: 15_000,
-    auth: { enabled: false, actorId: 'integration-test' },
+    auth: { enabled: false, actorId: fullFlowActorId },
     providers: {
       bigquery: false,
       confluence: false,
       jira: false,
       email: false,
       slack: false,
-      interstellar: false,
+      telemetry: false,
     },
+    model: {
+      provider: 'deterministic',
+      providerPolicy: 'direct_allowed',
+      name: 'daily-brief-fixture',
+      timeoutMs: 30_000,
+      inputUsdPerMillionTokens: 3,
+      outputUsdPerMillionTokens: 15,
+      pricingVersion: 'integration-test',
+    },
+    execution: { concurrency: 2, leaseMs: 60_000, dispatchMode: 'in_process' },
+    repositorySourceCommit: 'a'.repeat(40),
+    repositorySourceVerified: true,
     bigQuery: {
       enabled: false,
       projectId: null,
@@ -184,7 +205,12 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     }
     await prisma.$connect();
     const descriptor = await prisma.knowledgeSource.findUnique({
-      where: { id: 'confluence-supplier-playbook' },
+      where: {
+        workspaceId_id: {
+          workspaceId: LOCAL_WORKSPACE_ID,
+          id: 'confluence-supplier-playbook',
+        },
+      },
     });
     if (!descriptor) {
       throw new Error('Integration database must be migrated and seeded before tests');
@@ -263,6 +289,402 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     });
     return id;
   }
+
+  it('runs the daily brief from manifest import through authority, outcome, and metrics', async () => {
+    const referencePath = path.resolve(
+      workspaceRoot,
+      '05-reference',
+      'briefing-principles',
+      'manifest.yaml',
+    );
+    const skillPath = path.resolve(workspaceRoot, '02-skills', 'daily-brief', 'manifest.yaml');
+    const referenceImport = await request(app)
+      .post('/v1/repository-imports')
+      .send({
+        manifestYaml: await readFile(referencePath, 'utf8'),
+        sourcePath: '05-reference/briefing-principles/manifest.yaml',
+      })
+      .expect(201);
+    expect(referenceImport.body.import.sourceCommit).toBe(
+      process.env['REPOSITORY_SOURCE_COMMIT'] ?? 'synthetic-baseline',
+    );
+    const skillImport = await request(app)
+      .post('/v1/repository-imports')
+      .send({
+        manifestYaml: await readFile(skillPath, 'utf8'),
+        sourcePath: '02-skills/daily-brief/manifest.yaml',
+      })
+      .expect(201);
+    const repeated = await request(app)
+      .post('/v1/repository-imports')
+      .send({
+        manifestYaml: await readFile(skillPath, 'utf8'),
+        sourcePath: '02-skills/daily-brief/manifest.yaml',
+      })
+      .expect(201);
+    expect(repeated.body.idempotent).toBe(true);
+
+    const release = await request(app)
+      .post('/v1/releases')
+      .send({
+        resourceVersionIds: [
+          referenceImport.body.resource.id as string,
+          skillImport.body.resource.id as string,
+        ],
+        projectId: null,
+      })
+      .expect(201);
+    const runInput = {
+      date: '2026-08-16',
+      timezone: 'America/New_York',
+      priorities: ['Complete the governed vertical slice'],
+      calendarItems: [],
+      tasks: ['Verify the execution outcome'],
+      signals: ['A platform integration test is pending'],
+      userConstraints: [],
+    };
+    const implicitDraft = await request(app)
+      .post('/v1/execution-runs')
+      .send({
+        releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
+        authorityGrantId: null,
+        input: runInput,
+        maxInputTokens: 2000,
+        maxOutputTokens: 1000,
+        maxEstimatedCostUsd: 1,
+        idempotencyKey: `daily-brief-implicit-${randomUUID()}`,
+      })
+      .expect(422);
+    expect(implicitDraft.body.error.code).toBe('EXPLICIT_DEVELOPMENT_RUN_REQUIRED');
+    const awaiting = await request(app)
+      .post('/v1/execution-runs')
+      .send({
+        releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
+        authorityGrantId: null,
+        input: runInput,
+        maxInputTokens: 2000,
+        maxOutputTokens: 1000,
+        maxEstimatedCostUsd: 1,
+        idempotencyKey: `daily-brief-awaiting-${randomUUID()}`,
+        developmentDraft: true,
+      })
+      .expect(202);
+    expect(awaiting.body.state).toBe('awaiting_approval');
+    const approved = await request(app)
+      .post(`/v1/execution-runs/${awaiting.body.id as string}/approve`)
+      .send({
+        entryResourceVersionId: skillImport.body.resource.id,
+        projectId: null,
+        inputConstraints: { timezone: 'America/New_York' },
+        toolScopes: [],
+        validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        maxRuns: 2,
+        maxEstimatedCostPerRunUsd: 1,
+        totalCostBudgetUsd: 2,
+        rationale: 'Approve this bounded synthetic daily briefing execution.',
+      })
+      .expect(200);
+    expect(approved.body.run.state).toBe('queued');
+
+    let terminal: { state: string } | undefined;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      terminal = (
+        await request(app)
+          .get(`/v1/execution-runs/${awaiting.body.id as string}`)
+          .expect(200)
+      ).body as { state: string };
+      if (terminal.state === 'succeeded' || terminal.state === 'failed') break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(terminal?.state).toBe('succeeded');
+    const outcomesResponse = await request(app)
+      .get('/v1/outcomes')
+      .query({ runId: awaiting.body.id })
+      .expect(200);
+    expect(outcomesResponse.body.items).toHaveLength(1);
+    expect(outcomesResponse.body.items[0].output.topPriorities).toEqual([
+      'Complete the governed vertical slice',
+    ]);
+    const metricsResponse = await request(app)
+      .get('/v1/metrics')
+      .query({ runId: awaiting.body.id })
+      .expect(200);
+    expect(metricsResponse.body.items).toHaveLength(5);
+
+    const automatic = await request(app)
+      .post('/v1/execution-runs')
+      .send({
+        releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
+        authorityGrantId: approved.body.grant.id,
+        input: runInput,
+        maxInputTokens: 2000,
+        maxOutputTokens: 1000,
+        maxEstimatedCostUsd: 1,
+        idempotencyKey: `daily-brief-authorized-${randomUUID()}`,
+        developmentDraft: true,
+      })
+      .expect(202);
+    expect(automatic.body.state).toBe('queued');
+    await request(app)
+      .post(`/v1/authority-grants/${approved.body.grant.id as string}/revoke`)
+      .expect(200);
+
+    const paused = await request(app)
+      .post('/v1/execution-runs')
+      .send({
+        releaseId: release.body.id,
+        entryResourceVersionId: skillImport.body.resource.id,
+        authorityGrantId: null,
+        input: runInput,
+        maxInputTokens: 2000,
+        maxOutputTokens: 1000,
+        maxEstimatedCostUsd: 0,
+        idempotencyKey: `daily-brief-budget-${randomUUID()}`,
+        developmentDraft: true,
+      })
+      .expect(202);
+    expect(paused.body.state).toBe('paused_budget');
+    await request(app).get('/v1/resources').query({ kind: 'Skill' }).expect(200);
+    await request(app).get('/v1/execution-runs').expect(200);
+    await request(app).get('/v1/authority-grants').expect(200);
+  });
+
+  it('certifies immutable releases and atomically promotes and rolls back production', async () => {
+    const skillFamilyId = randomUUID();
+    const suiteFamilyId = randomUUID();
+    const skillYaml = (version: string, lifecycle = 'candidate') => `apiVersion: paul-os/v1
+kind: Skill
+metadata:
+  id: ${skillFamilyId}
+  slug: governance-brief-${skillFamilyId.slice(0, 8)}
+  version: ${version}
+  owner: integration-test
+  purpose: Produce a deterministic and cited governance briefing for integration testing.
+  lifecycle: ${lifecycle}
+  provenance: synthetic
+dependencies: []
+spec:
+  inputSchema:
+    type: object
+    properties:
+      calendarItems: { type: array }
+  outputSchema:
+    type: object
+    required: [scheduleRisks, citations]
+    properties:
+      scheduleRisks: { type: array }
+      citations: { type: array }
+  tools: []
+  permissions: []
+  contextRequirements: []
+  successCriteria: [Return a schema-valid result.]
+`;
+    const suiteYaml = (version: string, subjectVersion: string) => `apiVersion: paul-os/v1
+kind: EvaluationSuite
+metadata:
+  id: ${suiteFamilyId}
+  slug: governance-suite-${suiteFamilyId.slice(0, 8)}
+  version: ${version}
+  owner: integration-test
+  purpose: Verify deterministic release contract evidence without semantic quality claims.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: ${skillFamilyId}
+    version: ${subjectVersion}
+spec:
+  subject: governance-brief-${skillFamilyId.slice(0, 8)}@${subjectVersion}
+  executorKind: deterministic_contract
+  evaluationMode: contract_validation
+  corpusVersion: 1
+  cases:
+    - key: contract-shape
+      fixture: synthetic
+      assertions:
+        - output_schema_valid
+        - schedule_risk_present
+        - citations_resolve_to_supplied_calendar_items
+        - no_attempted_actions
+  gates:
+    schemaConformance: 1
+    citationCoverage: 1
+    unauthorizedActions: 0
+`;
+    const importManifest = async (manifestYaml: string) =>
+      request(app)
+        .post('/v1/repository-imports')
+        .send({ manifestYaml, sourcePath: null })
+        .expect(201);
+    const buildRelease = async (version: string) => {
+      const skillImport = await importManifest(skillYaml(version));
+      const suiteImport = await importManifest(suiteYaml(version, version));
+      return request(app)
+        .post('/v1/releases')
+        .send({
+          resourceVersionIds: [
+            skillImport.body.resource.id as string,
+            suiteImport.body.resource.id as string,
+          ],
+          projectId: null,
+        })
+        .expect(201);
+    };
+
+    await request(app)
+      .post('/v1/repository-imports')
+      .send({
+        manifestYaml: skillYaml('9.9.9', 'certified'),
+        sourcePath: null,
+      })
+      .expect(422);
+
+    const firstRelease = await buildRelease('1.0.0');
+    const firstSuite = await prisma.resourceVersion.findUniqueOrThrow({
+      where: { familyId_version: { familyId: suiteFamilyId, version: '1.0.0' } },
+    });
+    await expect(
+      prisma.$executeRaw`UPDATE "ResourceVersion" SET "lifecycle" = 'certified' WHERE "id" = ${firstSuite.id}::uuid`,
+    ).rejects.toThrow(/Certification requires immutable passing release evidence/);
+
+    const firstEvidenceResponse = await request(app)
+      .post('/v1/release-evaluations')
+      .send({ releaseId: firstRelease.body.id, suiteVersionId: firstSuite.id })
+      .expect(201);
+    const firstEvidence = releaseEvaluationSchema.parse(firstEvidenceResponse.body);
+    expect(firstEvidence.verdict).toBe('passed');
+    expect(firstEvidence.disclaimer).toContain('does not measure semantic model quality');
+
+    await request(app)
+      .post('/v1/production-channels/default/promote')
+      .send({ releaseId: firstRelease.body.id, evaluationId: firstEvidence.id, rationale: 'short' })
+      .expect(400);
+    const firstPromotionResponse = await request(app)
+      .post('/v1/production-channels/default/promote')
+      .send({
+        releaseId: firstRelease.body.id,
+        evaluationId: firstEvidence.id,
+        rationale: 'Promote the first fully certified integration release.',
+      });
+    if (firstPromotionResponse.status !== 200) {
+      throw new Error(`Promotion failed: ${JSON.stringify(firstPromotionResponse.body)}`);
+    }
+    const firstPromotion = productionChannelMutationResponseSchema.parse(
+      firstPromotionResponse.body,
+    );
+    expect(firstPromotion.channel.currentReleaseId).toBe(firstRelease.body.id);
+
+    const secondRelease = await buildRelease('1.1.0');
+    await request(app)
+      .post('/v1/production-channels/default/promote')
+      .send({
+        releaseId: secondRelease.body.id,
+        evaluationId: firstEvidence.id,
+        rationale: 'Attempt to bypass exact release certification evidence.',
+      })
+      .expect(422);
+    const unchanged = await request(app).get('/v1/production-channels/default').expect(200);
+    expect(unchanged.body.currentReleaseId).toBe(firstRelease.body.id);
+
+    const secondSuite = await prisma.resourceVersion.findUniqueOrThrow({
+      where: { familyId_version: { familyId: suiteFamilyId, version: '1.1.0' } },
+    });
+    const secondEvidenceResponse = await request(app)
+      .post('/v1/release-evaluations')
+      .send({ releaseId: secondRelease.body.id, suiteVersionId: secondSuite.id })
+      .expect(201);
+    const secondEvidence = releaseEvaluationSchema.parse(secondEvidenceResponse.body);
+    await request(app)
+      .post('/v1/production-channels/default/promote')
+      .send({
+        releaseId: secondRelease.body.id,
+        evaluationId: secondEvidence.id,
+        rationale: 'Promote the certified successor for rollback testing.',
+      })
+      .expect(200);
+
+    await request(app)
+      .post('/v1/production-channels/default/rollback')
+      .send({
+        targetReleaseId: randomUUID(),
+        rationale: 'This target has no immutable prior production evidence.',
+      })
+      .expect(422);
+    const afterRejectedRollback = await request(app)
+      .get('/v1/production-channels/default')
+      .expect(200);
+    expect(afterRejectedRollback.body.currentReleaseId).toBe(secondRelease.body.id);
+
+    const rollbackResponse = await request(app)
+      .post('/v1/production-channels/default/rollback')
+      .send({
+        targetReleaseId: firstRelease.body.id,
+        rationale: 'Restore the prior certified release after a synthetic regression.',
+      })
+      .expect(200);
+    const rollback = productionChannelMutationResponseSchema.parse(rollbackResponse.body);
+    expect(rollback.channel.currentReleaseId).toBe(firstRelease.body.id);
+    expect(rollback.channel.priorReleaseId).toBe(secondRelease.body.id);
+
+    await expect(
+      prisma.$executeRaw`UPDATE "ReleaseEvaluation" SET "requestedBy" = 'tampered' WHERE "id" = ${firstEvidence.id}::uuid`,
+    ).rejects.toThrow(/immutable/);
+  });
+
+  it('enforces frozen resource immutability below the service layer', async () => {
+    const frozen = await prisma.resourceVersion.findFirstOrThrow({
+      where: { family: { slug: 'daily-brief' }, version: '1.1.0' },
+    });
+    await expect(
+      prisma.$executeRaw`
+        UPDATE "ResourceVersion"
+        SET "lifecycle" = 'experimental'
+        WHERE "id" = ${frozen.id}::uuid
+      `,
+    ).rejects.toThrow(/cannot move backwards|freeze_check/i);
+    await expect(
+      prisma.$executeRaw`
+        UPDATE "ResourceVersion"
+        SET "owner" = 'tampered-owner',
+            "purpose" = 'Tampered purpose that bypasses the registry service.',
+            "provenance" = '{"source":"tampered"}'::jsonb,
+            "dependencyPins" = '[]'::jsonb,
+            "definition" = jsonb_set("definition", '{metadata,owner}', '"tampered"'),
+            "digest" = ${'f'.repeat(64)}
+        WHERE "id" = ${frozen.id}::uuid
+      `,
+    ).rejects.toThrow(/immutable/i);
+
+    const familyId = randomUUID();
+    await prisma.resourceFamily.create({
+      data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        id: familyId,
+        kind: ResourceKind.SKILL,
+        slug: `frozen-insert-${familyId.slice(0, 8)}`,
+        name: 'Frozen insert invariant fixture',
+        createdBy: 'integration-test',
+        updatedBy: 'integration-test',
+      },
+    });
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO "ResourceVersion" (
+          "id", "familyId", "version", "lifecycle", "owner", "purpose", "definition",
+          "digest", "sourceCommit", "provenance", "dependencyPins", "revision", "frozenAt",
+          "createdBy", "updatedBy", "createdAt", "updatedAt"
+        ) VALUES (
+          ${randomUUID()}::uuid, ${familyId}::uuid, '1.0.0', 'candidate', 'integration-test',
+          'A direct SQL insert without freeze evidence must fail.', '{}'::jsonb, ${'e'.repeat(64)},
+          'integration-test', '{}'::jsonb, '[]'::jsonb, 1, NULL,
+          'integration-test', 'integration-test', NOW(), NOW()
+        )
+      `,
+    ).rejects.toThrow(/frozenAt|freeze_check/i);
+  });
 
   it('runs search through evaluation and atomically rejects a duplicate generation claim', async () => {
     const search = await request(app)
@@ -364,8 +786,8 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     expect(evaluation.summary).toMatchObject({ passed: 1, failed: 0, total: 1, score: 1 });
     const storedAgent = await prisma.agent.findUniqueOrThrow({ where: { id: accepted.agentId } });
     const storedSpec = await prisma.agentSpec.findUniqueOrThrow({ where: { id: spec.id } });
-    expect(storedAgent.createdBy).toBe('integration-test');
-    expect(storedSpec.createdBy).toBe('integration-test');
+    expect(storedAgent.createdBy).toBe(fullFlowActorId);
+    expect(storedSpec.createdBy).toBe(fullFlowActorId);
     const auditWhere = {
       entityId: { in: [accepted.agentId, spec.id, accepted.jobId] },
     };
@@ -902,6 +1324,8 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     const expiredInterpretationId = randomUUID();
     await prisma.specInterpretation.create({
       data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
         id: expiredInterpretationId,
         prompt: 'Expired unattached integration interpretation prompt.',
         promptHash: 'f'.repeat(64),
@@ -979,6 +1403,8 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     const prohibitedLegacyFamilyId = randomUUID();
     await prisma.agentFamily.create({
       data: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
         id: prohibitedLegacyFamilyId,
         slug: `legacy-insert-${prohibitedLegacyFamilyId.slice(0, 8)}`,
         name: 'Legacy Insert Guard Fixture',

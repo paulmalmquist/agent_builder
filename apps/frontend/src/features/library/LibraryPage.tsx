@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAgentCatalog } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Icon } from '../../components/Icon';
+import { SectionTabs } from '../../components/SectionTabs';
 import { Notice } from '../../components/Notice';
 import { useAgentDrawer } from '../../components/agent-drawer-context';
 
@@ -27,8 +28,8 @@ export function LibraryPage() {
   );
   const catalog = useAgentCatalog(parsedFilters.success ? parsedFilters.data : { limit: 60 });
   const items = useMemo(
-    () => catalog.data?.pages.flatMap((page) => page.items) ?? [],
-    [catalog.data?.pages],
+    () => (catalog.isError ? [] : (catalog.data?.pages.flatMap((page) => page.items) ?? [])),
+    [catalog.data?.pages, catalog.isError],
   );
   const departments = useMemo(
     () => Array.from(new Set(items.map((agent) => agent.department))).sort(),
@@ -51,6 +52,14 @@ export function LibraryPage() {
         <h1>Agent Library</h1>
         <p>Find the certified or reusable capability already serving the organization.</p>
       </header>
+      <SectionTabs
+        label="Catalog views"
+        tabs={[
+          { label: 'AGENTS', path: '/catalog' },
+          { label: 'LEGACY LIBRARY', path: '/library' },
+          { label: 'DEFINITIONS', path: '/registry' },
+        ]}
+      />
       <section aria-label="Agent filters" className="catalog-filters">
         <label className="catalog-query">
           <span className="sr-only">Search the agent library</span>
@@ -101,13 +110,11 @@ export function LibraryPage() {
           <span>PROVIDER</span>
           <select onChange={(event) => setFilter('provider', event.target.value)} value={provider}>
             <option value="">All providers</option>
-            {['bigquery', 'confluence', 'jira', 'email', 'slack', 'interstellar', 'fixture'].map(
-              (value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ),
-            )}
+            {['bigquery', 'confluence', 'jira', 'email', 'slack', 'fixture'].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </label>
       </section>
@@ -123,7 +130,7 @@ export function LibraryPage() {
         className="catalog-grid"
       >
         {catalog.isLoading ? <p className="catalog-empty">Loading governed agents…</p> : null}
-        {!catalog.isLoading && items.length === 0 ? (
+        {!catalog.isLoading && !catalog.isError && items.length === 0 ? (
           <p className="catalog-empty">No governed agents match these filters.</p>
         ) : null}
         {items.map((agent) => (
@@ -164,7 +171,7 @@ export function LibraryPage() {
           </button>
         ))}
       </section>
-      {catalog.hasNextPage ? (
+      {!catalog.isError && catalog.hasNextPage ? (
         <button
           className="secondary-button catalog-load-more"
           disabled={catalog.isFetchingNextPage}

@@ -80,7 +80,7 @@ const sourceProviderMap = {
   [DatabaseSourceProvider.JIRA]: 'jira',
   [DatabaseSourceProvider.EMAIL]: 'email',
   [DatabaseSourceProvider.SLACK]: 'slack',
-  [DatabaseSourceProvider.INTERSTELLAR]: 'interstellar',
+  [DatabaseSourceProvider.TELEMETRY]: 'telemetry',
   [DatabaseSourceProvider.FIXTURE]: 'fixture',
 } as const;
 

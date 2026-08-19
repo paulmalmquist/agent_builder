@@ -2,6 +2,7 @@
 module.exports = {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/../../test-support/database-integration-guard.cjs'],
   roots: ['<rootDir>/tests'],
   extensionsToTreatAsEsm: ['.ts'],
   transform: {
@@ -18,6 +19,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@agent-builder/contracts$': '<rootDir>/../../packages/contracts/src/index.ts',
+    '^@paul-os/runtime$': '<rootDir>/../../packages/runtime/src/index.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   collectCoverageFrom: [

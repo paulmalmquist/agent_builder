@@ -22,7 +22,7 @@ export function SuggestionsPanel({
     <section aria-busy={isLoading} aria-labelledby="suggested-agents" className="suggestions-panel">
       <div className="panel-title">
         <span id="suggested-agents">{query ? 'REUSE CANDIDATES' : 'SUGGESTED AGENTS'}</span>
-        <Icon name="sparkles" size={18} />
+        <Icon name="draft" size={18} />
       </div>
       <div className="agent-list">
         {isLoading ? <div className="suggestion-state">Finding governed agents…</div> : null}

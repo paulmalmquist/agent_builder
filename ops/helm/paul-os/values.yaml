@@ -1,0 +1,144 @@
+# deploymentMode controls fail-closed chart validation. The default renders a proposal only.
+deploymentMode: proposal
+
+# global contains non-secret runtime posture. Secret values must come from existing Secrets.
+global:
+  nodeEnv: production
+  repositorySourceCommit: a702bb1
+  allowUnverifiedRepositoryImports: false
+  providerPolicy: gateway_only
+  modelProvider: gateway
+  modelName: approved-gateway-model
+  pricingVersion: proposal-2026-08
+
+# images are immutable proposal references. Enterprise Activation must replace the .invalid registry.
+images:
+  backend: registry.example.invalid/paul-os/backend@sha256:3333333333333333333333333333333333333333333333333333333333333333
+  frontend: registry.example.invalid/paul-os/frontend@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  worker: registry.example.invalid/paul-os/worker@sha256:5555555555555555555555555555555555555555555555555555555555555555
+  migrator: registry.example.invalid/paul-os/backend@sha256:3333333333333333333333333333333333333333333333333333333333333333
+  pullPolicy: IfNotPresent
+
+# externalSecrets names pre-created Secrets. The chart never creates production credentials.
+externalSecrets:
+  apiDatabase:
+    name: paul-os-api-database
+    key: database-url
+  workerDatabase:
+    name: paul-os-worker-database
+    key: database-url
+  migratorDatabase:
+    name: paul-os-migrator-database
+    key: database-url
+  backendEnvironment:
+    name: paul-os-backend-environment
+  workerEnvironment:
+    name: paul-os-worker-environment
+
+# auth config contains only public OIDC coordinates. No client secret belongs in values.
+auth:
+  mode: oidc
+  verifier: jwks
+  issuer: https://identity.example.invalid/tenant/v2.0
+  audiences: api://paul-os-proposal
+  jwksUri: https://identity.example.invalid/tenant/discovery/v2.0/keys
+  groupClaim: groups
+  fixture:
+    principalId: ''
+    workspaceId: ''
+    departmentId: ''
+    roles: ''
+
+backend:
+  # backend.replicaCount stays one until scheduler/maintenance ownership is extracted.
+  replicaCount: 1
+  servicePort: 3000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+
+worker:
+  replicaCount: 1
+  concurrency: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+
+frontend:
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8080
+    nodePort: null
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+serviceAccounts:
+  backend:
+    create: true
+    name: ''
+    automountServiceAccountToken: false
+    annotations: {}
+  worker:
+    create: true
+    name: ''
+    automountServiceAccountToken: false
+    annotations: {}
+  migrator:
+    create: true
+    name: ''
+    automountServiceAccountToken: false
+    annotations: {}
+
+networkPolicy:
+  enabled: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Node images declare USER node; Kubernetes requires a numeric identity to prove runAsNonRoot.
+nodeContainerSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# kindDemo and postgres are fixture-only and forbidden in production mode.
+kindDemo:
+  enabled: false
+  createFixtureSecret: false
+  fixtureOidcSecret: ''
+  seed: false
+
+postgres:
+  enabled: false
+  image: postgres:16.9-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  database: paul_os_demo
+  username: paul_os_demo
+  password: ''
+  storage: 1Gi

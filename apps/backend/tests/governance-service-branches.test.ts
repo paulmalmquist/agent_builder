@@ -11,6 +11,7 @@ import {
 import { pino } from 'pino';
 import { AppError } from '../src/errors.js';
 import { requestContextMiddleware } from '../src/request-context.js';
+import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
 import { requireHumanActor } from '../src/services/actors.js';
 import type { CertificationService } from '../src/services/certification-service.js';
 import { GateConfigService } from '../src/services/gate-config-service.js';
@@ -32,6 +33,8 @@ function gateConfig(overrides: Partial<CertificationGateConfig> = {}): Certifica
   const now = new Date('2026-08-04T12:00:00.000Z');
   return {
     id: CONFIG_ID,
+    workspaceId: LOCAL_WORKSPACE_ID,
+    departmentId: LOCAL_DEPARTMENT_ID,
     version: 1,
     state: CertificationGateConfigState.ACTIVE,
     promotionFreshnessHours: 24,

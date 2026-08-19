@@ -1,0 +1,1326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Paul OS — Six months as terrain</title>
+    <!-- Self-contained. No CDN, no fetch. WebGL with complete flat fallback. -->
+    <style>
+      :root {
+        --bg: #05070a;
+        --panel: #0b0e14;
+        --ink: #f5f6f8;
+        --i2: #aeb4bf;
+        --mut: #8f96a3;
+        --dim: #5c6270;
+        --faint: #333944;
+        --pur: #9578ff;
+        --purs: #b9aaff;
+        --teal: #2f9d82;
+        --amb: #e8b34b;
+        --red: #e0645f;
+        --bd: rgba(255, 255, 255, 0.09);
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          400 14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Inter,
+          Roboto,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      canvas {
+        position: fixed;
+        inset: 0;
+        display: block;
+        cursor: grab;
+      }
+      canvas.drag {
+        cursor: grabbing;
+      }
+      .ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 5;
+      }
+      .hd {
+        position: absolute;
+        top: 26px;
+        left: 32px;
+        max-width: 52ch;
+      }
+      .hd .k {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        color: var(--dim);
+      }
+      .hd h2 {
+        font-size: 21px;
+        font-weight: 650;
+        letter-spacing: -0.012em;
+        margin-top: 12px;
+      }
+      .hd p {
+        font-size: 12.5px;
+        color: var(--mut);
+        margin-top: 6px;
+      }
+      .hd p b {
+        color: var(--i2);
+        font-weight: 600;
+      }
+      .stat {
+        position: absolute;
+        right: 32px;
+        top: 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .s {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 12px;
+        color: var(--i2);
+        background: rgba(11, 14, 20, 0.55);
+        border: 1px solid var(--bd);
+        border-radius: 7px;
+        padding: 5px 11px;
+        min-width: 250px;
+        backdrop-filter: blur(8px);
+      }
+      .s i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: block;
+        flex: none;
+      }
+      .s b {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        font-weight: 640;
+        color: var(--ink);
+        padding-left: 14px;
+      }
+      .cap {
+        position: absolute;
+        left: 50%;
+        bottom: 118px;
+        transform: translateX(-50%);
+        max-width: 58ch;
+        text-align: center;
+        font-size: 12.5px;
+        color: var(--i2);
+        background: rgba(11, 14, 20, 0.62);
+        border: 1px solid var(--bd);
+        border-radius: 9px;
+        padding: 9px 16px;
+        backdrop-filter: blur(10px);
+        opacity: 0;
+        transition: opacity 420ms var(--ease);
+      }
+      .cap.show {
+        opacity: 1;
+      }
+      .cap b {
+        color: var(--ink);
+        font-weight: 620;
+      }
+      .scrub {
+        position: absolute;
+        left: 32px;
+        right: 32px;
+        bottom: 40px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        pointer-events: auto;
+      }
+      .btn {
+        font: 640 10px/1 sans-serif;
+        letter-spacing: 0.15em;
+        color: var(--i2);
+        background: rgba(11, 14, 20, 0.62);
+        border: 1px solid var(--bd);
+        border-radius: 7px;
+        padding: 9px 14px;
+        cursor: pointer;
+        min-width: 150px;
+        text-align: center;
+        backdrop-filter: blur(8px);
+        transition: all 180ms var(--ease);
+      }
+      .btn:hover {
+        border-color: var(--pur);
+        color: var(--ink);
+      }
+      .clock {
+        font-variant-numeric: tabular-nums;
+        font-size: 11px;
+        color: var(--mut);
+        min-width: 74px;
+        text-align: center;
+      }
+      input[type='range'] {
+        flex: 1;
+        appearance: none;
+        -webkit-appearance: none;
+        height: 26px;
+        background: transparent;
+        cursor: pointer;
+      }
+      input[type='range']::-webkit-slider-runnable-track {
+        height: 2px;
+        background: var(--faint);
+        border-radius: 1px;
+      }
+      input[type='range']::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--ink);
+        border: 2px solid var(--pur);
+        margin-top: -5px;
+      }
+      input[type='range']::-moz-range-track {
+        height: 2px;
+        background: var(--faint);
+      }
+      input[type='range']::-moz-range-thumb {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--ink);
+        border: 2px solid var(--pur);
+      }
+      .leg {
+        position: absolute;
+        right: 32px;
+        bottom: 118px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 10.5px;
+        color: var(--mut);
+      }
+      .leg span {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .leg i.sw {
+        width: 14px;
+        height: 0;
+        border-top: 2px solid var(--purs);
+        display: inline-block;
+      }
+      .leg i.da {
+        width: 14px;
+        height: 0;
+        border-top: 2px dashed var(--dim);
+        display: inline-block;
+      }
+      .leg i.am {
+        width: 8px;
+        height: 8px;
+        background: var(--amb);
+        border-radius: 2px;
+        display: inline-block;
+      }
+      .leg i.re {
+        width: 2px;
+        height: 10px;
+        background: var(--red);
+        display: inline-block;
+        margin: 0 6px;
+      }
+      .ft {
+        position: absolute;
+        left: 32px;
+        bottom: 16px;
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        color: var(--faint);
+      }
+      .ft2 {
+        position: absolute;
+        right: 32px;
+        bottom: 16px;
+        font-size: 9px;
+        letter-spacing: 0.09em;
+        color: var(--faint);
+        text-align: right;
+      }
+      .rl {
+        position: absolute;
+        pointer-events: none;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 560;
+        color: var(--i2);
+        text-shadow: 0 1px 6px rgba(5, 7, 10, 0.9);
+        transform: translate(-100%, -50%);
+        padding-right: 10px;
+      }
+      .rl small {
+        display: block;
+        font-size: 8.5px;
+        letter-spacing: 0.12em;
+        color: var(--dim);
+        font-weight: 400;
+      }
+      .ml {
+        position: absolute;
+        pointer-events: none;
+        font-size: 9.5px;
+        letter-spacing: 0.16em;
+        color: var(--dim);
+        transform: translate(-50%, 0);
+      }
+      .bk {
+        position: absolute;
+        pointer-events: none;
+        font-size: 10px;
+        color: var(--red);
+        transform: translate(-50%, -100%);
+        padding-bottom: 6px;
+        text-shadow: 0 1px 6px rgba(5, 7, 10, 0.95);
+      }
+      .tip {
+        position: absolute;
+        pointer-events: none;
+        background: rgba(11, 14, 20, 0.9);
+        border: 1px solid var(--bd);
+        border-radius: 8px;
+        padding: 8px 11px;
+        font-size: 11.5px;
+        color: var(--i2);
+        max-width: 34ch;
+        display: none;
+        z-index: 8;
+        backdrop-filter: blur(8px);
+      }
+      .tip b {
+        color: var(--ink);
+      }
+      .tip .w {
+        color: var(--amb);
+      }
+      .tip .h {
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        color: var(--dim);
+        margin-bottom: 3px;
+      }
+      #fb {
+        display: none;
+        position: fixed;
+        inset: 0;
+        overflow: auto;
+        padding: 48px 40px;
+        z-index: 9;
+        background: var(--bg);
+      }
+      #fb .in {
+        max-width: 760px;
+        margin: 0 auto;
+      }
+      #fb h2 {
+        font-size: 21px;
+        font-weight: 650;
+        margin: 10px 0 6px;
+      }
+      #fb p {
+        font-size: 13px;
+        color: var(--mut);
+        margin-bottom: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <div class="ui">
+      <div class="hd">
+        <div class="k">PAUL OS · SIX MONTHS · 9 STREAMS × 26 WEEKS</div>
+        <h2>The last six months, as terrain</h2>
+        <p>
+          Height is how much work landed each week. The dashed hairline is
+          <b>what the plan said</b>. Past is solid, future is ghost. <b>Drag</b> to orbit,
+          <b>scroll</b> to zoom, <b>scrub</b> to replay the half-year.
+        </p>
+      </div>
+      <div class="stat">
+        <div class="s"><i style="background: var(--pur)"></i>busiest week<b id="st1">—</b></div>
+        <div class="s">
+          <i style="background: var(--amb)"></i>longest starvation<b id="st2">—</b>
+        </div>
+        <div class="s">
+          <i style="background: var(--teal)"></i>weeks that ran above plan<b id="st3">—</b>
+        </div>
+      </div>
+      <div class="leg">
+        <span><i class="sw"></i>what happened (height)</span>
+        <span><i class="da"></i>what the plan said</span>
+        <span><i class="am"></i>review-queue jam</span>
+        <span><i class="re"></i>slipped milestone</span>
+      </div>
+      <div class="cap" id="cap"></div>
+      <div class="scrub">
+        <button class="btn" id="play">REPLAY SIX MONTHS</button>
+        <span class="clock">MAR 2026</span>
+        <input type="range" id="rng" min="0" max="25.5" step="0.01" value="25.5" />
+        <span class="clock" id="now">AUG · TODAY</span>
+      </div>
+      <div class="ft">
+        SELF-CONTAINED · NO CDN · DPR CAPPED AT 2 · RENDERS ONLY WHEN SOMETHING MOVES · COMPLETE
+        FLAT FALLBACK
+      </div>
+      <div class="ft2">
+        WHY THE GPU: ONE CONTINUOUS SPACE — CAMERA AND TIME SCRUB WITH ZERO RELAYOUT.<br />SVG WOULD
+        RE-TESSELLATE 1,800 PATH POINTS PER FRAME; HERE THE HALF-YEAR IS STATIC GEOMETRY.
+      </div>
+      <div id="labels"></div>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div id="fb">
+      <div class="in">
+        <div class="k" style="font-size: 10px; letter-spacing: 0.22em; color: var(--dim)">
+          PAUL OS · SIX MONTHS · FLAT VIEW
+        </div>
+        <h2>The last six months, as ridgelines</h2>
+        <p>
+          WebGL isn’t available here — same data, flat. Purple area is what happened, dashed line is
+          the plan, amber marks the review-queue jam.
+        </p>
+        <div id="fbSvg"></div>
+      </div>
+    </div>
+    <script>
+      'use strict';
+      function mulberry32(a) {
+        return function () {
+          a |= 0;
+          a = (a + 0x6d2b79f5) | 0;
+          var t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      const R = mulberry32(20260302);
+
+      /* ---------- the six months ---------- */
+      const W = 26,
+        START = new Date(2026, 2, 2); /* Mar 2 2026 */
+      const STREAMS = [
+        { n: 'Learning & reading', s: 'PERSONAL' },
+        { n: 'Hiring & admin', s: 'OVERHEAD' },
+        { n: 'Client & external', s: 'OUTSIDE WORK' },
+        { n: 'Console & design', s: 'THE FACE' },
+        { n: 'Evaluations', s: 'THE CONSCIENCE' },
+        { n: 'Plugin registry', s: 'THE HANDS' },
+        { n: 'Agent runtime', s: 'THE SPINE' },
+        { n: 'Integration', s: 'FIRST ARTICLE' },
+        { n: 'Factory ops', s: 'THE FLOOR' },
+      ];
+      const S = 9;
+      function seg(pts) {
+        /* piecewise-linear profile over 26 weeks: [[wk,val],...] */
+        const out = new Float32Array(W);
+        for (let w = 0; w < W; w++) {
+          let a = pts[0],
+            b = pts[pts.length - 1];
+          for (let i = 0; i < pts.length - 1; i++)
+            if (w >= pts[i][0] && w <= pts[i + 1][0]) {
+              a = pts[i];
+              b = pts[i + 1];
+              break;
+            }
+          const t = b[0] === a[0] ? 0 : (w - a[0]) / (b[0] - a[0]);
+          out[w] = a[1] + (b[1] - a[1]) * t;
+        }
+        return out;
+      }
+      function noisy(arr, amp) {
+        return arr.map((v) => Math.max(0.02, v + (R() - 0.5) * amp));
+      }
+      const actual = [
+        noisy(
+          seg([
+            [0, 0.12],
+            [25, 0.16],
+          ]),
+          0.05,
+        ),
+        noisy(
+          seg([
+            [0, 0.1],
+            [8, 0.1],
+            [9, 0.3],
+            [10, 0.26],
+            [11, 0.1],
+            [25, 0.1],
+          ]),
+          0.04,
+        ),
+        noisy(
+          seg([
+            [0, 0.1],
+            [3, 0.12],
+            [4, 0.55],
+            [5, 0.14],
+            [8, 0.12],
+            [9, 0.4],
+            [10, 0.12],
+            [14, 0.12],
+            [15, 0.65],
+            [16, 0.16],
+            [20, 0.12],
+            [21, 0.5],
+            [22, 0.12],
+            [25, 0.12],
+          ]),
+          0.05,
+        ),
+        noisy(
+          seg([
+            [0, 0.12],
+            [9, 0.16],
+            [10, 0.55],
+            [11, 0.52],
+            [12, 0.18],
+            [18, 0.18],
+            [19, 0.68],
+            [21, 0.66],
+            [22, 0.3],
+            [23, 0.5],
+            [24, 0.82],
+            [25, 0.88],
+          ]),
+          0.06,
+        ),
+        noisy(
+          seg([
+            [0, 0.3],
+            [5, 0.26],
+            [6, 0.06],
+            [13, 0.05],
+            [14, 0.22],
+            [16, 0.38],
+            [20, 0.44],
+            [25, 0.55],
+          ]),
+          0.03,
+        ),
+        noisy(
+          seg([
+            [0, 0.22],
+            [6, 0.3],
+            [12, 0.38],
+            [18, 0.45],
+            [25, 0.52],
+          ]),
+          0.06,
+        ),
+        noisy(
+          seg([
+            [0, 0.42],
+            [6, 0.52],
+            [7, 0.7],
+            [9, 0.72],
+            [10, 0.55],
+            [16, 0.55],
+            [22, 0.58],
+            [23, 0.66],
+            [25, 0.66],
+          ]),
+          0.06,
+        ),
+        noisy(
+          seg([
+            [0, 0.16],
+            [6, 0.3],
+            [10, 0.5],
+            [12, 0.62],
+            [13, 0.85],
+            [14, 0.95],
+            [15, 0.9],
+            [16, 0.72],
+            [18, 0.68],
+            [22, 0.7],
+            [24, 0.8],
+            [25, 0.82],
+          ]),
+          0.05,
+        ),
+        noisy(
+          seg([
+            [0, 0.28],
+            [8, 0.36],
+            [12, 0.52],
+            [13, 0.88],
+            [14, 1.0],
+            [15, 0.86],
+            [16, 0.6],
+            [18, 0.5],
+            [22, 0.5],
+            [24, 0.55],
+            [25, 0.55],
+          ]),
+          0.05,
+        ),
+      ];
+      const plan = [
+        seg([
+          [0, 0.12],
+          [25, 0.14],
+        ]),
+        seg([
+          [0, 0.1],
+          [25, 0.1],
+        ]),
+        seg([
+          [0, 0.15],
+          [25, 0.15],
+        ]),
+        seg([
+          [0, 0.12],
+          [8, 0.2],
+          [14, 0.35],
+          [25, 0.4],
+        ]),
+        seg([
+          [0, 0.3],
+          [25, 0.3],
+        ]) /* the promise never kept */,
+        seg([
+          [0, 0.22],
+          [12, 0.4],
+          [25, 0.48],
+        ]),
+        seg([
+          [0, 0.5],
+          [25, 0.5],
+        ]),
+        seg([
+          [0, 0.16],
+          [5, 0.35],
+          [9, 0.55],
+          [11, 0.55],
+          [14, 0.3],
+          [18, 0.15],
+          [25, 0.12],
+        ]) /* "done by June" */,
+        seg([
+          [0, 0.35],
+          [25, 0.4],
+        ]),
+      ];
+      /* review-queue jam intensity per stream/week */
+      const jam = Array.from({ length: S }, () => new Float32Array(W));
+      jam[8][13] = 0.8;
+      jam[8][14] = 1;
+      jam[8][15] = 0.7;
+      jam[7][13] = 0.6;
+      jam[7][14] = 1;
+      jam[7][15] = 0.8;
+      jam[7][16] = 0.4;
+      const BEACONS = [
+        { s: 7, w: 15, t: 'integration review slipped → wk 19' },
+        { s: 5, w: 22, t: 'registry freeze slipped a week' },
+      ];
+      /* stats */
+      let bw = 0,
+        bs = 0,
+        bv = 0;
+      for (let s = 0; s < S; s++)
+        for (let w = 0; w < W; w++)
+          if (actual[s][w] > bv) {
+            bv = actual[s][w];
+            bs = s;
+            bw = w;
+          }
+      let above = 0;
+      for (let w = 0; w < W; w++) {
+        let a = 0,
+          p = 0;
+        for (let s = 0; s < S; s++) {
+          a += actual[s][w];
+          p += plan[s][w];
+        }
+        if (a > p * 1.05) above++;
+      }
+      const med = (s) => {
+        const c = [...actual[s]].sort();
+        return c[13];
+      };
+      function wkDate(w) {
+        const d = new Date(START.getTime() + w * 7 * 864e5);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+      document.getElementById('st1').textContent = `wk of ${wkDate(bw)} · ${STREAMS[bs].n}`;
+      document.getElementById('st2').textContent = 'Evaluations · 8 weeks';
+      document.getElementById('st3').textContent = `${above} of 26`;
+
+      const CAPS = [
+        [0.8, '<b>March.</b> The dashed hairline is the plan. Watch what actually happened.'],
+        [
+          6.8,
+          '<b>Evaluations goes quiet here.</b> Eight weeks of silence. Nobody noticed at the time.',
+        ],
+        [
+          13.4,
+          '<b>The jam.</b> Review load on Factory ops and Integration goes vertical. The dashed line never saw it coming.',
+        ],
+        [
+          16.6,
+          "It cost about four weeks. Evaluations gets a pulse again the same month — that's not a coincidence, it's the lesson.",
+        ],
+        [
+          24.6,
+          "<b>Today.</b> Integration still runs far above its plan. The next mountain is visible before it arrives — that's the point of the terrain.",
+        ],
+      ];
+
+      /* ---------- smooth sampling (Catmull-Rom) ---------- */
+      const SUB = 8,
+        NX = (W - 1) * SUB + 1;
+      function smooth(arr) {
+        const out = new Float32Array(NX);
+        const g = (i) => arr[Math.max(0, Math.min(W - 1, i))];
+        for (let i = 0; i < NX; i++) {
+          const x = i / SUB,
+            k = Math.floor(x),
+            t = x - k,
+            p0 = g(k - 1),
+            p1 = g(k),
+            p2 = g(k + 1),
+            p3 = g(k + 2);
+          out[i] =
+            0.5 *
+            (2 * p1 +
+              (-p0 + p2) * t +
+              (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t +
+              (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
+        }
+        return out;
+      }
+      const sm = actual.map(smooth),
+        smp = plan.map(smooth),
+        smj = jam.map(smooth);
+      const X0 = -13,
+        XW = 26,
+        H = 4.4,
+        ROWZ = (r) => (r - 4) * 2.6;
+      const xw = (i) => X0 + (i / (NX - 1)) * XW,
+        wk2x = (w) => X0 + (w / (W - 1)) * XW;
+
+      /* ---------- GL ---------- */
+      const canvas = document.getElementById('gl');
+      const gl =
+        canvas.getContext('webgl2', { antialias: true, alpha: false }) ||
+        canvas.getContext('webgl', { antialias: true, alpha: false });
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!gl) {
+        flat();
+      } else {
+        main();
+      }
+
+      function flat() {
+        canvas.style.display = 'none';
+        document.querySelector('.ui').style.display = 'none';
+        document.getElementById('fb').style.display = 'block';
+        let html = '';
+        for (let s = S - 1; s >= 0; s--) {
+          let d = 'M0,46 ',
+            dp = 'M0,' + (46 - plan[s][0] * 40).toFixed(1) + ' ';
+          for (let w = 0; w < W; w++) {
+            const x = (w / (W - 1)) * 700;
+            d += `L${x.toFixed(1)},${(46 - actual[s][w] * 40).toFixed(1)} `;
+            dp += `L${x.toFixed(1)},${(46 - plan[s][w] * 40).toFixed(1)} `;
+          }
+          d += 'L700,46 Z';
+          let amber = '';
+          for (let w = 0; w < W; w++)
+            if (jam[s][w] > 0)
+              amber += `<rect x="${((w - 0.5) / (W - 1)) * 700}" y="0" width="${700 / (W - 1)}" height="46" fill="rgba(232,179,75,${jam[s][w] * 0.22})"/>`;
+          html += `<div style="display:flex;gap:14px;align-items:center;margin-bottom:2px">
+      <div style="width:150px;text-align:right;font-size:11px;color:var(--i2)">${STREAMS[s].n}</div>
+      <svg width="100%" height="50" viewBox="0 0 700 50" preserveAspectRatio="none" style="flex:1">
+      ${amber}<path d="${d}" fill="rgba(149,120,255,.16)" stroke="#9578ff" stroke-width="1.2"/>
+      <path d="${dp}" fill="none" stroke="#5c6270" stroke-width="1" stroke-dasharray="4 3"/></svg></div>`;
+        }
+        document.getElementById('fbSvg').innerHTML = html;
+      }
+
+      function main() {
+        const DPR = Math.min(devicePixelRatio || 1, 2);
+        /* --- tiny mat4 --- */
+        function persp(f, a, n, fr) {
+          const t = 1 / Math.tan(f / 2);
+          return [
+            t / a,
+            0,
+            0,
+            0,
+            0,
+            t,
+            0,
+            0,
+            0,
+            0,
+            (fr + n) / (n - fr),
+            -1,
+            0,
+            0,
+            (2 * fr * n) / (n - fr),
+            0,
+          ];
+        }
+        function lookAt(e, c, u) {
+          let zx = e[0] - c[0],
+            zy = e[1] - c[1],
+            zz = e[2] - c[2];
+          let l = Math.hypot(zx, zy, zz);
+          zx /= l;
+          zy /= l;
+          zz /= l;
+          let xx = u[1] * zz - u[2] * zy,
+            xy = u[2] * zx - u[0] * zz,
+            xz = u[0] * zy - u[1] * zx;
+          l = Math.hypot(xx, xy, xz);
+          xx /= l;
+          xy /= l;
+          xz /= l;
+          const yx = zy * xz - zz * xy,
+            yy = zz * xx - zx * xz,
+            yz = zx * xy - zy * xx;
+          return [
+            xx,
+            yx,
+            zx,
+            0,
+            xy,
+            yy,
+            zy,
+            0,
+            xz,
+            yz,
+            zz,
+            0,
+            -(xx * e[0] + xy * e[1] + xz * e[2]),
+            -(yx * e[0] + yy * e[1] + yz * e[2]),
+            -(zx * e[0] + zy * e[1] + zz * e[2]),
+            1,
+          ];
+        }
+        function mul(a, b) {
+          const o = new Array(16);
+          for (let i = 0; i < 4; i++)
+            for (let j = 0; j < 4; j++) {
+              let s = 0;
+              for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k];
+              o[i * 4 + j] = s;
+            }
+          return o;
+        }
+        /* --- shaders --- */
+        const VSF = `
+precision highp float;attribute vec3 aP;attribute vec3 aM; /* shade, jam, unused */
+uniform mat4 uMVP;uniform float uCX,uHi,uRow;
+varying float vSh,vJm,vGhost,vFog,vHi;
+void main(){
+  vSh=aM.x;vJm=aM.y;
+  vGhost=smoothstep(uCX,uCX+.4,aP.x);
+  vFog=clamp((aP.z+12.)/23.,0.,1.);
+  vHi=(uHi<-.5||abs(uRow-uHi)<.5)?1.:.35;
+  gl_Position=uMVP*vec4(aP,1.);}`;
+        const FSF = `
+precision mediump float;varying float vSh,vJm,vGhost,vFog,vHi;
+void main(){
+  vec3 bg=vec3(.0196,.0275,.0392);
+  vec3 pur=vec3(.584,.471,1.),amb=vec3(.91,.702,.294);
+  vec3 base=mix(pur,amb,vJm*.85);
+  vec3 col=base*(.10+.40*vSh*vSh+.12*vJm);
+  col=mix(bg,col,.35+.65*vFog);
+  col=mix(col,bg,vGhost*.82);
+  col*=vHi;
+  gl_FragColor=vec4(col,1.);}`;
+        const VSL = `
+precision highp float;attribute vec3 aP;attribute float aS;
+uniform mat4 uMVP;uniform float uCX,uHi,uRow;
+varying float vS,vGhost,vFog,vHi;
+void main(){vS=aS;
+  vGhost=smoothstep(uCX,uCX+.4,aP.x);
+  vFog=clamp((aP.z+12.)/23.,0.,1.);
+  vHi=(uHi<-.5||abs(uRow-uHi)<.5)?1.:.3;
+  gl_Position=uMVP*vec4(aP,1.);}`;
+        const FSL = `
+precision mediump float;varying float vS,vGhost,vFog,vHi;
+uniform vec3 uCol;uniform float uDash,uAlpha,uGhostMode;
+void main(){
+  float a=uAlpha;
+  if(uDash>.5)a*=step(.45,fract(vS*2.6));
+  a*=.35+.65*vFog;
+  if(uGhostMode<.5)a*=1.-vGhost*.9;      /* actual edge fades in future */
+  else a*=.55+.45*vGhost;                 /* plan stays visible ahead */
+  gl_FragColor=vec4(uCol*a*vHi,1.);}`;
+        function prog(v, f) {
+          const p = gl.createProgram();
+          for (const [t, s] of [
+            [gl.VERTEX_SHADER, v],
+            [gl.FRAGMENT_SHADER, f],
+          ]) {
+            const sh = gl.createShader(t);
+            gl.shaderSource(sh, s);
+            gl.compileShader(sh);
+            if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(sh);
+            gl.attachShader(p, sh);
+          }
+          gl.linkProgram(p);
+          if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw gl.getProgramInfoLog(p);
+          return p;
+        }
+        const PF = prog(VSF, FSF),
+          PL = prog(VSL, FSL);
+        /* --- geometry --- */
+        function buf(data) {
+          const b = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, b);
+          gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+          return b;
+        }
+        const fills = [],
+          edges = [],
+          plans = [];
+        for (let s = 0; s < S; s++) {
+          const z = ROWZ(s),
+            f = new Float32Array(NX * 2 * 6),
+            e = new Float32Array(NX * 4),
+            pn = new Float32Array(NX * 4);
+          for (let i = 0; i < NX; i++) {
+            const x = xw(i),
+              h = sm[s][i] * H,
+              j = smj[s][i];
+            f.set([x, h, z, h / H, j, 0, x, 0, z, 0, j, 0], i * 12);
+            e.set([x, h + 0.02, z, x], i * 4);
+            pn.set([x, smp[s][i] * H + 0.03, z, x], i * 4);
+          }
+          fills.push(buf(f));
+          edges.push(buf(e));
+          plans.push(buf(pn));
+        }
+        /* floor grid */
+        const gr = [];
+        for (let w = 0; w < W; w++) {
+          const x = wk2x(w);
+          gr.push(x, 0, ROWZ(0) - 1.4, x, x, 0, ROWZ(8) + 1.4, x);
+        }
+        gr.push(X0, 0, ROWZ(8) + 1.4, 0, X0 + XW, 0, ROWZ(8) + 1.4, 1);
+        const grBuf = buf(new Float32Array(gr)),
+          grN = gr.length / 4;
+        /* beacons */
+        const bk = [];
+        for (const b of BEACONS) {
+          const x = wk2x(b.w),
+            z = ROWZ(b.s),
+            h = actual[b.s][b.w] * H;
+          bk.push(x, h + 0.05, z, 0, x, h + 1.15, z, 0);
+        }
+        const bkBuf = buf(new Float32Array(bk)),
+          bkN = bk.length / 4;
+        /* cursor wall */
+        const cwBuf = gl.createBuffer();
+        function cursorWall(cx) {
+          const z0 = ROWZ(0) - 1.4,
+            z1 = ROWZ(8) + 1.4;
+          const v = new Float32Array([
+            cx,
+            0,
+            z0,
+            0,
+            cx,
+            H + 0.5,
+            z0,
+            0,
+            cx,
+            0,
+            z1,
+            0,
+            cx,
+            H + 0.5,
+            z0,
+            0,
+            cx,
+            H + 0.5,
+            z1,
+            0,
+            cx,
+            0,
+            z1,
+            0,
+          ]);
+          gl.bindBuffer(gl.ARRAY_BUFFER, cwBuf);
+          gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
+        }
+        /* --- camera --- */
+        let az = 0.09,
+          el = 0.55,
+          dist = 35.5,
+          CW = 0,
+          CH = 0,
+          MVP = null;
+        const target = [-2.2, 0.9, -0.4];
+        function eye() {
+          return [
+            target[0] + dist * Math.sin(az) * Math.cos(el),
+            target[1] + dist * Math.sin(el),
+            target[2] + dist * Math.cos(az) * Math.cos(el),
+          ];
+        }
+        function camera() {
+          const P = persp((33 * Math.PI) / 180, CW / CH, 0.5, 120),
+            V = lookAt(eye(), target, [0, 1, 0]);
+          MVP = mul(P, V);
+        }
+        function project(p) {
+          const m = MVP,
+            w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+          const x = (m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12]) / w,
+            y = (m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13]) / w;
+          return [(x * 0.5 + 0.5) * CW, (1 - (y * 0.5 + 0.5)) * CH, w];
+        }
+        /* --- labels --- */
+        const labels = document.getElementById('labels');
+        const rowEls = [],
+          monEls = [],
+          bkEls = [];
+        STREAMS.forEach((st, i) => {
+          const d = document.createElement('div');
+          d.className = 'rl';
+          d.innerHTML = `${st.n}<small>${st.s}</small>`;
+          labels.appendChild(d);
+          rowEls.push(d);
+        });
+
+        BEACONS.forEach((b) => {
+          const d = document.createElement('div');
+          d.className = 'bk';
+          d.textContent = b.t;
+          labels.appendChild(d);
+          bkEls.push(d);
+        });
+        function placeLabels() {
+          STREAMS.forEach((st, i) => {
+            const [px, py, w] = project([X0 - 0.4, sm[i][0] * H + 0.35, ROWZ(i)]);
+            const el = rowEls[i];
+            if (w < 0) {
+              el.style.display = 'none';
+              return;
+            }
+            el.style.display = '';
+            el.style.left = px + 'px';
+            el.style.top = py + 'px';
+            el.style.opacity = hiRow < 0 || hiRow === i ? 1 : 0.3;
+          });
+
+          BEACONS.forEach((b, i) => {
+            const [px, py, w] = project([wk2x(b.w), actual[b.s][b.w] * H + 1.2, ROWZ(b.s)]);
+            const el = bkEls[i];
+            if (w < 0 || cur < b.w) {
+              el.style.display = 'none';
+              return;
+            }
+            el.style.display = '';
+            el.style.left = px + 'px';
+            el.style.top = py + 'px';
+          });
+        }
+        /* --- draw --- */
+        gl.enable(gl.DEPTH_TEST);
+        gl.clearColor(0.0196, 0.0275, 0.0392, 1);
+        let cur = 25.5,
+          hiRow = -1;
+        function draw() {
+          camera();
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          const cx = wk2x(cur);
+          /* fills back→front, opaque */
+          gl.disable(gl.BLEND);
+          gl.useProgram(PF);
+          const uMVP = gl.getUniformLocation(PF, 'uMVP');
+          gl.uniformMatrix4fv(uMVP, false, MVP);
+          gl.uniform1f(gl.getUniformLocation(PF, 'uCX'), cx);
+          gl.uniform1f(gl.getUniformLocation(PF, 'uHi'), hiRow);
+          const aP = gl.getAttribLocation(PF, 'aP'),
+            aM = gl.getAttribLocation(PF, 'aM');
+          const uRowF = gl.getUniformLocation(PF, 'uRow');
+          for (let s = 0; s < S; s++) {
+            gl.uniform1f(uRowF, s);
+            gl.bindBuffer(gl.ARRAY_BUFFER, fills[s]);
+            gl.enableVertexAttribArray(aP);
+            gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 24, 0);
+            gl.enableVertexAttribArray(aM);
+            gl.vertexAttribPointer(aM, 3, gl.FLOAT, false, 24, 12);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, NX * 2);
+          }
+          /* lines: additive */
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.ONE, gl.ONE);
+          gl.depthMask(false);
+          gl.useProgram(PL);
+          gl.uniformMatrix4fv(gl.getUniformLocation(PL, 'uMVP'), false, MVP);
+          gl.uniform1f(gl.getUniformLocation(PL, 'uCX'), cx);
+          gl.uniform1f(gl.getUniformLocation(PL, 'uHi'), hiRow);
+          const aP2 = gl.getAttribLocation(PL, 'aP'),
+            aS2 = gl.getAttribLocation(PL, 'aS');
+          const uRow = gl.getUniformLocation(PL, 'uRow'),
+            uCol = gl.getUniformLocation(PL, 'uCol'),
+            uDash = gl.getUniformLocation(PL, 'uDash'),
+            uAl = gl.getUniformLocation(PL, 'uAlpha'),
+            uGm = gl.getUniformLocation(PL, 'uGhostMode');
+          function lines(b, n, mode, col, dash, al, gm, row) {
+            gl.uniform1f(uRow, row);
+            gl.uniform3fv(uCol, col);
+            gl.uniform1f(uDash, dash);
+            gl.uniform1f(uAl, al);
+            gl.uniform1f(uGm, gm);
+            gl.bindBuffer(gl.ARRAY_BUFFER, b);
+            gl.enableVertexAttribArray(aP2);
+            gl.vertexAttribPointer(aP2, 3, gl.FLOAT, false, 16, 0);
+            gl.enableVertexAttribArray(aS2);
+            gl.vertexAttribPointer(aS2, 1, gl.FLOAT, false, 16, 12);
+            gl.drawArrays(mode, 0, n);
+          }
+          /* grid + beacons + cursor first */
+          lines(grBuf, grN, gl.LINES, [0.29, 0.31, 0.38], 0, 0.1, 1, -1);
+          /* ridge edges & plans per row */
+          for (let s = 0; s < S; s++) {
+            const jamRow = s === 7 || s === 8;
+            lines(
+              edges[s],
+              NX,
+              gl.LINE_STRIP,
+              jamRow ? [0.86, 0.68, 0.42] : [0.73, 0.67, 1],
+              0,
+              0.5,
+              0,
+              s,
+            );
+            lines(plans[s], NX, gl.LINE_STRIP, [0.56, 0.6, 0.72], 1, 0.38, 1, s);
+          }
+          lines(bkBuf, bkN, gl.LINES, [0.88, 0.39, 0.37], 0, cur >= 13 ? 0.9 : 0, 1, -1);
+          /* cursor wall */
+          cursorWall(cx);
+          gl.uniform1f(uRow, -1);
+          gl.uniform3fv(uCol, [0.584, 0.471, 1]);
+          gl.uniform1f(uDash, 0);
+          gl.uniform1f(uAl, 0.085);
+          gl.uniform1f(uGm, 1);
+          gl.bindBuffer(gl.ARRAY_BUFFER, cwBuf);
+          gl.enableVertexAttribArray(aP2);
+          gl.vertexAttribPointer(aP2, 3, gl.FLOAT, false, 16, 0);
+          gl.enableVertexAttribArray(aS2);
+          gl.vertexAttribPointer(aS2, 1, gl.FLOAT, false, 16, 12);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+          /* cursor edge hairlines */
+          const ce = new Float32Array([cx, 0, ROWZ(8) + 1.4, 0, cx, H + 0.5, ROWZ(8) + 1.4, 0]);
+          gl.bindBuffer(gl.ARRAY_BUFFER, cwBuf);
+          gl.bufferData(gl.ARRAY_BUFFER, ce, gl.DYNAMIC_DRAW);
+          gl.uniform1f(uAl, 0.3);
+          gl.enableVertexAttribArray(aP2);
+          gl.vertexAttribPointer(aP2, 3, gl.FLOAT, false, 16, 0);
+          gl.enableVertexAttribArray(aS2);
+          gl.vertexAttribPointer(aS2, 1, gl.FLOAT, false, 16, 12);
+          gl.drawArrays(gl.LINES, 0, 2);
+          gl.depthMask(true);
+          placeLabels();
+        }
+        /* --- resize --- */
+        function resize() {
+          CW = innerWidth;
+          CH = innerHeight;
+          canvas.width = CW * DPR;
+          canvas.height = CH * DPR;
+          canvas.style.width = CW + 'px';
+          canvas.style.height = CH + 'px';
+          need();
+        }
+        addEventListener('resize', resize);
+        /* --- render on demand --- */
+        let pending = false,
+          hidden = false;
+        document.addEventListener('visibilitychange', () => {
+          hidden = document.hidden;
+          if (!hidden) need();
+        });
+        function need() {
+          if (pending || hidden) return;
+          pending = true;
+          requestAnimationFrame(() => {
+            pending = false;
+            draw();
+          });
+        }
+        /* --- interaction --- */
+        let dragging = false,
+          lx = 0,
+          ly = 0,
+          moved = 0;
+        canvas.addEventListener('pointerdown', (e) => {
+          dragging = true;
+          moved = 0;
+          lx = e.clientX;
+          ly = e.clientY;
+          canvas.classList.add('drag');
+          canvas.setPointerCapture(e.pointerId);
+        });
+        canvas.addEventListener('pointerup', (e) => {
+          dragging = false;
+          canvas.classList.remove('drag');
+        });
+        canvas.addEventListener('pointermove', (e) => {
+          if (dragging) {
+            const dx = e.clientX - lx,
+              dy = e.clientY - ly;
+            lx = e.clientX;
+            ly = e.clientY;
+            moved += Math.abs(dx) + Math.abs(dy);
+            az = Math.max(-0.55, Math.min(0.55, az - dx * 0.004));
+            el = Math.max(0.22, Math.min(0.72, el + dy * 0.004));
+            need();
+            return;
+          }
+          pickAt(e.clientX, e.clientY);
+        });
+        canvas.addEventListener(
+          'wheel',
+          (e) => {
+            e.preventDefault();
+            dist = Math.max(22, Math.min(44, dist * (1 + Math.sign(e.deltaY) * 0.07)));
+            need();
+          },
+          { passive: false },
+        );
+        /* --- picking + tooltip --- */
+        const tip = document.getElementById('tip');
+        function pickAt(mx, my) {
+          if (!MVP) return;
+          let best = null,
+            bd = 26 * 26;
+          for (let s = 0; s < S; s++)
+            for (let w = 0; w < W; w++) {
+              const [px, py, ww] = project([wk2x(w), actual[s][w] * H, ROWZ(s)]);
+              if (ww < 0) continue;
+              const d = (px - mx) * (px - mx) + (py - my) * (py - my);
+              if (d < bd) {
+                bd = d;
+                best = [s, w, px, py];
+              }
+            }
+          const old = hiRow;
+          if (!best) {
+            tip.style.display = 'none';
+            hiRow = -1;
+            if (old !== hiRow) need();
+            return;
+          }
+          const [s, w, px, py] = best;
+          hiRow = s;
+          const x = actual[s][w] / Math.max(0.04, med(s));
+          let extra = '';
+          if (jam[s][w] > 0)
+            extra = `<div class="w">review-queue jam — approvals were the constraint</div>`;
+          if (s === 4 && w >= 6 && w <= 13)
+            extra = `<div class="w">starved — under 10% of a typical week</div>`;
+          const bcn = BEACONS.find((b) => b.s === s && b.w === w);
+          if (bcn) extra += `<div style="color:var(--red)">${bcn.t}</div>`;
+          tip.innerHTML = `<div class="h">WK OF ${wkDate(w).toUpperCase()} · ${STREAMS[s].n.toUpperCase()}</div>
+   <b>${x.toFixed(1)}× a typical week</b> · plan said ${(plan[s][w] / Math.max(0.04, med(s))).toFixed(1)}×${extra}`;
+          tip.style.display = 'block';
+          tip.style.left = Math.min(CW - 280, px + 16) + 'px';
+          tip.style.top = Math.max(10, py - 14) + 'px';
+          if (old !== hiRow) need();
+        }
+        canvas.addEventListener('pointerleave', () => {
+          tip.style.display = 'none';
+          if (hiRow !== -1) {
+            hiRow = -1;
+            need();
+          }
+        });
+        /* --- scrub + sweep + captions --- */
+        const rng = document.getElementById('rng'),
+          cap = document.getElementById('cap'),
+          nowEl = document.getElementById('now'),
+          play = document.getElementById('play');
+        let capIdx = -1;
+        function setCur(v) {
+          cur = v;
+          rng.value = v;
+          nowEl.textContent =
+            cur >= 25.4 ? 'AUG · TODAY' : 'WK OF ' + wkDate(Math.floor(cur)).toUpperCase();
+          let ci = -1;
+          for (let i = 0; i < CAPS.length; i++) if (cur >= CAPS[i][0]) ci = i;
+          if (ci !== capIdx) {
+            capIdx = ci;
+            if (ci < 0) cap.classList.remove('show');
+            else {
+              cap.innerHTML = CAPS[ci][1];
+              cap.classList.add('show');
+            }
+          }
+          need();
+        }
+        rng.oninput = () => {
+          sweeping = false;
+          setCur(+rng.value);
+        };
+        let sweeping = false;
+        function sweep() {
+          if (reduced) {
+            setCur(25.5);
+            return;
+          }
+          sweeping = true;
+          const t0 = performance.now(),
+            D = 8000;
+          (function step() {
+            if (!sweeping || hidden) return;
+            const t = Math.min(1, (performance.now() - t0) / D);
+            setCur(t * 25.5);
+            if (t < 1) requestAnimationFrame(step);
+            else sweeping = false;
+          })();
+        }
+        play.onclick = () => {
+          capIdx = -1;
+          sweep();
+        };
+        resize();
+        camera();
+        setCur(reduced ? 25.5 : 0);
+        if (!reduced) sweep();
+        else need();
+      }
+    </script>
+  </body>
+</html>

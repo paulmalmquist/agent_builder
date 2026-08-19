@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paul-os.fullname" . }}-worker
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "paul-os.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: {{ include "paul-os.workerServiceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccounts.worker.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-migrations
+          image: {{ .Values.images.migrator | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.nodeContainerSecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - >-
+              until node node_modules/prisma/build/index.js migrate status
+              --schema apps/backend/prisma/schema.prisma; do sleep 3; done
+          env:
+            - name: HOME
+              value: /tmp
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.workerDatabase.name }}
+                  key: {{ .Values.externalSecrets.workerDatabase.key }}
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      containers:
+        - name: worker
+          image: {{ .Values.images.worker | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.nodeContainerSecurityContext | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.externalSecrets.workerEnvironment.name }}
+          env:
+            - name: HOME
+              value: /tmp
+            - name: NODE_ENV
+              value: {{ .Values.global.nodeEnv | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.workerDatabase.name }}
+                  key: {{ .Values.externalSecrets.workerDatabase.key }}
+            - name: WORKER_CONCURRENCY
+              value: {{ .Values.worker.concurrency | quote }}
+            - name: MODEL_PROVIDER
+              value: {{ .Values.global.modelProvider | quote }}
+            - name: PROVIDER_POLICY
+              value: {{ .Values.global.providerPolicy | quote }}
+            - name: MODEL_NAME
+              value: {{ .Values.global.modelName | quote }}
+            - name: MODEL_PRICING_VERSION
+              value: {{ .Values.global.pricingVersion | quote }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: temporary
+          emptyDir: {}

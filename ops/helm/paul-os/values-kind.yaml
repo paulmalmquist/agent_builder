@@ -1,0 +1,65 @@
+deploymentMode: kind
+
+global:
+  nodeEnv: development
+  repositorySourceCommit: local-kind
+  allowUnverifiedRepositoryImports: true
+  providerPolicy: direct_allowed
+  modelProvider: deterministic
+  modelName: daily-brief-fixture
+  pricingVersion: kind-fixture-2026-08
+
+images:
+  backend: paul-os/backend:kind
+  frontend: paul-os/frontend:kind
+  worker: paul-os/worker:kind
+  migrator: paul-os/backend:kind
+  pullPolicy: IfNotPresent
+
+externalSecrets:
+  apiDatabase:
+    name: paul-os-kind-runtime
+    key: database-url-api
+  workerDatabase:
+    name: paul-os-kind-runtime
+    key: database-url-worker
+  migratorDatabase:
+    name: paul-os-kind-runtime
+    key: database-url-migrator
+  backendEnvironment:
+    name: paul-os-kind-runtime
+  workerEnvironment:
+    name: paul-os-kind-runtime
+
+auth:
+  mode: fixture_oidc
+  verifier: fail_closed
+  issuer: ''
+  audiences: ''
+  jwksUri: ''
+  groupClaim: groups
+  fixture:
+    principalId: 00000000-0000-4000-8000-000000000003
+    workspaceId: 00000000-0000-4000-8000-000000000001
+    departmentId: 00000000-0000-4000-8000-000000000002
+    roles: consumer,builder,owner,admin
+
+frontend:
+  service:
+    type: NodePort
+    port: 8080
+    nodePort: 30080
+
+kindDemo:
+  enabled: true
+  createFixtureSecret: true
+  fixtureOidcSecret: fixture-only-oidc-secret-000000000000
+  seed: true
+
+postgres:
+  enabled: true
+  image: postgres:16.9-alpine
+  database: paul_os_demo
+  username: paul_os_demo
+  password: fixture-only-postgres-password
+  storage: 1Gi

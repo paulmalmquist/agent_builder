@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type {
   GuardrailsSection,
   InterpretationConfirmation,
@@ -9,10 +9,14 @@ import type {
   KnowledgeSection,
   OutcomesSection,
   OutputsSection,
+  CapabilityProfile,
 } from '@agent-builder/contracts';
+import { featureFlags } from './config/feature-flags';
 import {
-  useAgentSearch,
   useAgentSpec,
+  useBuilderReferredChoices,
+  useCreateBuilderDecision,
+  useCreateBuilderIntake,
   useCreateSpec,
   useEvaluation,
   useGenerationJob,
@@ -21,13 +25,11 @@ import {
   useUpdateSpecSection,
   queryKeys,
 } from './api/hooks';
-import { agentApi, getErrorMessage } from './api/client';
-import { CandidateDialog } from './components/CandidateDialog';
+import { builderApi, getErrorMessage } from './api/client';
 import { GovernanceBar } from './components/GovernanceBar';
 import { Icon } from './components/Icon';
 import { Modal } from './components/Modal';
 import { Notice } from './components/Notice';
-import { SuggestionsPanel } from './components/SuggestionsPanel';
 import { WorkflowStep, type WorkflowStepId } from './components/WorkflowStep';
 import { BlueprintSection } from './features/blueprint/BlueprintSection';
 import { GenerationPanel } from './features/generation/GenerationPanel';
@@ -38,33 +40,39 @@ import { OutputsForm } from './features/spec/OutputsForm';
 import { ScopeForm } from './features/spec/ScopeForm';
 import { InputModeToggle } from './features/single-shot/InputModeToggle';
 import { SingleShotPanel } from './features/single-shot/SingleShotPanel';
+import {
+  ReferredChoicesPanel,
+  type PendingBuilderDecision,
+} from './features/builder/ReferredChoicesPanel';
+import { ReuseDecisionDialog } from './features/builder/ReuseDecisionDialog';
 
 type DialogId = 'scope' | 'knowledge' | 'guardrails' | 'outputs' | 'review' | 'process';
+type PendingDecision = PendingBuilderDecision & { idempotencyKey: string };
 
 const workflowSteps = [
   {
     step: 1 as const,
     title: 'DEFINE SCOPE & PURPOSE',
     description: 'Describe the job to be done, inputs, users, and the desired outcome.',
-    icon: 'scope' as const,
+    mark: 'definition-sheet' as const,
   },
   {
     step: 2 as const,
     title: 'DEFINE KNOWLEDGE & ACCESS',
     description: 'Select and configure governed data sources, documents, and tools.',
-    icon: 'database' as const,
+    mark: 'source-table' as const,
   },
   {
     step: 3 as const,
     title: 'DEFINE ACTIONS & WORKFLOW',
     description: 'Choose the auditable workflow, approvals, and fail-closed behavior.',
-    icon: 'code' as const,
+    mark: 'control-flow' as const,
   },
   {
     step: 4 as const,
     title: 'DEFINE SUCCESS CRITERIA',
     description: 'Set evaluation criteria, quality thresholds, and acceptance tests.',
-    icon: 'success' as const,
+    mark: 'acceptance-gate' as const,
   },
 ];
 
@@ -76,17 +84,30 @@ const precedingStep: Record<Exclude<WorkflowStepId, 1>, WorkflowStepId> = {
   4: 3,
 };
 
+function intakeProfile(outcomes: OutcomesSection): CapabilityProfile {
+  return {
+    schemaVersion: 1,
+    intendedUsers: [outcomes.audience],
+    businessDomain: outcomes.department,
+    triggers: ['User-requested build intake'],
+    tasks: [outcomes.purpose],
+    inputs: ['User-provided scope'],
+    outputs: outcomes.desiredOutcomes,
+    knowledgeClasses: [],
+    tools: [],
+    potentialActions: [],
+    successCriteria: outcomes.desiredOutcomes,
+    riskLevel: 'moderate',
+  };
+}
+
 export function App() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const inputMode = searchParams.get('mode') === 'single-shot' ? 'single-shot' : 'guided';
   const [dialog, setDialog] = useState<DialogId | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [pendingOutcomes, setPendingOutcomes] = useState<OutcomesSection | null>(null);
-  const [candidateId, setCandidateId] = useState<string | null>(() =>
-    searchParams.get('candidate'),
-  );
-  const [existingAgentName, setExistingAgentName] = useState<string | null>(null);
+  const [pendingDecision, setPendingDecision] = useState<PendingDecision | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [modeWarning, setModeWarning] = useState<string | null>(null);
   const [singleShotPrompt, setSingleShotPrompt] = useState('');
@@ -102,6 +123,7 @@ export function App() {
   const previousCompletedSteps = useRef<StepState | null>(null);
   const previousUnlockedSteps = useRef<StepState | null>(null);
   const specId = searchParams.get('spec');
+  const intakeId = searchParams.get('intake');
   const jobId = searchParams.get('job');
   const shadowDeployed = searchParams.get('shadow') === 'true';
 
@@ -117,7 +139,9 @@ export function App() {
   const setJobId = (value: string | null) => setUrlState('job', value);
   const setShadowDeployed = (value: boolean) => setUrlState('shadow', value ? 'true' : null);
 
-  const search = useAgentSearch(searchQuery);
+  const createIntake = useCreateBuilderIntake();
+  const referredChoices = useBuilderReferredChoices(intakeId);
+  const createDecision = useCreateBuilderDecision(intakeId);
   const specQuery = useAgentSpec(specId);
   const spec = specQuery.data;
   const sourceCatalog = useSourceCatalog('knowledge', dialog === 'knowledge');
@@ -131,7 +155,7 @@ export function App() {
       createdSpecId: string;
       outcomes: OutcomesSection;
       confirmation: InterpretationConfirmation;
-    }) => agentApi.updateOutcomes(createdSpecId, outcomes, confirmation),
+    }) => builderApi.updateOutcomes(createdSpecId, outcomes, confirmation),
     onSuccess: (confirmedSpec) => {
       queryClient.setQueryData(queryKeys.spec(confirmedSpec.id), confirmedSpec);
     },
@@ -141,18 +165,8 @@ export function App() {
   const evaluation = useEvaluation(jobQuery.data?.agentId ?? null, shadowDeployed);
   const interpretSpec = useInterpretSpec();
 
-  useEffect(() => {
-    const linkedCandidate = searchParams.get('candidate');
-    if (linkedCandidate) setCandidateId(linkedCandidate);
-  }, [searchParams]);
-
-  const similarity = useMutation({
-    mutationFn: (outcomes: OutcomesSection) =>
-      agentApi.similarity(outcomes.purpose.slice(0, 2_000)),
-  });
-
   const generate = useMutation({
-    mutationFn: (id: string) => agentApi.generate(id),
+    mutationFn: (id: string) => builderApi.generate(id),
     onSuccess: (accepted) => {
       setJobId(accepted.jobId);
       setDialog(null);
@@ -161,7 +175,7 @@ export function App() {
   });
 
   const recover = useMutation({
-    mutationFn: (agentId: string) => agentApi.recover(agentId),
+    mutationFn: (agentId: string) => builderApi.recover(agentId),
     onSuccess: async () => {
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
@@ -175,7 +189,7 @@ export function App() {
   });
 
   const shadowDeploy = useMutation({
-    mutationFn: (agentId: string) => agentApi.shadowDeploy(agentId),
+    mutationFn: (agentId: string) => builderApi.shadowDeploy(agentId),
     onSuccess: async (deployment) => {
       setShadowDeployed(true);
       setNotice(`Shadow deployment ${deployment.deploymentId} started.`);
@@ -268,6 +282,8 @@ export function App() {
   }, [justCompletedSteps, justUnlockedSteps]);
 
   const actionError =
+    createIntake.error ??
+    referredChoices.error ??
     createSpec.error ??
     confirmCreatedOutcomes.error ??
     updateSection.error ??
@@ -279,6 +295,11 @@ export function App() {
     null;
 
   const interpretedPrefill = interpretation?.kind === 'prefill' ? interpretation : null;
+  const highestMatchScore =
+    referredChoices.data?.referredChoices.reduce(
+      (highest, choice) => Math.max(highest, choice.match.score),
+      0,
+    ) ?? null;
 
   function setInputMode(mode: 'guided' | 'single-shot') {
     if (mode === 'single-shot' && spec && Object.values(spec.completion).some(Boolean)) {
@@ -300,6 +321,33 @@ export function App() {
     });
   }
 
+  function submitIntake(outcomes: OutcomesSection, confirmed: boolean) {
+    createIntake.mutate(
+      {
+        request: outcomes.purpose,
+        department: outcomes.department,
+        capabilityProfile: intakeProfile(outcomes),
+        confirmed,
+      },
+      {
+        onSuccess: (intake) => {
+          setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.set('intake', intake.id);
+            next.delete('candidate');
+            next.delete('intent');
+            return next;
+          });
+          setNotice(
+            confirmed
+              ? 'Referred choices are ready. Choose reuse, adaptation, or a new draft.'
+              : 'Interpretation ready. Review the scope before choosing an implementation.',
+          );
+        },
+      },
+    );
+  }
+
   function acceptInterpretation(result: InterpretSpecResponse) {
     setInterpretation(result);
     setReviewedInterpretationId(null);
@@ -313,11 +361,7 @@ export function App() {
       if (!spec?.completion.outcomes) {
         setPendingOutcomes(result.sections.outcomes.value);
       }
-      setSearchQuery(result.reuseQuery);
-      similarity.mutate(result.sections.outcomes.value);
-      setNotice(
-        'Interpretation ready. Reuse candidates were searched before any draft was created.',
-      );
+      submitIntake(result.sections.outcomes.value, false);
     } else {
       setNotice('The scope is unresolved. Review step 01 before creating a draft.');
     }
@@ -413,10 +457,8 @@ export function App() {
       setNotice('Resolve every interpreted scope uncertainty before saving this section.');
       return;
     }
-    const boundedQuery = outcomes.purpose.slice(0, 2_000);
     setPendingOutcomes(outcomes);
-    setSearchQuery(boundedQuery);
-    similarity.mutate(outcomes);
+    submitIntake(outcomes, true);
     if (interpretedPrefill) {
       setReviewedInterpretationId(interpretedPrefill.interpretationId);
     }
@@ -428,42 +470,31 @@ export function App() {
         {
           onSuccess: () => {
             setDialog(null);
-            setNotice('Scope updated. Reuse candidates were refreshed.');
+            setNotice('Scope updated. Referred choices are being refreshed.');
           },
         },
       );
     } else {
       setDialog(null);
-      setNotice('Reuse candidates are ranked. Choose one or build a new agent.');
     }
   }
 
-  function clearCandidate() {
-    setCandidateId(null);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete('candidate');
-      next.delete('intent');
-      return next;
-    });
-  }
-
-  function createDraft(baseAgentId: string | null, mode: 'configure' | 'extend' | 'new') {
+  function createDraft(baseAgentId: string | null, mode: 'extend' | 'new') {
     const outcomes = pendingOutcomes ?? spec?.outcomes;
     if (!outcomes) {
-      clearCandidate();
+      setPendingDecision(null);
       setDialog('scope');
       setNotice('Define the scope before choosing an implementation path.');
       return;
     }
     if (interpretedPrefill && reviewedInterpretationId !== interpretedPrefill.interpretationId) {
-      clearCandidate();
+      setPendingDecision(null);
       setDialog('scope');
       setNotice('Review and save the interpreted scope before creating a draft.');
       return;
     }
     if (spec) {
-      clearCandidate();
+      setPendingDecision(null);
       setNotice('A draft already exists. Finish or recover it before creating another.');
       return;
     }
@@ -477,7 +508,7 @@ export function App() {
       },
       {
         onSuccess: (created) => {
-          setCandidateId(null);
+          setPendingDecision(null);
           setSearchParams((current) => {
             const next = new URLSearchParams(current);
             next.set('spec', created.id);
@@ -485,11 +516,10 @@ export function App() {
             next.delete('intent');
             return next;
           });
-          setExistingAgentName(null);
           const createdMessage =
             mode === 'new'
               ? 'New draft created. Continue with governed knowledge.'
-              : `${mode === 'extend' ? 'Extension' : 'Configured branch'} created from the selected agent.`;
+              : 'Extension draft created with recorded source lineage.';
           const outcomesConfirmation = sectionConfirmation('outcomes');
           if (interpretedPrefill && outcomesConfirmation) {
             setNotice('Draft created. Recording the reviewed scope and interpretation lineage…');
@@ -507,6 +537,52 @@ export function App() {
         },
       },
     );
+  }
+
+  function submitDecision(reason: string | null) {
+    if (!pendingDecision) return;
+    if (interpretedPrefill && reviewedInterpretationId !== interpretedPrefill.interpretationId) {
+      setPendingDecision(null);
+      setDialog('scope');
+      setNotice('Review and save the interpreted scope before choosing an implementation.');
+      return;
+    }
+    const decision = pendingDecision;
+    createDecision.mutate(
+      {
+        idempotencyKey: decision.idempotencyKey,
+        value: {
+          action: decision.action,
+          selectedPublicationId: decision.choice?.publicationId ?? null,
+          buildNewReason: reason,
+        },
+      },
+      {
+        onSuccess: () => {
+          if (decision.action === 'use_as_is' && decision.choice) {
+            setPendingDecision(null);
+            setNotice(`Deployment created from ${decision.choice.name}. No draft was created.`);
+            return;
+          }
+          if (decision.action === 'configure' && decision.choice) {
+            setPendingDecision(null);
+            setNotice(
+              `Configuration overlay created for ${decision.choice.name}. The certified agent was not forked.`,
+            );
+            return;
+          }
+          if (decision.action === 'extend' && decision.choice) {
+            createDraft(decision.choice.provenance.resourceVersionId, 'extend');
+            return;
+          }
+          createDraft(null, 'new');
+        },
+      },
+    );
+  }
+
+  function beginDecision(decision: PendingBuilderDecision) {
+    setPendingDecision({ ...decision, idempotencyKey: crypto.randomUUID() });
   }
 
   function saveSection(
@@ -541,16 +617,14 @@ export function App() {
       <div className="frame">
         <section className="left-column">
           <div className="hero-copy">
+            <p className="page-kicker">GOVERNED DEFINITION WORKBENCH</p>
             <h1>
-              <span className="hero-line">Build or extend the right agent.</span>
-              <br />
-              <span className="hero-line">Faster. Governed. Effective.</span>
+              <span className="hero-line">Build</span>
             </h1>
             <div aria-hidden="true" className="hairline" />
             <p>
-              Describe what you want to accomplish.
-              <br className="desktop-break" /> We’ll help you reuse what exists or guide
-              <br className="desktop-break" /> you to build the right agent step by step.
+              Define the work to be governed. Paul OS checks certified agents first, then opens a
+              new four-step definition only when reuse does not fit.
             </p>
           </div>
           {notice ? (
@@ -567,28 +641,22 @@ export function App() {
             </div>
           ) : null}
           {modeWarning ? <Notice>{modeWarning}</Notice> : null}
-          {actionError || search.isError ? (
-            <Notice tone="error">{getErrorMessage(actionError ?? search.error)}</Notice>
-          ) : null}
-          {similarity.data?.matches[0] ? (
+          {actionError ? <Notice tone="error">{getErrorMessage(actionError)}</Notice> : null}
+          {referredChoices.data?.referredChoices[0] ? (
             <div className="similarity-note">
-              <Icon name="sparkles" size={18} />
-              Closest semantic match: {similarity.data.matches[0].score}% ·{' '}
-              {similarity.data.matches[0].reasons[0] ?? 'shared governed capabilities'}
+              <Icon name="draft" size={18} />
+              Closest certified match:{' '}
+              {Math.round(referredChoices.data.referredChoices[0].match.score)}%{' · '}
+              {referredChoices.data.referredChoices[0].match.label}
             </div>
           ) : null}
-          {existingAgentName ? (
-            <Notice tone="success">
-              Using <strong>{existingAgentName}</strong> as-is. No new draft was created.
-            </Notice>
-          ) : null}
-          <SuggestionsPanel
-            isLoading={search.isLoading || search.isFetching}
-            items={search.data?.items ?? []}
-            onBuildNew={() => createDraft(null, 'new')}
-            onSelect={setCandidateId}
-            query={searchQuery}
-            selectedAgentId={candidateId}
+          <ReferredChoicesPanel
+            intakeId={intakeId}
+            isLoading={
+              createIntake.isPending || referredChoices.isLoading || referredChoices.isFetching
+            }
+            onChoose={beginDecision}
+            results={referredChoices.data}
           />
         </section>
 
@@ -625,7 +693,7 @@ export function App() {
                 }
                 complete={completedSteps[step.step]}
                 description={step.description}
-                icon={step.icon}
+                mark={step.mark}
                 justCompleted={justCompletedSteps.has(step.step)}
                 justUnlocked={justUnlockedSteps.has(step.step)}
                 key={step.step}
@@ -654,7 +722,7 @@ export function App() {
             ))}
             {canReview ? (
               <button className="review-button" onClick={() => setDialog('review')} type="button">
-                <Icon name="sparkles" />
+                <Icon name="draft" />
                 <span>
                   <strong>Review & Generate</strong>
                   All four sections are valid for revision {spec.revision}.
@@ -663,21 +731,31 @@ export function App() {
               </button>
             ) : null}
             {jobId ? (
-              <GenerationPanel
-                error={generationError}
-                evaluation={evaluation.data}
-                isLoading={jobQuery.isLoading}
-                isRecovering={recover.isPending}
-                isShadowDeploying={shadowDeploy.isPending}
-                job={jobQuery.data}
-                onRecover={() => {
-                  if (jobQuery.data) recover.mutate(jobQuery.data.agentId);
-                }}
-                onShadowDeploy={() => {
-                  if (jobQuery.data) shadowDeploy.mutate(jobQuery.data.agentId);
-                }}
-                shadowDeployed={shadowDeployed}
-              />
+              <>
+                <GenerationPanel
+                  error={generationError}
+                  evaluation={evaluation.data}
+                  isLoading={jobQuery.isLoading}
+                  isRecovering={recover.isPending}
+                  isShadowDeploying={shadowDeploy.isPending}
+                  job={jobQuery.data}
+                  onRecover={() => {
+                    if (jobQuery.data) recover.mutate(jobQuery.data.agentId);
+                  }}
+                  onShadowDeploy={() => {
+                    if (jobQuery.data) shadowDeploy.mutate(jobQuery.data.agentId);
+                  }}
+                  shadowDeployed={shadowDeployed}
+                />
+                {featureFlags.visualSurfacesEnabled && jobQuery.data ? (
+                  <Link
+                    className="secondary-button builder-bench-link"
+                    to={`/bench/${jobQuery.data.agentId}`}
+                  >
+                    OPEN ASSEMBLY BENCH ↗
+                  </Link>
+                ) : null}
+              </>
             ) : null}
           </div>
         </section>
@@ -691,7 +769,7 @@ export function App() {
       {dialog === 'scope' ? (
         <ScopeForm
           initialValue={spec?.outcomes ?? pendingOutcomes ?? null}
-          isSaving={similarity.isPending || updateSection.isPending}
+          isSaving={createIntake.isPending || updateSection.isPending}
           onClose={() => setDialog(null)}
           onResolutionChange={setInterpretationResolution}
           onSubmit={searchScope}
@@ -786,18 +864,19 @@ export function App() {
           </ol>
         </Modal>
       ) : null}
-      {candidateId ? (
-        <CandidateDialog
-          agentId={candidateId}
-          canBranch={Boolean(pendingOutcomes ?? spec?.outcomes)}
-          isCreating={createSpec.isPending || confirmCreatedOutcomes.isPending}
-          onBranch={(agentId, mode) => createDraft(agentId, mode)}
-          onClose={clearCandidate}
-          onUseAsIs={(_id, name) => {
-            setExistingAgentName(name);
-            clearCandidate();
-            setNotice(`Selected ${name} from the governed catalog.`);
+      {pendingDecision ? (
+        <ReuseDecisionDialog
+          decision={pendingDecision}
+          error={createDecision.isError ? getErrorMessage(createDecision.error) : null}
+          highestMatchScore={highestMatchScore}
+          isSubmitting={
+            createDecision.isPending || createSpec.isPending || confirmCreatedOutcomes.isPending
+          }
+          onClose={() => {
+            createDecision.reset();
+            setPendingDecision(null);
           }}
+          onSubmit={submitDecision}
         />
       ) : null}
     </main>

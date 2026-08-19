@@ -44,7 +44,7 @@ export class MaintenanceScheduler implements MaintenanceSchedulerApi {
     this.timer = setTimeout(() => {
       void this.task
         .run('scheduled')
-        .catch((error: unknown) => this.logger.error({ error }, 'Nightly maintenance failed'))
+        .catch((error: unknown) => this.logger.error({ err: error }, 'Nightly maintenance failed'))
         .finally(() => this.schedule());
     }, delay);
     this.timer.unref();

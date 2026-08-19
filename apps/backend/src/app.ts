@@ -7,7 +7,7 @@ import type { Logger } from 'pino';
 import { ZodError } from 'zod';
 import { AppError } from './errors.js';
 import type { AppConfig } from './config.js';
-import { currentActorId, requestContextMiddleware } from './request-context.js';
+import { currentRequestPrincipal, requestContextMiddleware } from './request-context.js';
 import { registerRoutes } from './routes.js';
 import type { ServiceBundle } from './services/types.js';
 
@@ -39,7 +39,13 @@ export function createApp(
       },
     }),
   );
-  app.use(requestContextMiddleware(config.auth));
+  app.use(
+    requestContextMiddleware(config.auth, {
+      ...(services.platform?.identityDirectory === undefined
+        ? {}
+        : { identityDirectory: services.platform.identityDirectory }),
+    }),
+  );
   app.use(express.json({ limit: '1mb', strict: true }));
 
   registerRoutes(app, services);
@@ -80,10 +86,28 @@ export function createApp(
     }
 
     if (appError.status >= 500) {
-      logger.error({ error, requestId, actorId: currentActorId() }, 'Request failed');
+      const principal = currentRequestPrincipal();
+      logger.error(
+        {
+          err: error,
+          requestId,
+          actorId: principal.actorId,
+          workspaceId: principal.workspaceId,
+          departmentId: principal.departmentId,
+        },
+        'Request failed',
+      );
     } else {
+      const principal = currentRequestPrincipal();
       logger.info(
-        { code: appError.code, requestId, actorId: currentActorId(), status: appError.status },
+        {
+          code: appError.code,
+          requestId,
+          actorId: principal.actorId,
+          workspaceId: principal.workspaceId,
+          departmentId: principal.departmentId,
+          status: appError.status,
+        },
         'Request rejected',
       );
     }

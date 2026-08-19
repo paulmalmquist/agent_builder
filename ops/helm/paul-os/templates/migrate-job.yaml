@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "paul-os.fullname" . }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrator
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "paul-os.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrator
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "paul-os.migratorServiceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccounts.migrator.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ .Values.images.migrator | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.nodeContainerSecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - >-
+              until node -e 'const net = require("node:net");
+              const url = new URL(process.env.DATABASE_URL);
+              const socket = net.connect(Number(url.port || 5432), url.hostname);
+              socket.setTimeout(2000);
+              socket.once("connect", () => { socket.end(); process.exit(0); });
+              socket.once("timeout", () => { socket.destroy(); process.exit(1); });
+              socket.once("error", () => process.exit(1));'; do sleep 2; done &&
+              npm run db:deploy -w @agent-builder/backend{{ if .Values.kindDemo.seed }} &&
+              npm run db:seed -w @agent-builder/backend{{ end }}
+          env:
+            - name: HOME
+              value: /tmp
+            - name: NODE_ENV
+              value: {{ .Values.global.nodeEnv | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.migratorDatabase.name }}
+                  key: {{ .Values.externalSecrets.migratorDatabase.key }}
+            - name: REPOSITORY_SOURCE_COMMIT
+              value: {{ .Values.global.repositorySourceCommit | quote }}
+            - name: ALLOW_UNVERIFIED_REPOSITORY_IMPORTS
+              value: {{ .Values.global.allowUnverifiedRepositoryImports | quote }}
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: temporary
+          emptyDir: {}

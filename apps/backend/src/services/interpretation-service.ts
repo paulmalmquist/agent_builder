@@ -11,6 +11,7 @@ import { AppError } from '../errors.js';
 import { toPrismaJson } from '../json-boundary.js';
 import { toSourceDescriptor } from '../mappers.js';
 import { currentActorId } from '../request-context.js';
+import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import {
   HeuristicSpecInterpreter,
   type InterpretationDraft,
@@ -89,8 +90,8 @@ export class InterpretationService implements InterpretationApi {
     if (input.kind === 'prompt') {
       prompt = input.prompt;
       if (input.specId !== undefined) {
-        const target = await this.prisma.agentSpec.findUnique({
-          where: { id: input.specId },
+        const target = await this.prisma.agentSpec.findFirst({
+          where: { id: input.specId, agent: { family: aggregateScopeWhere() } },
           select: { interpretationId: true },
         });
         if (!target) {
@@ -101,8 +102,8 @@ export class InterpretationService implements InterpretationApi {
         parentInterpretationId = target.interpretationId;
       }
     } else {
-      const parent = await this.prisma.specInterpretation.findUnique({
-        where: { id: input.parentInterpretationId },
+      const parent = await this.prisma.specInterpretation.findFirst({
+        where: { id: input.parentInterpretationId, ...aggregateScopeWhere() },
       });
       if (!parent)
         throw new AppError(404, 'INTERPRETATION_NOT_FOUND', 'Parent interpretation was not found', {
@@ -130,9 +131,12 @@ export class InterpretationService implements InterpretationApi {
       parentInterpretationId = parent.id;
     }
 
-    const sources = (await this.prisma.knowledgeSource.findMany({ orderBy: { id: 'asc' } })).map(
-      toSourceDescriptor,
-    );
+    const sources = (
+      await this.prisma.knowledgeSource.findMany({
+        where: aggregateScopeWhere(),
+        orderBy: { id: 'asc' },
+      })
+    ).map(toSourceDescriptor);
     let interpreted: Awaited<ReturnType<SpecInterpreter['interpret']>>;
     try {
       interpreted = await this.interpreter.interpret(prompt, sources);
@@ -164,7 +168,9 @@ export class InterpretationService implements InterpretationApi {
     } else {
       const draft = interpreted.draft!;
       if (input.specId !== undefined) {
-        const spec = await this.prisma.agentSpec.findUnique({ where: { id: input.specId } });
+        const spec = await this.prisma.agentSpec.findFirst({
+          where: { id: input.specId, agent: { family: aggregateScopeWhere() } },
+        });
         if (!spec)
           throw new AppError(404, 'SPEC_NOT_FOUND', 'Agent specification was not found', {
             specId: input.specId,
@@ -200,9 +206,11 @@ export class InterpretationService implements InterpretationApi {
     }
 
     const actorId = currentActorId();
+    const scope = aggregateScope();
     await this.prisma.$transaction(async (transaction) => {
       await transaction.specInterpretation.create({
         data: {
+          ...scope,
           id: interpretationId,
           parentInterpretationId,
           prompt,
@@ -234,6 +242,7 @@ export class InterpretationService implements InterpretationApi {
   async deleteExpiredUnattached(): Promise<number> {
     const now = new Date();
     const records = await this.prisma.specInterpretation.findMany({
+      where: aggregateScopeWhere(),
       select: {
         id: true,
         parentInterpretationId: true,
@@ -275,7 +284,12 @@ export class InterpretationService implements InterpretationApi {
     let deleted = 0;
     for (const candidate of candidates) {
       const result = await this.prisma.specInterpretation.deleteMany({
-        where: { id: candidate.id, attachedSpec: null, confirmations: { none: {} } },
+        where: {
+          id: candidate.id,
+          ...aggregateScopeWhere(),
+          attachedSpec: null,
+          confirmations: { none: {} },
+        },
       });
       deleted += result.count;
     }

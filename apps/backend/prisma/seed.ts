@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   AgentDerivationMode,
   AgentStatus,
@@ -14,7 +16,10 @@ import {
   EvalCaseSource,
   EvalCaseTag,
   EvaluationMode,
+  ExternalIdentityProvider,
   ExecutorKind,
+  PlatformRole,
+  PrincipalKind,
   PromotionDecisionType,
   Prisma,
   PrismaClient,
@@ -32,9 +37,78 @@ import {
   outcomesSectionSchema,
   outputsSectionSchema,
 } from '@agent-builder/contracts';
+import {
+  assertAcyclicDependencies,
+  compileResourceYaml,
+  discoverResourceManifestPaths,
+} from '@paul-os/runtime';
+import { RegistryService } from '../src/services/registry-service.js';
+import {
+  LOCAL_DEPARTMENT_ID,
+  LOCAL_DEPARTMENT_SLUG,
+  LOCAL_PRINCIPAL_ID,
+  LOCAL_PROJECT_INSTANCE_ID,
+  LOCAL_SERVICE_PRINCIPAL_ID,
+  LOCAL_WORKSPACE_ID,
+  LOCAL_WORKSPACE_SLUG,
+  SYSTEM_PRINCIPAL_ID,
+} from '../src/scope-constants.js';
 
 const prisma = new PrismaClient();
 const seedActor = 'system:seed';
+const localScope = { workspaceId: LOCAL_WORKSPACE_ID, departmentId: LOCAL_DEPARTMENT_ID } as const;
+const configuredSourceCommit = process.env['REPOSITORY_SOURCE_COMMIT']?.trim();
+const seedSourceCommit =
+  configuredSourceCommit !== undefined && /^[a-f0-9]{7,64}$/i.test(configuredSourceCommit)
+    ? configuredSourceCommit
+    : 'synthetic-baseline';
+
+async function seedPlatformResources(): Promise<void> {
+  const workspaceRoot = process.cwd().endsWith(path.join('apps', 'backend'))
+    ? path.resolve(process.cwd(), '..', '..')
+    : process.cwd();
+  const sources = await Promise.all(
+    (await discoverResourceManifestPaths(workspaceRoot)).map(async (manifestPath) => ({
+      manifestPath,
+      source: await readFile(manifestPath, 'utf8'),
+      compiled: compileResourceYaml(await readFile(manifestPath, 'utf8')),
+    })),
+  );
+  assertAcyclicDependencies(sources.map(({ compiled }) => compiled.manifest));
+  const byFamily = new Map(
+    sources.map((entry) => [entry.compiled.manifest.metadata.id, entry] as const),
+  );
+  const ordered: typeof sources = [];
+  const visited = new Set<string>();
+  const visit = (familyId: string): void => {
+    if (visited.has(familyId)) return;
+    const entry = byFamily.get(familyId);
+    if (entry === undefined) return;
+    entry.compiled.manifest.dependencies.forEach((dependency) => visit(dependency.familyId));
+    visited.add(familyId);
+    ordered.push(entry);
+  };
+  byFamily.forEach((_entry, familyId) => visit(familyId));
+
+  const registry = new RegistryService(prisma, seedSourceCommit);
+  const imported = new Map<string, string>();
+  for (const entry of ordered) {
+    const result = await registry.importResource({
+      manifestYaml: entry.source,
+      sourcePath: path.relative(workspaceRoot, entry.manifestPath).replaceAll('\\', '/'),
+    });
+    imported.set(entry.compiled.manifest.metadata.id, result.resource.id);
+  }
+  const referenceId = imported.get('50000000-0000-4000-8000-000000000001');
+  const dailyBriefId = imported.get('20000000-0000-4000-8000-000000000001');
+  if (referenceId === undefined || dailyBriefId === undefined) {
+    throw new Error('Daily brief seed resources are incomplete');
+  }
+  await registry.createRelease({
+    resourceVersionIds: [referenceId, dailyBriefId],
+    projectId: null,
+  });
+}
 
 const supplierFamilyId = '4a40357e-924f-46db-86ac-b8ed920be486';
 const supplierChampionId = '4a40357e-924f-46db-86ac-b8ed920be486';
@@ -77,12 +151,12 @@ const supplierOutcomes = outcomesSectionSchema.parse({
 const supplierKnowledge = knowledgeSectionSchema.parse({
   sources: [
     {
-      descriptorId: 'bq-relativity-mes-builds',
+      descriptorId: 'bq-operations-builds',
       purpose: 'Resolve impacted production builds',
       requiredCitations: true,
     },
     {
-      descriptorId: 'bq-relativity-mes-genealogy',
+      descriptorId: 'bq-operations-genealogy',
       purpose: 'Trace delayed components into build genealogy',
       requiredCitations: true,
     },
@@ -134,7 +208,7 @@ const evalCaseInputs = [
     'Known supplier delay',
     { supplierId: 'SUP-104', delayDays: 5 },
     { affectedBuilds: ['BUILD-42'], escalationRequired: true },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.GOLDEN],
   ],
   [
@@ -142,7 +216,7 @@ const evalCaseInputs = [
     'Delay with no build impact',
     { supplierId: 'SUP-208', delayDays: 1 },
     { affectedBuilds: [], escalationRequired: false },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.FALSE_ALARM],
   ],
   [
@@ -150,7 +224,7 @@ const evalCaseInputs = [
     'Missing genealogy fails closed',
     { supplierId: 'SUP-301', genealogyAvailable: false },
     { status: 'blocked', reason: 'genealogy_unavailable' },
-    ['bq-relativity-mes-genealogy'],
+    ['bq-operations-genealogy'],
     [EvalCaseTag.REGRESSION],
   ],
   [
@@ -158,7 +232,7 @@ const evalCaseInputs = [
     'Every build includes a citation',
     { supplierId: 'SUP-104', requireCitations: true },
     { citedBuildCount: 1, buildCount: 1 },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.GOLDEN],
   ],
   [
@@ -166,7 +240,7 @@ const evalCaseInputs = [
     'Replay multi-supplier delay',
     { supplierIds: ['SUP-104', 'SUP-208'] },
     { affectedBuilds: ['BUILD-42'] },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.REPLAY],
   ],
   [
@@ -206,7 +280,7 @@ const evalCaseInputs = [
     'Conflicting build status is surfaced',
     { buildId: 'BUILD-77', conflictingRecords: true },
     { status: 'unresolved', conflictCount: 2 },
-    ['bq-relativity-mes-builds'],
+    ['bq-operations-builds'],
     [EvalCaseTag.GOLDEN],
   ],
   [
@@ -320,7 +394,7 @@ const rejectedManifest = agentManifestSchema.parse({
           expectedResult: {
             __fixture: {
               output: { affectedBuilds: [], escalationRequired: false },
-              citations: ['bq-relativity-mes-builds'],
+              citations: ['bq-operations-builds'],
               attemptedActions: [],
             },
           },
@@ -331,7 +405,7 @@ const rejectedManifest = agentManifestSchema.parse({
             expectedResult: {
               __fixture: {
                 output: { affectedBuilds: ['BUILD-UNKNOWN'] },
-                citations: ['bq-relativity-mes-builds'],
+                citations: ['bq-operations-builds'],
                 attemptedActions: [],
               },
             },
@@ -386,11 +460,11 @@ const inventoryCorpusHash = sha256([
 const refreshedAt = new Date('2026-07-30T12:00:00.000Z');
 const sources = [
   [
-    'bq-relativity-mes-builds',
+    'bq-operations-builds',
     SourceRole.KNOWLEDGE,
     SourceProvider.BIGQUERY,
-    'MES Gold Build Records',
-    'bigquery://agent-builder-demo/relativity_mes/gold_builds',
+    'Operations Build Records',
+    'bigquery://agent-builder-demo/operations/gold_builds',
     SourceAuthority.SYSTEM_OF_RECORD,
     'Manufacturing Data Platform',
     'US',
@@ -398,7 +472,7 @@ const sources = [
     false,
     {
       project: 'agent-builder-demo',
-      dataset: 'relativity_mes',
+      dataset: 'operations',
       table: 'gold_builds',
       location: 'US',
       columns: ['build_id', 'status', 'supplier_id', 'updated_at'],
@@ -406,11 +480,11 @@ const sources = [
     },
   ],
   [
-    'bq-relativity-mes-genealogy',
+    'bq-operations-genealogy',
     SourceRole.KNOWLEDGE,
     SourceProvider.BIGQUERY,
-    'MES Gold Genealogy',
-    'bigquery://agent-builder-demo/relativity_mes/gold_genealogy',
+    'Operations Component Genealogy',
+    'bigquery://agent-builder-demo/operations/gold_genealogy',
     SourceAuthority.SYSTEM_OF_RECORD,
     'Manufacturing Data Platform',
     'US',
@@ -418,7 +492,7 @@ const sources = [
     false,
     {
       project: 'agent-builder-demo',
-      dataset: 'relativity_mes',
+      dataset: 'operations',
       table: 'gold_genealogy',
       location: 'US',
       columns: ['build_id', 'component_id', 'supplier_id', 'lot_id'],
@@ -426,11 +500,11 @@ const sources = [
     },
   ],
   [
-    'bq-relativity-mes-ncr',
+    'bq-operations-quality-events',
     SourceRole.KNOWLEDGE,
     SourceProvider.BIGQUERY,
-    'MES Gold NCR Records',
-    'bigquery://agent-builder-demo/relativity_mes/gold_ncr',
+    'Operations Quality Event Records',
+    'bigquery://agent-builder-demo/operations/quality_events',
     SourceAuthority.SYSTEM_OF_RECORD,
     'Quality Data Platform',
     'US',
@@ -438,7 +512,7 @@ const sources = [
     false,
     {
       project: 'agent-builder-demo',
-      dataset: 'relativity_mes',
+      dataset: 'operations',
       table: 'gold_ncr',
       location: 'US',
       columns: ['ncr_id', 'build_id', 'severity', 'status'],
@@ -512,11 +586,11 @@ const sources = [
     { project: 'SUP', issueType: 'Incident' },
   ],
   [
-    'interstellar-build-observations',
+    'telemetry-build-observations',
     SourceRole.TELEMETRY,
-    SourceProvider.INTERSTELLAR,
-    'Interstellar Build Observations',
-    'interstellar://builds/observations',
+    SourceProvider.TELEMETRY,
+    'Telemetry Build Observations',
+    'telemetry://builds/observations',
     SourceAuthority.DERIVED,
     'Manufacturing Systems',
     'US',
@@ -548,8 +622,11 @@ const sources = [
 
 async function seedFamiliesAndVersions(): Promise<void> {
   await prisma.agentFamily.upsert({
-    where: { slug: 'supplier-delay-alert' },
+    where: {
+      workspaceId_slug: { workspaceId: LOCAL_WORKSPACE_ID, slug: 'supplier-delay-alert' },
+    },
     create: {
+      ...localScope,
       id: supplierFamilyId,
       slug: 'supplier-delay-alert',
       name: 'Supplier Delay Alert',
@@ -566,8 +643,11 @@ async function seedFamiliesAndVersions(): Promise<void> {
     },
   });
   await prisma.agentFamily.upsert({
-    where: { slug: 'inventory-risk-analyst' },
+    where: {
+      workspaceId_slug: { workspaceId: LOCAL_WORKSPACE_ID, slug: 'inventory-risk-analyst' },
+    },
     create: {
+      ...localScope,
       id: inventoryFamilyId,
       slug: 'inventory-risk-analyst',
       name: 'Inventory Risk Analyst',
@@ -764,17 +844,24 @@ async function seedSources(): Promise<void> {
       metadata,
     };
     await prisma.knowledgeSource.upsert({
-      where: { id },
-      create: { id, ...mutable },
+      where: { workspaceId_id: { workspaceId: LOCAL_WORKSPACE_ID, id } },
+      create: { id, ...localScope, ...mutable },
       update: mutable,
     });
   }
   for (const agentId of [supplierChampionId, rejectedChallengerId, passingChallengerId]) {
     for (const selection of supplierKnowledge.sources) {
       await prisma.agentKnowledgeSource.upsert({
-        where: { agentId_sourceId: { agentId, sourceId: selection.descriptorId } },
+        where: {
+          agentId_workspaceId_sourceId: {
+            agentId,
+            workspaceId: LOCAL_WORKSPACE_ID,
+            sourceId: selection.descriptorId,
+          },
+        },
         create: {
           agentId,
+          workspaceId: LOCAL_WORKSPACE_ID,
           sourceId: selection.descriptorId,
           purpose: selection.purpose,
           citations: selection.requiredCitations,
@@ -786,10 +873,13 @@ async function seedSources(): Promise<void> {
 }
 
 async function seedCertification(): Promise<void> {
-  const existingConfig = await prisma.certificationGateConfig.findUnique({ where: { version: 1 } });
+  const existingConfig = await prisma.certificationGateConfig.findUnique({
+    where: { workspaceId_version: { workspaceId: LOCAL_WORKSPACE_ID, version: 1 } },
+  });
   if (existingConfig === null) {
     await prisma.certificationGateConfig.create({
       data: {
+        ...localScope,
         id: gateConfigId,
         version: 1,
         state: CertificationGateConfigState.ACTIVE,
@@ -803,7 +893,7 @@ async function seedCertification(): Promise<void> {
   }
 
   await prisma.evalCase.createMany({
-    data: [...evalCases, inventoryEvalCase],
+    data: [...evalCases, inventoryEvalCase].map((evalCase) => ({ ...evalCase, ...localScope })),
     skipDuplicates: true,
   });
   const snapshotCase = (evalCase: (typeof evalCases)[number] | typeof inventoryEvalCase) =>
@@ -818,12 +908,13 @@ async function seedCertification(): Promise<void> {
       updatedAt: '2026-08-04T00:00:00.000Z',
     });
   const existingInventoryCorpus = await prisma.evalCorpusVersion.findUnique({
-    where: { version: 1 },
+    where: { workspaceId_version: { workspaceId: LOCAL_WORKSPACE_ID, version: 1 } },
   });
   if (existingInventoryCorpus === null) {
     const caseSnapshot = snapshotCase(inventoryEvalCase);
     await prisma.evalCorpusVersion.create({
       data: {
+        ...localScope,
         id: inventoryCorpusId,
         version: 1,
         contentHash: inventoryCorpusHash,
@@ -841,10 +932,13 @@ async function seedCertification(): Promise<void> {
       },
     });
   }
-  const existingCorpus = await prisma.evalCorpusVersion.findUnique({ where: { version: 2 } });
+  const existingCorpus = await prisma.evalCorpusVersion.findUnique({
+    where: { workspaceId_version: { workspaceId: LOCAL_WORKSPACE_ID, version: 2 } },
+  });
   if (existingCorpus === null) {
     await prisma.evalCorpusVersion.create({
       data: {
+        ...localScope,
         id: corpusId,
         version: 2,
         contentHash: corpusHash,
@@ -1206,6 +1300,7 @@ async function seedCertification(): Promise<void> {
   await prisma.auditEvent.createMany({
     data: [
       {
+        ...localScope,
         id: 'f1b364f8-61a5-4e24-a8d7-903b7ac36c28',
         actorId: seedActor,
         action: 'certification.corpus.seeded',
@@ -1214,6 +1309,7 @@ async function seedCertification(): Promise<void> {
         details: { version: 2, caseCount: evalCases.length },
       },
       {
+        ...localScope,
         id: '4337219b-d6f7-4612-9e53-1824e7398562',
         actorId: seedActor,
         action: 'certification.gates.seeded',
@@ -1244,6 +1340,7 @@ async function seedCertification(): Promise<void> {
       if (auditEvent === null) {
         await transaction.auditEvent.create({
           data: {
+            ...localScope,
             id: input.auditEventId,
             actorId: seedActor,
             action: 'promotion.approved',
@@ -1320,10 +1417,190 @@ async function seedCertification(): Promise<void> {
   });
 }
 
+async function seedLocalScope(): Promise<void> {
+  const workspace = await prisma.workspace.upsert({
+    where: { slug: LOCAL_WORKSPACE_SLUG },
+    create: {
+      id: LOCAL_WORKSPACE_ID,
+      slug: LOCAL_WORKSPACE_SLUG,
+      name: 'Local workspace',
+    },
+    update: { name: 'Local workspace' },
+  });
+  if (workspace.id !== LOCAL_WORKSPACE_ID) {
+    throw new Error('The local workspace slug is bound to an unexpected ID');
+  }
+  const department = await prisma.department.upsert({
+    where: {
+      workspaceId_slug: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        slug: LOCAL_DEPARTMENT_SLUG,
+      },
+    },
+    create: {
+      id: LOCAL_DEPARTMENT_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      slug: LOCAL_DEPARTMENT_SLUG,
+      name: 'Personal',
+    },
+    update: { name: 'Personal' },
+  });
+  if (department.id !== LOCAL_DEPARTMENT_ID) {
+    throw new Error('The local department slug is bound to an unexpected ID');
+  }
+
+  await prisma.principal.upsert({
+    where: {
+      workspaceId_actorId: { workspaceId: LOCAL_WORKSPACE_ID, actorId: 'local-user' },
+    },
+    create: {
+      id: LOCAL_PRINCIPAL_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+      actorId: 'local-user',
+      kind: PrincipalKind.HUMAN,
+      displayName: 'Local user',
+    },
+    update: {
+      active: true,
+      displayName: 'Local user',
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+    },
+  });
+  await prisma.externalIdentity.upsert({
+    where: {
+      workspaceId_issuer_subject: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        issuer: 'urn:paul-os:local',
+        subject: 'local-user',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: LOCAL_PRINCIPAL_ID,
+      provider: ExternalIdentityProvider.LOCAL,
+      issuer: 'urn:paul-os:local',
+      subject: 'local-user',
+    },
+    update: { principalId: LOCAL_PRINCIPAL_ID },
+  });
+  await prisma.externalIdentity.upsert({
+    where: {
+      workspaceId_issuer_subject: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        issuer: 'urn:paul-os:fixture',
+        subject: 'local-user-fixture',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: LOCAL_PRINCIPAL_ID,
+      provider: ExternalIdentityProvider.FIXTURE_OIDC,
+      issuer: 'urn:paul-os:fixture',
+      subject: 'local-user-fixture',
+    },
+    update: { principalId: LOCAL_PRINCIPAL_ID },
+  });
+  await prisma.roleBinding.upsert({
+    where: {
+      workspaceId_principalId_role_scopeKey: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        principalId: LOCAL_PRINCIPAL_ID,
+        role: PlatformRole.ADMIN,
+        scopeKey: 'workspace',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: LOCAL_PRINCIPAL_ID,
+      role: PlatformRole.ADMIN,
+      scopeKey: 'workspace',
+      grantedBy: seedActor,
+    },
+    update: { revokedAt: null },
+  });
+
+  await prisma.principal.upsert({
+    where: {
+      workspaceId_actorId: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        actorId: 'system:background',
+      },
+    },
+    create: {
+      id: SYSTEM_PRINCIPAL_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+      actorId: 'system:background',
+      kind: PrincipalKind.SERVICE,
+      displayName: 'Local background service',
+    },
+    update: {
+      active: true,
+      displayName: 'Local background service',
+      homeDepartmentId: LOCAL_DEPARTMENT_ID,
+    },
+  });
+  await prisma.servicePrincipal.upsert({
+    where: { principalId: SYSTEM_PRINCIPAL_ID },
+    create: {
+      id: LOCAL_SERVICE_PRINCIPAL_ID,
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: SYSTEM_PRINCIPAL_ID,
+      slug: 'background-worker',
+      purpose: 'Runs governed local background work',
+    },
+    update: { state: 'ACTIVE', purpose: 'Runs governed local background work' },
+  });
+  await prisma.roleBinding.upsert({
+    where: {
+      workspaceId_principalId_role_scopeKey: {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        principalId: SYSTEM_PRINCIPAL_ID,
+        role: PlatformRole.ADMIN,
+        scopeKey: 'workspace',
+      },
+    },
+    create: {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      principalId: SYSTEM_PRINCIPAL_ID,
+      role: PlatformRole.ADMIN,
+      scopeKey: 'workspace',
+      grantedBy: seedActor,
+    },
+    update: { revokedAt: null },
+  });
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT set_config('paul_os.workspace_id', ${LOCAL_WORKSPACE_ID}, true)`,
+    );
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT set_config('paul_os.department_id', ${LOCAL_DEPARTMENT_ID}, true)`,
+    );
+    await transaction.projectInstance.upsert({
+      where: {
+        workspaceId_slug: { workspaceId: LOCAL_WORKSPACE_ID, slug: 'personal-operations' },
+      },
+      create: {
+        id: LOCAL_PROJECT_INSTANCE_ID,
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        slug: 'personal-operations',
+        name: 'Personal operations',
+        createdBy: seedActor,
+      },
+      update: { name: 'Personal operations', state: 'ACTIVE' },
+    });
+  });
+}
+
 async function main(): Promise<void> {
+  await seedLocalScope();
   await seedFamiliesAndVersions();
   await seedSources();
   await seedCertification();
+  await seedPlatformResources();
 }
 
 main()

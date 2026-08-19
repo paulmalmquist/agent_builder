@@ -41,7 +41,7 @@ export class CertificationDispatcher implements CertificationDispatcherApi {
     void this.semaphore
       .use(() => runAsSystem(() => this.runWithTimeout(runId)))
       .catch((error: unknown) => {
-        this.logger.error({ error, runId }, 'Certification dispatcher failed');
+        this.logger.error({ err: error, runId }, 'Certification dispatcher failed');
       })
       .finally(() => this.scheduled.delete(runId));
   }
@@ -75,7 +75,7 @@ export class CertificationDispatcher implements CertificationDispatcherApi {
         timedOut ? 'CERTIFICATION_TIMEOUT' : 'CERTIFICATION_EXECUTION_ERROR',
         errorMessage(error),
       );
-      this.logger.warn({ error, runId }, 'Certification run failed');
+      this.logger.warn({ err: error, runId }, 'Certification run failed');
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }

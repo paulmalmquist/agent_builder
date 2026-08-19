@@ -1,0 +1,73 @@
+name: Console Copy Certification
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: console-copy-certification-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: console-copy-certification
+    permissions:
+      actions: read
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agent_builder
+          POSTGRES_PASSWORD: agent_builder
+          POSTGRES_DB: agent_builder_console_copy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent_builder -d agent_builder_console_copy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://agent_builder:agent_builder@localhost:5432/agent_builder_console_copy?schema=public
+      MODEL_PROVIDER: ${{ vars.CONSOLE_COPY_MODEL_PROVIDER || 'anthropic' }}
+      MODEL_NAME: ${{ vars.CONSOLE_COPY_MODEL_NAME }}
+      PROVIDER_POLICY: ${{ vars.CONSOLE_COPY_PROVIDER_POLICY || 'direct_allowed' }}
+      ANTHROPIC_API_KEY: ${{ secrets.CONSOLE_COPY_ANTHROPIC_API_KEY }}
+      AUTH_ACTOR_ID: console-copy-release-approver
+      REPOSITORY_SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha }}
+      CONSOLE_COPY_EVIDENCE_PATH: console-copy-certification.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:deploy
+      - run: npm run db:seed
+      - run: npm run check:console-copy
+      - name: Certify shipped screen copy semantically
+        run: npm run certify:console-copy
+      - name: Upload SHA-bound certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-copy-certification
+          path: console-copy-certification.json
+          if-no-files-found: error
+          retention-days: 90

@@ -11,6 +11,8 @@ export default tseslint.config(
       '**/coverage/**',
       '**/node_modules/**',
       '**/generated/**',
+      '.local/**',
+      '.runtime/**',
       '**/*.config.cjs',
       'eslint.config.js',
       'apps/backend/prisma/**',
@@ -21,7 +23,18 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          defaultProject: 'apps/backend/tsconfig.seed.json',
+          allowDefaultProject: [
+            'scripts/*.mjs',
+            'scripts/*.ts',
+            'test-support/*.cjs',
+            'apps/backend/tests/*.smoke.mjs',
+            'apps/workstation-broker/scripts/*.mjs',
+            'packages/contracts/test/*.mjs',
+            'packages/runtime/test/*.mjs',
+          ],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -46,7 +59,21 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/backend/**/*.ts', 'apps/generator-cli/**/*.ts', 'packages/contracts/**/*.ts'],
+    files: [
+      'apps/backend/**/*.ts',
+      'apps/generator-cli/**/*.ts',
+      'apps/worker/**/*.ts',
+      'e2e/**/*.ts',
+      'packages/contracts/**/*.ts',
+      'packages/runtime/**/*.ts',
+      'scripts/**/*.ts',
+      'scripts/**/*.mjs',
+      'test-support/**/*.cjs',
+      'apps/workstation-broker/scripts/**/*.mjs',
+      'apps/backend/tests/**/*.smoke.mjs',
+      'packages/contracts/test/**/*.mjs',
+      'packages/runtime/test/**/*.mjs',
+    ],
     languageOptions: {
       globals: globals.node,
     },
@@ -63,5 +90,15 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
     },
+  },
+  {
+    files: [
+      'scripts/**/*.mjs',
+      'apps/workstation-broker/scripts/**/*.mjs',
+      'apps/backend/tests/**/*.smoke.mjs',
+      'packages/contracts/test/**/*.mjs',
+      'packages/runtime/test/**/*.mjs',
+    ],
+    ...tseslint.configs.disableTypeChecked,
   },
 );

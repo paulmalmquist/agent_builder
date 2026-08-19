@@ -1,0 +1,29 @@
+apiVersion: paul-os/v1
+kind: Protocol
+metadata:
+  id: 70000000-0000-4000-8000-000000000001
+  slug: safe-execution
+  version: 1.0.0
+  owner: local-platform-owner
+  purpose: Enforce release, authority, output-validation, and logging boundaries.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies:
+  - familyId: 00000000-0000-4000-8000-000000000001
+    version: 1.0.0
+spec:
+  mandatory: true
+  precedence: deny_overrides_allow
+  enforcementPoints:
+    - compile
+    - release
+    - run_claim
+    - provider_call
+    - tool_call
+    - outcome_write
+  rules:
+    - production_requires_immutable_release
+    - authority_must_match_release_digest
+    - expanded_scope_requires_approval
+    - output_must_validate
+    - sensitive_payloads_must_not_be_logged

@@ -10,13 +10,13 @@ export function GovernanceBar({ onExplain }: GovernanceBarProps) {
       <div className="governance-left">
         <Icon name="shield" size={35} />
         <div>
-          <strong>Governed by Relativity Standards</strong>
+          <strong>Governed by Paul OS Protocols</strong>
           <span>Security · Access Control · Audit Logging · Evaluation · Versioning</span>
         </div>
       </div>
       <div aria-hidden="true" className="governance-divider" />
       <div className="help-copy">
-        <Icon name="sparkles" />
+        <Icon name="draft" />
         <span>Not sure where to start?</span>
       </div>
       <button className="explain-button" onClick={onExplain} type="button">

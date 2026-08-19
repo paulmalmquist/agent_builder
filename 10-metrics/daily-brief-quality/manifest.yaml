@@ -1,0 +1,26 @@
+apiVersion: paul-os/v1
+kind: MetricDefinition
+metadata:
+  id: a0000000-0000-4000-8000-000000000001
+  slug: daily-brief-quality
+  version: 1.0.0
+  owner: local-user
+  purpose: Measure useful and governed daily-brief outcomes without storing source content.
+  lifecycle: candidate
+  provenance: synthetic
+dependencies: []
+spec:
+  dimensions:
+    - releaseDigest
+    - provider
+    - model
+    - outcomeStatus
+  measures:
+    - schema_valid
+    - citation_coverage
+    - unresolved_count
+    - latency_ms
+    - input_tokens
+    - output_tokens
+    - estimated_cost_usd
+  payloadLoggingAllowed: false

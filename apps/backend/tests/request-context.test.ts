@@ -2,10 +2,19 @@ import express, { type ErrorRequestHandler } from 'express';
 import request from 'supertest';
 import type { AppError } from '../src/errors.js';
 import {
+  currentActorId,
   currentRequestContext,
+  currentRequestPrincipal,
   requestContextMiddleware,
   runAsSystem,
+  runWithPrincipal,
 } from '../src/request-context.js';
+import {
+  LOCAL_DEPARTMENT_ID,
+  LOCAL_PRINCIPAL_ID,
+  LOCAL_WORKSPACE_ID,
+  SYSTEM_PRINCIPAL_ID,
+} from '../src/scope-constants.js';
 
 function testApp() {
   const app = express();
@@ -48,6 +57,15 @@ describe('request identity context', () => {
       id: 'authenticated-user@example.test',
       authentication: 'bearer',
     });
+    expect(response.body.principal).toEqual({
+      principalId: LOCAL_PRINCIPAL_ID,
+      actorId: 'authenticated-user@example.test',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      departmentId: LOCAL_DEPARTMENT_ID,
+      authentication: 'bearer',
+      roles: ['admin'],
+      requestId: null,
+    });
   });
 
   it('can explicitly detach background lifecycle work from the requesting actor', async () => {
@@ -57,7 +75,43 @@ describe('request identity context', () => {
       .expect(200);
     expect(response.body).toEqual({
       requestId: null,
+      principal: {
+        principalId: SYSTEM_PRINCIPAL_ID,
+        actorId: 'system:background',
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        authentication: 'system',
+        roles: ['admin'],
+        requestId: null,
+      },
       actor: { id: 'system:background', authentication: 'system' },
     });
+  });
+
+  it('preserves the compatibility actor view for an explicitly supplied principal', () => {
+    const result = runWithPrincipal(
+      {
+        principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
+        actorId: 'human:scoped-test',
+        workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        departmentId: null,
+        authentication: 'local',
+        roles: ['admin'],
+        requestId: 'scope-test-request',
+      },
+      () => ({
+        actorId: currentActorId(),
+        principal: currentRequestPrincipal(),
+        context: currentRequestContext(),
+      }),
+    );
+
+    expect(result.actorId).toBe('human:scoped-test');
+    expect(result.principal).toMatchObject({
+      workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      departmentId: null,
+      requestId: 'scope-test-request',
+    });
+    expect(result.context.actor).toEqual({ id: 'human:scoped-test', authentication: 'local' });
   });
 });

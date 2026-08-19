@@ -25,7 +25,7 @@ export class GenerationDispatcher implements DispatcherApi {
     void this.semaphore
       .use(() => this.run(jobId))
       .catch((error: unknown) => {
-        this.logger.error({ error, jobId }, 'Generation dispatcher failed');
+        this.logger.error({ err: error, jobId }, 'Generation dispatcher failed');
       })
       .finally(() => {
         this.scheduled.delete(jobId);
@@ -55,7 +55,7 @@ export class GenerationDispatcher implements DispatcherApi {
       const code = error instanceof GeneratorRunnerError ? error.code : 'GENERATOR_FAILED';
       await this.generation.fail(jobId, code, errorMessage(error));
       this.logger.warn(
-        { error, jobId, agentId: input.agentId, specId: input.spec.id },
+        { err: error, jobId, agentId: input.agentId, specId: input.spec.id },
         'Agent generation failed',
       );
     }

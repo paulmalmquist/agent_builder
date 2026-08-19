@@ -1,0 +1,282 @@
+.connector-mark {
+  --connector-mark-size: 26px;
+  width: var(--connector-mark-size);
+  height: var(--connector-mark-size);
+  position: relative;
+  flex: 0 0 var(--connector-mark-size);
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(188, 195, 208, 0.13);
+  border-radius: 6px;
+  color: var(--connector-accent, #b9aaff);
+  background: rgba(188, 195, 208, 0.045);
+  filter: saturate(0.5);
+  opacity: 0.78;
+  transition:
+    filter var(--dur-hover, 180ms) var(--ease-instrument, ease),
+    opacity var(--dur-hover, 180ms) var(--ease-instrument, ease),
+    border-color var(--dur-hover, 180ms) var(--ease-instrument, ease);
+}
+
+.connector-mark[data-compact='true'] {
+  --connector-mark-size: 21px;
+  border-radius: 5px;
+}
+
+.connector-mark[data-active='true'],
+.connector-mark:hover,
+.plugin-card:hover .connector-mark {
+  border-color: color-mix(in srgb, var(--connector-accent, #b9aaff) 38%, transparent);
+  filter: none;
+  opacity: 1;
+}
+
+.connector-mark-monogram {
+  font-family: var(--font-display, sans-serif);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.connector-mark[data-compact='true'] .connector-mark-monogram {
+  font-size: 7.5px;
+}
+
+.connector-mark img {
+  width: 15px;
+  height: 15px;
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: block;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+}
+
+.connector-mark[data-compact='true'] img {
+  width: 12px;
+  height: 12px;
+}
+
+.agent-capability-schematic {
+  display: grid;
+  grid-template-columns: minmax(116px, 0.26fr) minmax(0, 1fr);
+  gap: 26px;
+  padding: 20px;
+  border: 1px solid rgba(188, 195, 208, 0.16);
+  border-radius: 12px;
+  background: rgba(7, 9, 13, 0.72);
+}
+
+.agent-capability-origin {
+  min-height: 48px;
+  align-self: center;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 9px 12px;
+  border: 1px solid rgba(149, 120, 255, 0.66);
+  border-radius: 8px;
+  background: rgba(149, 120, 255, 0.04);
+  text-align: center;
+}
+
+.agent-capability-origin strong {
+  font-family: var(--font-display, sans-serif);
+  font-size: 12px;
+}
+
+.agent-capability-origin span,
+.agent-capability-group h4 {
+  color: #747b87;
+  font-family: var(--font-display, sans-serif);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.agent-capability-groups {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.agent-capability-group h4 {
+  margin: 0 0 8px;
+}
+
+.agent-capability-group ul,
+.agent-capability-strip {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-capability-group > p {
+  margin: 0;
+  color: #7f8692;
+  font-size: 11px;
+}
+
+.agent-capability-branch {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(26px, 72px) 10px 26px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.agent-capability-line {
+  width: 100%;
+  border-top: 1.5px solid #8d75e6;
+}
+
+.agent-capability-branch[data-authority='declared'] .agent-capability-line {
+  border-top-color: #505762;
+  border-top-style: dashed;
+}
+
+.agent-capability-terminal {
+  width: 9px;
+  height: 9px;
+  display: block;
+  border: 1.5px solid #69d59a;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.agent-capability-branch[data-effect='write'] .agent-capability-terminal,
+.agent-capability-branch[data-effect='destructive'] .agent-capability-terminal {
+  border-color: #e8b34b;
+  background: #e8b34b;
+}
+
+.agent-capability-branch[data-effect='destructive'] .agent-capability-terminal {
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 2px #11141a;
+}
+
+.agent-capability-branch[data-authority='declared'] .agent-capability-terminal {
+  border-color: #5c6370;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-capability-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.agent-capability-copy strong {
+  font-family: var(--font-display, sans-serif);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.agent-capability-copy small {
+  overflow: hidden;
+  color: #8f96a3;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-capability-legend {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(188, 195, 208, 0.1);
+  color: #8f96a3;
+  font-size: 10px;
+}
+
+.agent-capability-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-capability-legend i[data-effect] {
+  width: 8px;
+  height: 8px;
+  border: 1.4px solid #69d59a;
+  border-radius: 50%;
+}
+
+.agent-capability-legend i[data-effect='write'] {
+  border-color: #e8b34b;
+  background: #e8b34b;
+}
+
+.agent-capability-legend i[data-authority] {
+  width: 18px;
+  border-top: 1.5px solid #8d75e6;
+}
+
+.agent-capability-legend i[data-authority='declared'] {
+  border-top-color: #505762;
+  border-top-style: dashed;
+}
+
+.agent-capability-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.agent-capability-strip > li {
+  position: relative;
+  display: inline-grid;
+}
+
+.agent-capability-strip > li[data-authority='declared'] .connector-mark {
+  border-style: dashed;
+  opacity: 0.5;
+}
+
+.agent-capability-strip-effect {
+  width: 7px;
+  height: 7px;
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  border: 1.5px solid #69d59a;
+  border-radius: 50%;
+  background: #080a0f;
+}
+
+.agent-capability-strip > li[data-effect='write'] .agent-capability-strip-effect,
+.agent-capability-strip > li[data-effect='destructive'] .agent-capability-strip-effect {
+  border-color: #e8b34b;
+  background: #e8b34b;
+}
+
+.agent-capability-strip > li[data-effect='destructive'] .agent-capability-strip-effect {
+  border-radius: 1px;
+}
+
+.agent-capability-strip > li[data-authority='declared'] .agent-capability-strip-effect {
+  border-color: #5c6370;
+  background: #080a0f;
+}
+
+@media (max-width: 620px) {
+  .agent-capability-schematic {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-capability-origin {
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connector-mark {
+    transition: none;
+  }
+}

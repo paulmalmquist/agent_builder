@@ -1,0 +1,18 @@
+<Project Sdk="WixToolset.Sdk/4.0.6">
+  <PropertyGroup>
+    <OutputName>PaulOs.WorkstationBroker</OutputName>
+    <OutputType>Package</OutputType>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ServicePublishDir)' == ''">
+    <ServicePublishDir>$(MSBuildThisFileDirectory)..\artifacts\service</ServicePublishDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(CompanionPublishDir)' == ''">
+    <CompanionPublishDir>$(MSBuildThisFileDirectory)..\artifacts\companion</CompanionPublishDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <DefineConstants>ServicePublishDir=$(ServicePublishDir);CompanionPublishDir=$(CompanionPublishDir)</DefineConstants>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Governed p95 latency metric identifier; this is a schema key, not a credential"
+regexTarget = "line"
+regexes = ['''p95_latency_ms''']

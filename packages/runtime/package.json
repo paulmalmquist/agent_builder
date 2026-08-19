@@ -1,0 +1,32 @@
+{
+  "name": "@paul-os/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./aim": {
+      "types": "./dist/aim/index.d.ts",
+      "import": "./dist/aim/index.js"
+    }
+  },
+  "bin": {
+    "paul-os": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "node --test test/*.test.mjs",
+    "clean": "tsc -b --clean"
+  },
+  "dependencies": {
+    "@agent-builder/contracts": "0.2.0",
+    "yaml": "2.9.0",
+    "zod": "3.24.2"
+  }
+}

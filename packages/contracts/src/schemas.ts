@@ -56,7 +56,7 @@ export const sourceProviderSchema = z.enum([
   'jira',
   'email',
   'slack',
-  'interstellar',
+  'telemetry',
   'fixture',
 ]);
 export const evaluationStatusSchema = z.enum(['not_run', 'passed', 'failed']);

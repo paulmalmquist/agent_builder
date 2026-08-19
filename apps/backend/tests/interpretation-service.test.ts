@@ -89,10 +89,11 @@ function createPrisma(
     auditEvent: { create: auditCreate },
   };
   const prisma = {
-    agentSpec: { findUnique: agentSpecFindUnique },
+    agentSpec: { findUnique: agentSpecFindUnique, findFirst: agentSpecFindUnique },
     knowledgeSource: { findMany: jest.fn(async () => []) },
     specInterpretation: {
       findUnique: specInterpretationFindUnique,
+      findFirst: specInterpretationFindUnique,
       findMany: specInterpretationFindMany,
       deleteMany,
     },

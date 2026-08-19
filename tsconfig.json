@@ -2,8 +2,10 @@
   "files": [],
   "references": [
     { "path": "./packages/contracts" },
+    { "path": "./packages/runtime" },
     { "path": "./apps/generator-cli" },
     { "path": "./apps/backend" },
+    { "path": "./apps/worker" },
     { "path": "./apps/frontend" }
   ]
 }

@@ -19,7 +19,9 @@ import {
 } from '@agent-builder/contracts';
 import { AppError } from '../errors.js';
 import { toAgent } from '../mappers.js';
+import { aggregateScopeWhere } from '../scope.js';
 import type { CatalogApi } from './types.js';
+import { userFacingAgentFamilyWhere, userFacingAgentWhere } from './user-facing-records.js';
 
 const tokens = (value: string): string[] =>
   value
@@ -77,7 +79,7 @@ const providerMap = {
   jira: DatabaseSourceProvider.JIRA,
   email: DatabaseSourceProvider.EMAIL,
   slack: DatabaseSourceProvider.SLACK,
-  interstellar: DatabaseSourceProvider.INTERSTELLAR,
+  telemetry: DatabaseSourceProvider.TELEMETRY,
   fixture: DatabaseSourceProvider.FIXTURE,
 } as const;
 
@@ -87,7 +89,7 @@ const providerWire = {
   [DatabaseSourceProvider.JIRA]: 'jira',
   [DatabaseSourceProvider.EMAIL]: 'email',
   [DatabaseSourceProvider.SLACK]: 'slack',
-  [DatabaseSourceProvider.INTERSTELLAR]: 'interstellar',
+  [DatabaseSourceProvider.TELEMETRY]: 'telemetry',
   [DatabaseSourceProvider.FIXTURE]: 'fixture',
 } as const;
 
@@ -116,6 +118,8 @@ export class CatalogService implements CatalogApi {
 
     const normalizedQuery = query.query?.trim() ?? '';
     const where: Prisma.AgentWhereInput = {
+      AND: [userFacingAgentWhere],
+      family: aggregateScopeWhere(),
       ...(query.department === undefined ? {} : { department: query.department }),
       ...(query.status === undefined
         ? { status: { not: DatabaseAgentStatus.RETIRED } }
@@ -183,8 +187,16 @@ export class CatalogService implements CatalogApi {
     const records = await this.prisma.agent.findMany({
       where:
         request.candidateIds === undefined
-          ? { status: { not: DatabaseAgentStatus.RETIRED } }
-          : { id: { in: request.candidateIds } },
+          ? {
+              AND: [userFacingAgentWhere],
+              family: aggregateScopeWhere(),
+              status: { not: DatabaseAgentStatus.RETIRED },
+            }
+          : {
+              AND: [userFacingAgentWhere],
+              id: { in: request.candidateIds },
+              family: aggregateScopeWhere(),
+            },
       include: { family: true, knowledgeSources: { include: { source: true } } },
       orderBy: [{ familyId: 'asc' }, { versionNumber: 'desc' }],
     });
@@ -223,18 +235,23 @@ export class CatalogService implements CatalogApi {
   }
 
   async getAgent(agentId: string): Promise<Agent> {
-    const record = await this.prisma.agent.findUnique({ where: { id: agentId } });
+    const record = await this.prisma.agent.findFirst({
+      where: { id: agentId, family: aggregateScopeWhere() },
+    });
     if (!record) throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent was not found', { agentId });
     return toAgent(record);
   }
 
   private async familyVersions(query: AgentCatalogQuery): Promise<AgentCatalogResponse> {
     const familyId = query.familyId as string;
-    const family = await this.prisma.agentFamily.findUnique({ where: { id: familyId } });
+    const family = await this.prisma.agentFamily.findFirst({
+      where: { AND: [userFacingAgentFamilyWhere], id: familyId, ...aggregateScopeWhere() },
+    });
     if (!family)
       throw new AppError(404, 'AGENT_FAMILY_NOT_FOUND', 'Agent family was not found', { familyId });
     const records = await this.prisma.agent.findMany({
       where: {
+        AND: [userFacingAgentWhere],
         familyId,
         ...(query.includeRetired === 'true'
           ? {}

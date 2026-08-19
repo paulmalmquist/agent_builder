@@ -17,7 +17,27 @@ import type {
   SourceDescriptor,
   UpdateKnowledgeRequest,
 } from '@agent-builder/contracts';
-import { agentApi, ApiError, type CatalogFilters } from './client';
+import {
+  agentApi,
+  ApiError,
+  builderApi,
+  platformApi,
+  type ApproveRunInput,
+  type CatalogFilters,
+  type GrantFilters,
+  type ResourceFilters,
+  type ReviewImprovementInput,
+  type ReviewMemoryInput,
+  type DeclineReleaseInput,
+  type PromoteReleaseInput,
+  type RollbackReleaseInput,
+  type ConfigurePluginInput,
+  type InstallPluginInput,
+  type PluginCatalogFilters,
+  type RunFilters,
+  type CreateBuilderDecisionInput,
+  type CreateBuilderIntakeInput,
+} from './client';
 
 type InterpretationConfirmation = NonNullable<UpdateKnowledgeRequest['interpretationConfirmation']>;
 
@@ -33,7 +53,91 @@ export const queryKeys = {
   evaluation: (agentId: string | null) => ['evaluation', agentId] as const,
   certificationRun: (runId: string | null) => ['certification-run', runId] as const,
   certificationRuns: (agentId: string | null) => ['certification-runs', agentId] as const,
+  platformResources: (filters: ResourceFilters) => ['platform-resources', filters] as const,
+  platformResource: (resourceVersionId: string | null) =>
+    ['platform-resource', resourceVersionId] as const,
+  attention: ['attention'] as const,
+  attentionItem: (itemId: string | null) => ['attention-item', itemId] as const,
+  executionRuns: (filters: RunFilters) => ['execution-runs', filters] as const,
+  executionRun: (runId: string | null) => ['execution-run', runId] as const,
+  authorityGrants: (filters: GrantFilters) => ['authority-grants', filters] as const,
+  outcomes: (runId?: string) => ['outcomes', runId ?? 'all'] as const,
+  metrics: (runId?: string) => ['metrics', runId ?? 'all'] as const,
+  automationSchedules: ['automation-schedules'] as const,
+  productionChannel: (channelKey: string) => ['production-channel', channelKey] as const,
+  releaseEvaluation: (evaluationId: string | null) => ['release-evaluation', evaluationId] as const,
+  observations: ['observations'] as const,
+  improvementCandidates: ['improvement-candidates'] as const,
+  memoryCandidates: ['memory-candidates'] as const,
+  plugins: (filters: PluginCatalogFilters) => ['plugins', filters] as const,
+  pluginInstallations: ['plugin-installations'] as const,
+  pluginUsedBy: (installationId: string | null) => ['plugin-used-by', installationId] as const,
+  builderChoices: (intakeId: string | null) => ['builder-referred-choices', intakeId] as const,
+  session: ['session'] as const,
+  catalogPublications: ['catalog-publications'] as const,
 };
+
+export function useCreateBuilderIntake() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (value: CreateBuilderIntakeInput) => builderApi.createIntake(value),
+    onSuccess: (intake) =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.builderChoices(intake.id) }),
+  });
+}
+
+export function useBuilderReferredChoices(intakeId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.builderChoices(intakeId),
+    queryFn: () => builderApi.getReferredChoices(intakeId ?? ''),
+    enabled: intakeId !== null,
+  });
+}
+
+export function useCreateBuilderDecision(intakeId: string | null) {
+  return useMutation({
+    mutationFn: ({
+      value,
+      idempotencyKey,
+    }: {
+      value: CreateBuilderDecisionInput;
+      idempotencyKey: string;
+    }) => {
+      if (!intakeId) throw new Error('Confirm a Builder intake before choosing an option.');
+      return builderApi.createDecision(intakeId, value, idempotencyKey);
+    },
+  });
+}
+
+export function useAttention() {
+  return useQuery({
+    queryKey: queryKeys.attention,
+    queryFn: () => platformApi.getAttention(),
+    retry: false,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 10_000),
+  });
+}
+
+export function useAttentionItem(itemId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.attentionItem(itemId),
+    queryFn: () => platformApi.getAttentionItem(itemId ?? ''),
+    enabled: itemId !== null,
+  });
+}
+
+export function useResolveAttentionItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, rationale }: { itemId: string; rationale: string }) =>
+      platformApi.resolveAttentionItem(itemId, rationale),
+    onSuccess: (_resolution, variables) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attentionItem(variables.itemId) }),
+      ]),
+  });
+}
 
 export function useAgentSearch(query: string, enabled = true, retainPreviousData = true) {
   return useQuery({
@@ -41,6 +145,364 @@ export function useAgentSearch(query: string, enabled = true, retainPreviousData
     queryFn: () => agentApi.search(query),
     ...(retainPreviousData ? { placeholderData: keepPreviousData } : {}),
     enabled,
+  });
+}
+
+export function usePlatformResources(filters: ResourceFilters, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.platformResources(filters),
+    queryFn: () => platformApi.listResources(filters),
+    enabled,
+  });
+}
+
+export function usePlatformResource(resourceVersionId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.platformResource(resourceVersionId),
+    queryFn: () => platformApi.getResource(resourceVersionId ?? ''),
+    enabled: resourceVersionId !== null,
+  });
+}
+
+export function useSession() {
+  return useQuery({
+    queryKey: queryKeys.session,
+    queryFn: () => platformApi.getSession(),
+  });
+}
+
+export function useCatalogPublications() {
+  return useQuery({
+    queryKey: queryKeys.catalogPublications,
+    queryFn: () => platformApi.listCatalogPublications(),
+  });
+}
+
+export function usePlugins(filters: PluginCatalogFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.plugins(filters),
+    queryFn: () => platformApi.listPlugins(filters),
+    refetchInterval: 30_000,
+  });
+}
+
+export function usePluginInstallations() {
+  return useQuery({
+    queryKey: queryKeys.pluginInstallations,
+    queryFn: () => platformApi.listPluginInstallations(),
+  });
+}
+
+export function usePluginUsedBy(installationId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.pluginUsedBy(installationId),
+    queryFn: () => platformApi.getPluginUsedBy(installationId ?? ''),
+    enabled: installationId !== null,
+  });
+}
+
+function useInvalidatePlugins() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['plugins'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.pluginInstallations }),
+      queryClient.invalidateQueries({ queryKey: ['plugin-used-by'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+    ]);
+}
+
+export function useInstallPlugin() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: (value: InstallPluginInput) => platformApi.installPlugin(value),
+    onSuccess: invalidate,
+  });
+}
+
+export function useConfigurePluginInstallation() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: ({
+      installationId,
+      value,
+    }: {
+      installationId: string;
+      value: ConfigurePluginInput;
+    }) => platformApi.configurePluginInstallation(installationId, value),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCheckPluginHealth() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: (installationId: string) => platformApi.checkPluginHealth(installationId),
+    onSuccess: invalidate,
+  });
+}
+
+export function useSetPluginInstallationState() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: ({
+      installationId,
+      action,
+      rationale,
+    }: {
+      installationId: string;
+      action: 'enable' | 'disable';
+      rationale: string;
+    }) => platformApi.setPluginInstallationState(installationId, action, rationale),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUninstallPlugin() {
+  const invalidate = useInvalidatePlugins();
+  return useMutation({
+    mutationFn: ({ installationId, rationale }: { installationId: string; rationale: string }) =>
+      platformApi.uninstallPlugin(installationId, rationale),
+    onSuccess: invalidate,
+  });
+}
+
+export function useExecutionRuns(filters: RunFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.executionRuns(filters),
+    queryFn: () => platformApi.listExecutionRuns(filters),
+    refetchInterval: (query) => {
+      const hasOpenWork = query.state.data?.items.some(
+        (run) =>
+          run.state === 'awaiting_approval' || run.state === 'queued' || run.state === 'running',
+      );
+      return hasOpenWork ? 2_000 : 10_000;
+    },
+  });
+}
+
+export function useExecutionRun(runId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.executionRun(runId),
+    queryFn: () => platformApi.getExecutionRun(runId ?? ''),
+    enabled: runId !== null,
+  });
+}
+
+export function useAuthorityGrants(filters: GrantFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.authorityGrants(filters),
+    queryFn: () => platformApi.listAuthorityGrants(filters),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useOutcomes(runId?: string) {
+  return useQuery({
+    queryKey: queryKeys.outcomes(runId),
+    queryFn: () => platformApi.listOutcomes(runId),
+  });
+}
+
+export function useMetrics(runId?: string) {
+  return useQuery({
+    queryKey: queryKeys.metrics(runId),
+    queryFn: () => platformApi.listMetrics(runId),
+  });
+}
+
+export function useAutomationSchedules() {
+  return useQuery({
+    queryKey: queryKeys.automationSchedules,
+    queryFn: () => platformApi.listAutomationSchedules(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useUpdateAutomationScheduleState() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      scheduleId,
+      state,
+      rationale,
+    }: {
+      scheduleId: string;
+      state: 'active' | 'paused';
+      rationale: string;
+    }) => platformApi.updateAutomationScheduleState(scheduleId, { state, rationale }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.automationSchedules }),
+  });
+}
+
+export function useProductionChannel(channelKey: string) {
+  return useQuery({
+    queryKey: queryKeys.productionChannel(channelKey),
+    queryFn: () => platformApi.getProductionChannel(channelKey),
+  });
+}
+
+export function useRollbackRelease(channelKey: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (value: RollbackReleaseInput) => platformApi.rollbackRelease(channelKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.productionChannel(channelKey) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
+  });
+}
+
+export function useReleaseEvaluation(evaluationId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.releaseEvaluation(evaluationId),
+    queryFn: () => platformApi.getReleaseEvaluation(evaluationId ?? ''),
+    enabled: evaluationId !== null,
+  });
+}
+
+export function useObservations() {
+  return useQuery({
+    queryKey: queryKeys.observations,
+    queryFn: () => platformApi.listObservations(),
+  });
+}
+
+export function useImprovementCandidates() {
+  return useQuery({
+    queryKey: queryKeys.improvementCandidates,
+    queryFn: () => platformApi.listImprovementCandidates(),
+  });
+}
+
+export function useReviewImprovementCandidate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ candidateId, value }: { candidateId: string; value: ReviewImprovementInput }) =>
+      platformApi.reviewImprovementCandidate(candidateId, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.improvementCandidates }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
+  });
+}
+
+export function useMemoryCandidates() {
+  return useQuery({
+    queryKey: queryKeys.memoryCandidates,
+    queryFn: () => platformApi.listMemoryCandidates(),
+  });
+}
+
+export function useReviewMemoryCandidate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ candidateId, value }: { candidateId: string; value: ReviewMemoryInput }) =>
+      platformApi.reviewMemoryCandidate(candidateId, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.memoryCandidates }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
+  });
+}
+
+export function useApproveExecutionRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, value }: { runId: string; value: ApproveRunInput }) =>
+      platformApi.approveExecutionRun(runId, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+        queryClient.invalidateQueries({ queryKey: ['authority-grants'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
+  });
+}
+
+export function useApproveExecutionApprovalGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupKey, value }: { groupKey: string; value: ApproveRunInput }) =>
+      platformApi.approveExecutionApprovalGroup(groupKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+        queryClient.invalidateQueries({ queryKey: ['authority-grants'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+      ]),
+  });
+}
+
+export function useRejectExecutionRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, rationale }: { runId: string; rationale: string }) =>
+      platformApi.rejectExecutionRun(runId, rationale),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+      ]),
+  });
+}
+
+export function useRejectExecutionApprovalGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupKey, rationale }: { groupKey: string; rationale: string }) =>
+      platformApi.rejectExecutionApprovalGroup(groupKey, rationale),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+      ]),
+  });
+}
+
+export function usePromoteRelease() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelKey, value }: { channelKey: string; value: PromoteReleaseInput }) =>
+      platformApi.promoteRelease(channelKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['production-channel'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform-resources'] }),
+      ]),
+  });
+}
+
+export function useDeclineRelease() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelKey, value }: { channelKey: string; value: DeclineReleaseInput }) =>
+      platformApi.declineRelease(channelKey, value),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
+        queryClient.invalidateQueries({ queryKey: ['production-channel'] }),
+      ]),
+  });
+}
+
+export function useCancelExecutionRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => platformApi.cancelExecutionRun(runId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['execution-runs'] }),
+  });
+}
+
+export function useRevokeAuthorityGrant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (grantId: string) => platformApi.revokeAuthorityGrant(grantId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['authority-grants'] }),
   });
 }
 
@@ -86,7 +548,7 @@ export function useAgentDetail(agentId: string | null) {
 export function useSourceCatalog(role: SourceDescriptor['role'], enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.sources(role),
-    queryFn: () => agentApi.listSources(role),
+    queryFn: () => builderApi.listSources(role),
     enabled,
     staleTime: 5 * 60_000,
   });
@@ -95,7 +557,7 @@ export function useSourceCatalog(role: SourceDescriptor['role'], enabled: boolea
 export function useAgentSpec(specId: string | null) {
   return useQuery({
     queryKey: queryKeys.spec(specId),
-    queryFn: () => agentApi.getSpec(specId ?? ''),
+    queryFn: () => builderApi.getSpec(specId ?? ''),
     enabled: specId !== null,
   });
 }
@@ -113,7 +575,7 @@ export function useCreateSpec() {
       baseAgentId: string | null;
       derivationMode: DerivationMode;
       interpretationId: string | null;
-    }) => agentApi.createSpec(outcomes, baseAgentId, derivationMode, interpretationId),
+    }) => builderApi.createSpec(outcomes, baseAgentId, derivationMode, interpretationId),
     onSuccess: (spec) => {
       queryClient.setQueryData(queryKeys.spec(spec.id), spec);
     },
@@ -134,13 +596,13 @@ export function useUpdateSpecSection(specId: string | null) {
 
       switch (update.section) {
         case 'outcomes':
-          return agentApi.updateOutcomes(specId, update.value, update.confirmation);
+          return builderApi.updateOutcomes(specId, update.value, update.confirmation);
         case 'knowledge':
-          return agentApi.updateKnowledge(specId, update.value, update.confirmation);
+          return builderApi.updateKnowledge(specId, update.value, update.confirmation);
         case 'guardrails':
-          return agentApi.updateGuardrails(specId, update.value, update.confirmation);
+          return builderApi.updateGuardrails(specId, update.value, update.confirmation);
         case 'outputs':
-          return agentApi.updateOutputs(specId, update.value, update.confirmation);
+          return builderApi.updateOutputs(specId, update.value, update.confirmation);
       }
     },
     onSuccess: (spec: AgentSpec) => {
@@ -151,14 +613,14 @@ export function useUpdateSpecSection(specId: string | null) {
 
 export function useInterpretSpec() {
   return useMutation({
-    mutationFn: (value: InterpretSpecRequest) => agentApi.interpretSpec(value),
+    mutationFn: (value: InterpretSpecRequest) => builderApi.interpretSpec(value),
   });
 }
 
 export function useGenerationJob(jobId: string | null) {
   return useQuery({
     queryKey: queryKeys.generationJob(jobId),
-    queryFn: () => agentApi.getGenerationJob(jobId ?? ''),
+    queryFn: () => builderApi.getGenerationJob(jobId ?? ''),
     enabled: jobId !== null,
     retry: (failureCount, error) => {
       if (error instanceof ApiError && error.status === 404) return false;
@@ -180,7 +642,7 @@ export function useGenerationJob(jobId: string | null) {
 export function useEvaluation(agentId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.evaluation(agentId),
-    queryFn: () => agentApi.getEvaluation(agentId ?? ''),
+    queryFn: () => builderApi.getEvaluation(agentId ?? ''),
     enabled: enabled && agentId !== null,
     refetchInterval: (query) => {
       if (query.state.status === 'error' || query.state.data?.status === 'complete') {

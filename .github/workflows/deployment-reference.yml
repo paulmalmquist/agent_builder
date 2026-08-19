@@ -1,0 +1,127 @@
+name: Deployment reference
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/deployment-reference.yml'
+      - 'apps/backend/Dockerfile'
+      - 'apps/frontend/Dockerfile'
+      - 'apps/frontend/nginx.conf'
+      - 'apps/worker/Dockerfile'
+      - 'ops/**'
+      - 'packages/contracts/src/deployment-schemas.ts'
+      - 'packages/contracts/test/deployment-schemas.test.mjs'
+      - '06-business-domains/synthetic-demo/**'
+      - 'scripts/compose-worker-smoke.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deployment-reference.yml'
+      - 'ops/**'
+      - 'packages/contracts/src/deployment-schemas.ts'
+      - 'packages/contracts/test/deployment-schemas.test.mjs'
+      - '06-business-domains/synthetic-demo/**'
+      - 'scripts/compose-worker-smoke.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: v4.2.3
+  KIND_VERSION: v0.32.0
+  KUBECTL_VERSION: v1.35.0
+  TERRAFORM_VERSION: 1.15.8
+
+jobs:
+  static-reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @agent-builder/contracts
+      - run: npm test -w @agent-builder/contracts
+      - uses: Azure/setup-helm@v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Lint and render proposal and kind chart modes
+        run: |
+          helm lint ops/helm/paul-os
+          helm lint ops/helm/paul-os --values ops/helm/paul-os/values-kind.yaml
+          helm template paul-os ops/helm/paul-os > /tmp/paul-os-proposal.yaml
+          helm template paul-os ops/helm/paul-os --values ops/helm/paul-os/values-kind.yaml > /tmp/paul-os-kind.yaml
+          test "$(grep -c 'replicas: 1' /tmp/paul-os-proposal.yaml)" -ge 1
+          ! grep -E 'image: .*:latest([[:space:]]|$)' /tmp/paul-os-proposal.yaml
+      - name: Prove production placeholders fail closed
+        run: |
+          if helm template paul-os ops/helm/paul-os --values ops/helm/paul-os/values-production.example.yaml; then
+            echo 'Production placeholders rendered unexpectedly.' >&2
+            exit 1
+          fi
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: Validate Terraform without credentials or apply
+        working-directory: ops/terraform/gke-reference
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate -no-color
+      - name: Prove the workflow has no infrastructure apply path
+        run: |
+          ! grep -E 'terraform[[:space:]]+apply|gcloud[[:space:]].*create' .github/workflows/deployment-reference.yml ops/terraform/gke-reference/*.tf
+
+  kind-demo:
+    runs-on: ubuntu-latest
+    needs: static-reference
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: Azure/setup-helm@v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - uses: helm/kind-action@v1.14.0
+        with:
+          version: ${{ env.KIND_VERSION }}
+          kubectl_version: ${{ env.KUBECTL_VERSION }}
+          cluster_name: paul-os-demo
+          config: ops/kind/kind-config.yaml
+          wait: 120s
+      - name: Build and load synthetic demo images
+        run: |
+          docker build --tag paul-os/backend:kind --file apps/backend/Dockerfile .
+          docker build --tag paul-os/frontend:kind --file apps/frontend/Dockerfile .
+          docker build --tag paul-os/worker:kind --file apps/worker/Dockerfile .
+          kind load docker-image paul-os/backend:kind paul-os/frontend:kind paul-os/worker:kind --name paul-os-demo
+      - name: Install fixture-only chart
+        run: |
+          helm upgrade --install paul-os ops/helm/paul-os \
+            --namespace paul-os \
+            --create-namespace \
+            --values ops/helm/paul-os/values-kind.yaml \
+            --set-string global.repositorySourceCommit="${GITHUB_SHA}" \
+            --wait \
+            --wait-for-jobs \
+            --timeout 10m
+      - name: Verify health, migration, and singleton ownership
+        run: |
+          curl --fail --retry 30 --retry-delay 2 --retry-all-errors http://127.0.0.1:18080/live
+          curl --fail http://127.0.0.1:18080/ready
+          curl --fail http://127.0.0.1:18080/openapi.json
+          test "$(kubectl get deployment paul-os-backend --namespace paul-os --output jsonpath='{.spec.replicas}')" = '1'
+          kubectl get secret paul-os-kind-runtime --namespace paul-os --show-labels | grep 'paul-os.dev/fixture-only=true'
+      - name: Verify deterministic API to worker to outcome lifecycle
+        env:
+          PAUL_OS_BASE_URL: http://127.0.0.1:18080
+          PAUL_OS_FIXTURE_OIDC_SUBJECT: local-user-fixture
+        run: |
+          PAUL_OS_FIXTURE_OIDC_SECRET="$(kubectl get secret paul-os-kind-runtime --namespace paul-os --output jsonpath='{.data.FIXTURE_OIDC_SECRET}' | base64 --decode)"
+          export PAUL_OS_FIXTURE_OIDC_SECRET
+          node scripts/compose-worker-smoke.mjs

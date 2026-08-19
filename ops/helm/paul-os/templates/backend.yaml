@@ -1,0 +1,156 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paul-os.fullname" . }}-backend
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "paul-os.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      serviceAccountName: {{ include "paul-os.backendServiceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccounts.backend.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-migrations
+          image: {{ .Values.images.migrator | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.nodeContainerSecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - >-
+              until node node_modules/prisma/build/index.js migrate status
+              --schema apps/backend/prisma/schema.prisma; do sleep 3; done
+          env:
+            - name: HOME
+              value: /tmp
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.apiDatabase.name }}
+                  key: {{ .Values.externalSecrets.apiDatabase.key }}
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      containers:
+        - name: backend
+          image: {{ .Values.images.backend | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.nodeContainerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.servicePort }}
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: {{ .Values.externalSecrets.backendEnvironment.name }}
+          env:
+            - name: HOME
+              value: /tmp
+            - name: NODE_ENV
+              value: {{ .Values.global.nodeEnv | quote }}
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: {{ .Values.backend.servicePort | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecrets.apiDatabase.name }}
+                  key: {{ .Values.externalSecrets.apiDatabase.key }}
+            - name: AUTH_MODE
+              value: {{ .Values.auth.mode | quote }}
+            - name: OIDC_ISSUER
+              value: {{ .Values.auth.issuer | quote }}
+            - name: OIDC_AUDIENCES
+              value: {{ .Values.auth.audiences | quote }}
+            - name: OIDC_JWKS_URI
+              value: {{ .Values.auth.jwksUri | quote }}
+            - name: OIDC_GROUP_CLAIM
+              value: {{ .Values.auth.groupClaim | quote }}
+            - name: OIDC_VERIFIER
+              value: {{ .Values.auth.verifier | quote }}
+            {{- if eq .Values.auth.mode "fixture_oidc" }}
+            - name: AUTH_PRINCIPAL_ID
+              value: {{ .Values.auth.fixture.principalId | quote }}
+            - name: AUTH_WORKSPACE_ID
+              value: {{ .Values.auth.fixture.workspaceId | quote }}
+            - name: AUTH_DEPARTMENT_ID
+              value: {{ .Values.auth.fixture.departmentId | quote }}
+            - name: AUTH_ROLES
+              value: {{ .Values.auth.fixture.roles | quote }}
+            {{- end }}
+            - name: EXECUTION_DISPATCH_MODE
+              value: external
+            - name: MODEL_PROVIDER
+              value: {{ .Values.global.modelProvider | quote }}
+            - name: PROVIDER_POLICY
+              value: {{ .Values.global.providerPolicy | quote }}
+            - name: MODEL_NAME
+              value: {{ .Values.global.modelName | quote }}
+            - name: MODEL_PRICING_VERSION
+              value: {{ .Values.global.pricingVersion | quote }}
+            - name: REPOSITORY_SOURCE_COMMIT
+              value: {{ .Values.global.repositorySourceCommit | quote }}
+            - name: ALLOW_UNVERIFIED_REPOSITORY_IMPORTS
+              value: {{ .Values.global.allowUnverifiedRepositoryImports | quote }}
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: temporary
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "paul-os.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+  ports:
+    - name: http
+      port: {{ .Values.backend.servicePort }}
+      targetPort: http

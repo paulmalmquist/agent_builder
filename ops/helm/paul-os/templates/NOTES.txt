@@ -1,0 +1,7 @@
+This chart is a proposal/demo artifact. It does not authorize an enterprise deployment.
+
+Mode: {{ .Values.deploymentMode }}
+Backend replicas: {{ .Values.backend.replicaCount }} (intentionally fixed at one)
+
+Production activation requires approved identity, gateway, secrets, image digests, database,
+network, security review, operational owners, and a separately authorized rollout.

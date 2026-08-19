@@ -9,6 +9,17 @@ import {
   server,
 } from '../../test/server';
 
+async function submitBuildNew(
+  user: ReturnType<typeof userEvent.setup>,
+  reason = 'The approval boundary needs an independent implementation.',
+) {
+  await user.click(
+    await screen.findByRole('button', { name: /None of these fit — Build a new agent/i }),
+  );
+  await user.type(screen.getByLabelText(/Why does the referred option not fit/i), reason);
+  await user.click(screen.getByRole('button', { name: 'Create new draft' }));
+}
+
 describe('single-shot specification input', () => {
   it('prefills governed sections, runs reuse discovery, and escalates requested authority', async () => {
     const user = userEvent.setup();
@@ -37,10 +48,14 @@ describe('single-shot specification input', () => {
   it('requires an explicit scope save before an interpreted draft can be created', async () => {
     const user = userEvent.setup();
     let specCreationRequests = 0;
+    let decisionRequests = 0;
     const recordSpecCreation = ({ request }: { request: Request; requestId: string }) => {
       const url = new URL(request.url);
-      if (request.method === 'POST' && url.pathname === '/agents/specs') {
+      if (request.method === 'POST' && url.pathname === '/v1/builder/specs') {
         specCreationRequests += 1;
+      }
+      if (request.method === 'POST' && url.pathname.endsWith('/decisions')) {
+        decisionRequests += 1;
       }
     };
     server.events.on('request:start', recordSpecCreation);
@@ -55,25 +70,25 @@ describe('single-shot specification input', () => {
       await user.click(screen.getByRole('button', { name: 'Interpret brief' }));
       expect(await screen.findByText('87% MATCH')).toBeInTheDocument();
 
-      await user.click(
-        screen.getByRole('button', { name: /None of these fit — Build a new agent/i }),
-      );
+      await submitBuildNew(user);
 
       expect(specCreationRequests).toBe(0);
+      expect(decisionRequests).toBe(0);
       expect(
-        screen.getByText('Review and save the interpreted scope before creating a draft.'),
+        screen.getByText(
+          'Review and save the interpreted scope before choosing an implementation.',
+        ),
       ).toBeInTheDocument();
       expect(screen.getByRole('dialog', { name: 'Define scope & purpose' })).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Find reusable agents' }));
-      await user.click(
-        screen.getByRole('button', { name: /None of these fit — Build a new agent/i }),
-      );
+      await submitBuildNew(user);
 
       expect(
         await screen.findByText('New draft created. Continue with governed knowledge.'),
       ).toBeInTheDocument();
       expect(specCreationRequests).toBe(1);
+      expect(decisionRequests).toBe(1);
       expect(lastOutcomesConfirmation).toEqual({ interpretationId, resolutions: [] });
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /open step 02/i })).toHaveAttribute(
@@ -97,13 +112,9 @@ describe('single-shot specification input', () => {
     await user.click(screen.getByRole('button', { name: 'Interpret brief' }));
     expect(await screen.findByText('87% MATCH')).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole('button', { name: /None of these fit — Build a new agent/i }),
-    );
+    await submitBuildNew(user);
     await user.click(screen.getByRole('button', { name: 'Find reusable agents' }));
-    await user.click(
-      screen.getByRole('button', { name: /None of these fit — Build a new agent/i }),
-    );
+    await submitBuildNew(user);
     expect(
       await screen.findByText('New draft created. Continue with governed knowledge.'),
     ).toBeInTheDocument();
@@ -145,11 +156,7 @@ describe('single-shot specification input', () => {
     await user.type(screen.getByLabelText('Primary users'), 'Program managers');
     await user.type(screen.getByLabelText('Desired outcomes'), 'Produce a traceable action brief');
     await user.click(screen.getByRole('button', { name: 'Find reusable agents' }));
-    await user.click(
-      await screen.findByRole('button', {
-        name: /None of these fit — Build a new agent/i,
-      }),
-    );
+    await submitBuildNew(user);
     expect(
       await screen.findByText('New draft created. Continue with governed knowledge.'),
     ).toBeInTheDocument();

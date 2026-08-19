@@ -19,6 +19,16 @@ Object.defineProperty(window, 'matchMedia', {
   writable: true,
 });
 
+Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+  configurable: true,
+  value: vi.fn(),
+});
+
+Object.defineProperty(window, 'scrollTo', {
+  configurable: true,
+  value: vi.fn(),
+});
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => resetFixtures());
 afterEach(() => server.resetHandlers());

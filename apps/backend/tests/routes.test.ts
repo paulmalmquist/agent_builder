@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/unbound-method */
+import { Writable } from 'node:stream';
 import request from 'supertest';
 import { pino } from 'pino';
 import {
@@ -17,6 +18,7 @@ import {
   generationJobSchema,
   gateConfigListResponseSchema,
   interpretSpecResponseSchema,
+  liveResponseSchema,
   promotionResponseSchema,
   retirementResponseSchema,
   shadowDeployResponseSchema,
@@ -29,7 +31,13 @@ import {
 } from '@agent-builder/contracts';
 import { createApp } from '../src/app.js';
 import { AppError } from '../src/errors.js';
+import { createLogger } from '../src/logger.js';
 import type { ServiceBundle } from '../src/services/types.js';
+import {
+  LOCAL_DEPARTMENT_ID,
+  LOCAL_PRINCIPAL_ID,
+  LOCAL_WORKSPACE_ID,
+} from '../src/scope-constants.js';
 
 const agentId = 'e341457e-e682-4429-898f-a07d31d88a35';
 const familyId = 'a341457e-e682-4429-898f-a07d31d88a35';
@@ -51,7 +59,7 @@ const outcomes: OutcomesSection = {
 const knowledge: KnowledgeSection = {
   sources: [
     {
-      descriptorId: 'bq-relativity-mes-builds',
+      descriptorId: 'bq-operations-builds',
       purpose: 'Resolve impacted builds',
       requiredCitations: true,
     },
@@ -122,10 +130,10 @@ const spec = agentSpecSchema.parse({
   updatedAt: now,
 });
 const source = sourceDescriptorSchema.parse({
-  id: 'bq-relativity-mes-builds',
+  id: 'bq-operations-builds',
   role: 'knowledge',
   provider: 'bigquery',
-  displayName: 'MES Builds',
+  displayName: 'Operations Builds',
   uri: 'bigquery://project/dataset/table',
   authority: 'system_of_record',
   owner: 'Manufacturing Data',
@@ -469,6 +477,18 @@ function createFakeServices(): ServiceBundle {
       start: jest.fn(() => Promise.resolve()),
       stop: jest.fn(),
     },
+    automationScheduler: {
+      start: jest.fn(() => Promise.resolve()),
+      stop: jest.fn(() => Promise.resolve()),
+    },
+    pluginHealthScheduler: {
+      start: jest.fn(() => Promise.resolve()),
+      stop: jest.fn(),
+    },
+    catalogIndexScheduler: {
+      start: jest.fn(() => Promise.resolve()),
+      stop: jest.fn(),
+    },
   };
 }
 
@@ -482,6 +502,17 @@ describe('Agent Builder HTTP API', () => {
 
   it('serves database-backed health and generated OpenAPI', async () => {
     const app = createApp(services, logger);
+    const live = await request(app).get('/live').expect(200);
+    const liveBody = liveResponseSchema.parse(live.body as unknown);
+    expect(liveBody).toMatchObject({ status: 'live' });
+    expect(Date.parse(liveBody.timestamp)).not.toBeNaN();
+    await request(app)
+      .get('/ready')
+      .expect(200, {
+        status: 'ready',
+        dependencies: { postgresql: 'connected' },
+        timestamp: now,
+      });
     await request(app).get('/health').expect(200, {
       status: 'ok',
       database: 'connected',
@@ -492,6 +523,73 @@ describe('Agent Builder HTTP API', () => {
     expect(openapi.body.paths['/agents']).toBeDefined();
     expect(openapi.body).toEqual(createOpenApiDocument());
     expect(openapi.body).toMatchSnapshot();
+  });
+
+  it('serializes unexpected errors through the Pino err path and redacts response bodies', async () => {
+    const chunks: string[] = [];
+    const destination = new Writable({
+      write(
+        chunk: string | Buffer,
+        _encoding: BufferEncoding,
+        callback: (error?: Error | null) => void,
+      ) {
+        chunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+        callback();
+      },
+    });
+    const capturedServices = createFakeServices();
+    const failure = Object.assign(new Error('Synthetic upstream request failed'), {
+      response: {
+        status: 503,
+        body: { token: 'fixture-response-value', rows: [{ private: 'fixture-row-value' }] },
+      },
+    });
+    jest.spyOn(capturedServices.health, 'check').mockRejectedValueOnce(failure);
+
+    const response = await request(
+      createApp(capturedServices, createLogger({ logLevel: 'error' }, destination)),
+    )
+      .get('/health')
+      .expect(500);
+
+    expect(response.body).toMatchObject({
+      error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+    });
+    const serialized = chunks.join('');
+    expect(serialized).not.toContain('fixture-response-value');
+    expect(serialized).not.toContain('fixture-row-value');
+    const records = serialized
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const event = records.find((record) => record['msg'] === 'Request failed');
+    expect(event).toBeDefined();
+    expect(event).not.toHaveProperty('error');
+    expect(event).toMatchObject({
+      err: {
+        type: 'Error',
+        message: 'Synthetic upstream request failed',
+        response: { status: 503, body: '[REDACTED]' },
+      },
+    });
+    expect((event?.['err'] as { stack?: unknown }).stack).toEqual(expect.any(String));
+  });
+
+  it('returns the resolved local session and inherited four-role authorization', async () => {
+    const response = await request(createApp(services, logger)).get('/v1/session').expect(200);
+    expect(response.body).toMatchObject({
+      principal: {
+        principalId: LOCAL_PRINCIPAL_ID,
+        actorId: 'local-user',
+        workspaceId: LOCAL_WORKSPACE_ID,
+        departmentId: LOCAL_DEPARTMENT_ID,
+        authentication: 'local',
+        roles: ['admin'],
+      },
+      effectiveRoles: ['consumer', 'builder', 'owner', 'admin'],
+      authorizationModel: 'workspace-role-v1',
+    });
+    expect(response.body.permissions).toContain('platform:administer');
   });
 
   it('searches from GET /agents and returns the reuse result', async () => {

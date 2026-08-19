@@ -3,10 +3,10 @@ import { HeuristicSpecInterpreter } from '../src/interpretation/heuristic.js';
 
 const sources: SourceDescriptor[] = [
   sourceDescriptorSchema.parse({
-    id: 'bq-relativity-mes-builds',
+    id: 'bq-operations-builds',
     role: 'knowledge',
     provider: 'bigquery',
-    displayName: 'MES Supplier Build Records',
+    displayName: 'Operations Supplier Build Records',
     uri: 'bigquery://project/dataset/builds',
     authority: 'system_of_record',
     owner: 'Manufacturing Data',
@@ -45,7 +45,7 @@ describe('HeuristicSpecInterpreter', () => {
     expect(result.kind).toBe('prefill');
     expect(result.draft?.outcomes.value?.department).toBe('Supply Chain');
     expect(result.draft?.knowledge.value?.sources.map((source) => source.descriptorId)).toEqual(
-      expect.arrayContaining(['bq-relativity-mes-builds', 'confluence-supplier-playbook']),
+      expect.arrayContaining(['bq-operations-builds', 'confluence-supplier-playbook']),
     );
     expect(result.draft?.guardrails.value).not.toBeNull();
     expect(result.draft?.outputs.value).not.toBeNull();

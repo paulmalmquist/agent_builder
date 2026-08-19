@@ -1,0 +1,30 @@
+apiVersion: paul-os/v1
+kind: Profile
+metadata:
+  id: 00000000-0000-4000-8000-000000000002
+  displayName: Local User
+  timezone: Etc/UTC
+context:
+  locale: en-US
+  defaultProject: personal-operations
+  workingHours:
+    start: '09:00'
+    end: '17:00'
+    weekdays: [monday, tuesday, wednesday, thursday, friday]
+  briefingPreferences:
+    maxPriorities: 5
+    includeScheduleRisks: true
+    includeDecisionRequests: true
+    tone: concise
+  contextBudget:
+    maxInputTokens: 12000
+    maxOutputTokens: 2000
+  costPolicy:
+    maxEstimatedCostPerRunUsd: 0.50
+    maxAuthorityGrantCostUsd: 15.00
+  connectorRefs: []
+  durableMemory:
+    writesRequireAcceptance: true
+    retentionDays: 365
+secretReferences:
+  modelProvider: env:MODEL_PROVIDER_API_KEY

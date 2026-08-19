@@ -1,0 +1,50 @@
+# This file is intentionally non-deployable until every .invalid image and identity coordinate is replaced.
+deploymentMode: production
+
+global:
+  nodeEnv: production
+  repositorySourceCommit: REPLACE_WITH_CERTIFIED_COMMIT
+  allowUnverifiedRepositoryImports: false
+  providerPolicy: gateway_only
+  modelProvider: gateway
+  modelName: REPLACE_WITH_APPROVED_GATEWAY_MODEL
+  pricingVersion: REPLACE_WITH_APPROVED_PRICING_VERSION
+
+images:
+  backend: registry.example.invalid/paul-os/backend@sha256:REPLACE_WITH_64_HEX_CHARACTERS
+  frontend: registry.example.invalid/paul-os/frontend@sha256:REPLACE_WITH_64_HEX_CHARACTERS
+  worker: registry.example.invalid/paul-os/worker@sha256:REPLACE_WITH_64_HEX_CHARACTERS
+  migrator: registry.example.invalid/paul-os/backend@sha256:REPLACE_WITH_64_HEX_CHARACTERS
+  pullPolicy: IfNotPresent
+
+externalSecrets:
+  apiDatabase:
+    name: REPLACE_WITH_API_DATABASE_SECRET
+    key: database-url
+  workerDatabase:
+    name: REPLACE_WITH_WORKER_DATABASE_SECRET
+    key: database-url
+  migratorDatabase:
+    name: REPLACE_WITH_MIGRATOR_DATABASE_SECRET
+    key: database-url
+  backendEnvironment:
+    name: REPLACE_WITH_BACKEND_ENVIRONMENT_SECRET
+  workerEnvironment:
+    name: REPLACE_WITH_WORKER_ENVIRONMENT_SECRET
+
+auth:
+  mode: oidc
+  verifier: jwks
+  issuer: https://identity.example.invalid/REPLACE
+  audiences: api://REPLACE
+  jwksUri: https://identity.example.invalid/REPLACE/keys
+  groupClaim: groups
+
+kindDemo:
+  enabled: false
+  createFixtureSecret: false
+  fixtureOidcSecret: ''
+  seed: false
+
+postgres:
+  enabled: false

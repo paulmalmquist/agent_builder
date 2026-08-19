@@ -1,0 +1,86 @@
+{{- if and .Values.kindDemo.enabled .Values.kindDemo.createFixtureSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: paul-os-kind-runtime
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    paul-os.dev/fixture-only: "true"
+type: Opaque
+stringData:
+  database-url-api: {{ printf "postgresql://%s:%s@%s-postgres:5432/%s?schema=public" .Values.postgres.username .Values.postgres.password (include "paul-os.fullname" .) .Values.postgres.database | quote }}
+  database-url-worker: {{ printf "postgresql://%s:%s@%s-postgres:5432/%s?schema=public" .Values.postgres.username .Values.postgres.password (include "paul-os.fullname" .) .Values.postgres.database | quote }}
+  database-url-migrator: {{ printf "postgresql://%s:%s@%s-postgres:5432/%s?schema=public" .Values.postgres.username .Values.postgres.password (include "paul-os.fullname" .) .Values.postgres.database | quote }}
+  FIXTURE_OIDC_SECRET: {{ .Values.kindDemo.fixtureOidcSecret | quote }}
+{{- end }}
+{{- if .Values.postgres.enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "paul-os.fullname" . }}-postgres
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-fixture
+    paul-os.dev/fixture-only: "true"
+spec:
+  serviceName: {{ include "paul-os.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "paul-os.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres-fixture
+  template:
+    metadata:
+      labels:
+        {{- include "paul-os.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres-fixture
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.username | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.postgres.password | quote }}
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "paul-os.fullname" . }}-postgres
+  labels:
+    {{- include "paul-os.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-fixture
+spec:
+  clusterIP: None
+  selector:
+    {{- include "paul-os.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-fixture
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

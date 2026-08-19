@@ -23,6 +23,7 @@ import { appendAuditEvent } from '../audit.js';
 import { canonicalizeCertificationJson } from '../certification/executor.js';
 import { AppError } from '../errors.js';
 import { parseJson, toPrismaJson } from '../json-boundary.js';
+import { aggregateScope, aggregateScopeWhere } from '../scope.js';
 import { requireHumanActor } from './actors.js';
 import type { CorpusApi } from './types.js';
 
@@ -94,8 +95,8 @@ export class CorpusService implements CorpusApi {
   async listCases(query: z.infer<typeof evalCaseListQuerySchema>) {
     let corpusCaseIds: string[] | undefined;
     if (query.corpusVersion !== undefined) {
-      const corpus = await this.prisma.evalCorpusVersion.findUnique({
-        where: { version: query.corpusVersion },
+      const corpus = await this.prisma.evalCorpusVersion.findFirst({
+        where: { version: query.corpusVersion, ...aggregateScopeWhere() },
         include: { memberships: { select: { caseId: true } } },
       });
       if (!corpus)
@@ -109,6 +110,7 @@ export class CorpusService implements CorpusApi {
     }
     const records = await this.prisma.evalCase.findMany({
       where: {
+        ...aggregateScopeWhere(),
         ...(query.tag === undefined ? {} : { tags: { has: tagMap[query.tag] } }),
         ...(query.source === undefined ? {} : { source: querySourceMap[query.source] }),
         ...(query.active === undefined ? {} : { active: query.active === 'true' }),
@@ -129,9 +131,11 @@ export class CorpusService implements CorpusApi {
   async createCase(rawInput: z.infer<typeof createEvalCaseRequestSchema>) {
     const input = createEvalCaseRequestSchema.parse(rawInput);
     const actorId = requireHumanActor();
+    const scope = aggregateScope();
     return this.prisma.$transaction(async (transaction) => {
       const created = await transaction.evalCase.create({
         data: {
+          ...scope,
           key: input.key,
           name: input.name,
           input: toPrismaJson(jsonValueSchema, input.input, `EvalCase(${input.key}).input`),
@@ -170,7 +174,9 @@ export class CorpusService implements CorpusApi {
     const request = deactivateEvalCaseRequestSchema.parse(input);
     const actorId = requireHumanActor();
     return this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.evalCase.findUnique({ where: { id: caseId } });
+      const current = await transaction.evalCase.findFirst({
+        where: { id: caseId, ...aggregateScopeWhere() },
+      });
       if (!current)
         throw new AppError(404, 'EVAL_CASE_NOT_FOUND', 'Evaluation case was not found', { caseId });
       if (!current.active)
@@ -203,10 +209,12 @@ export class CorpusService implements CorpusApi {
       throw new AppError(400, 'VALIDATION_ERROR', 'Corpus case IDs must be unique');
     }
     const actorId = requireHumanActor();
+    const scope = aggregateScope();
     return this.prisma.$transaction(
       async (transaction) => {
         await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('eval-corpus-publish'))`;
         const current = await transaction.evalCorpusVersion.findFirst({
+          where: aggregateScopeWhere(),
           orderBy: { version: 'desc' },
         });
         if ((current?.version ?? null) !== input.baseVersion) {
@@ -216,7 +224,11 @@ export class CorpusService implements CorpusApi {
           });
         }
         const records = await transaction.evalCase.findMany({
-          where: { id: { in: input.caseIds }, active: true },
+          where: {
+            id: { in: input.caseIds },
+            active: true,
+            ...aggregateScopeWhere(),
+          },
         });
         if (records.length !== input.caseIds.length) {
           const found = new Set(records.map(({ id }) => id));
@@ -229,6 +241,7 @@ export class CorpusService implements CorpusApi {
         const digest = contentHash(ordered);
         const created = await transaction.evalCorpusVersion.create({
           data: {
+            ...scope,
             version: (current?.version ?? 0) + 1,
             contentHash: digest,
             publishedBy: actorId,

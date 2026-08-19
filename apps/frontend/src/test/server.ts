@@ -12,10 +12,39 @@ export const certificationRunId = '66666666-6666-4666-8666-666666666666';
 const corpusVersionId = '77777777-7777-4777-8777-777777777777';
 const gateConfigId = '88888888-8888-4888-8888-888888888888';
 export const interpretationId = '99999999-9999-4999-8999-999999999999';
+export const platformResourceId = '12121212-1212-4121-8121-121212121212';
+const platformFamilyId = '13131313-1313-4131-8131-131313131313';
+export const executionRunId = '14141414-1414-4141-8141-141414141414';
+export const attentionApprovalGroupKey = 'f'.repeat(64);
+export const authorityGrantId = '15151515-1515-4151-8151-151515151515';
+const releaseId = '16161616-1616-4161-8161-161616161616';
+const outcomeId = '17171717-1717-4171-8171-171717171717';
+const metricId = '18181818-1818-4181-8181-181818181818';
+export const automationScheduleId = '19191919-1919-4191-8191-191919191919';
+export const releaseEvaluationId = '20202020-2020-4202-8202-202020202020';
+const evaluationSuiteVersionId = '21212121-2121-4212-8212-212121212121';
+const observationId = '23232323-2323-4232-8232-232323232323';
+export const improvementCandidateId = '24242424-2424-4242-8242-242424242424';
+export const memoryCandidateId = '25252525-2525-4252-8252-252525252525';
+export const httpPluginVersionId = '30303030-3030-4303-8303-303030303030';
+export const httpPluginInstallationId = '31313131-3131-4313-8313-313131313131';
+const mcpPluginVersionId = '32323232-3232-4323-8323-323232323232';
+const mcpPluginInstallationId = '33333333-4444-4333-8333-333333333333';
+const cliPluginVersionId = '34343434-3434-4343-8343-343434343434';
+const dbPluginVersionId = '35353535-3535-4353-8353-353535353535';
+const dbPluginInstallationId = '36363636-3636-4363-8363-363636363636';
+export const builderIntakeId = '37373737-3737-4373-8373-373737373737';
+export const catalogPublicationId = '38383838-3838-4383-8383-383838383838';
+const builderDecisionId = '39393939-3939-4393-8393-393939393939';
+const demandObservationId = '40404040-4040-4404-8404-404040404040';
 const now = '2026-07-31T14:00:00.000Z';
 type TestInterpretationConfirmation = InterpretationConfirmation;
 export let lastOutcomesConfirmation: TestInterpretationConfirmation | null = null;
 export let lastKnowledgeConfirmation: TestInterpretationConfirmation | null = null;
+export let lastPluginApprovalScopes: unknown[] | null = null;
+export let lastPluginSecretBindings: unknown[] | null = null;
+export let lastBuilderDecision: Record<string, unknown> | null = null;
+export let lastBuilderDecisionIdempotencyKey: string | null = null;
 
 const outcomes = {
   name: 'Supplier continuity analyst',
@@ -63,11 +92,11 @@ const outputs = {
 };
 
 const source = {
-  id: 'relativity-mes-genealogy',
+  id: 'demo-build-genealogy',
   role: 'knowledge' as const,
   provider: 'bigquery' as const,
   displayName: 'Build genealogy',
-  uri: 'bigquery://agent-builder-demo/relativity_mes/gold_genealogy',
+  uri: 'fixture://paul-os/build-genealogy',
   authority: 'system_of_record' as const,
   owner: 'Manufacturing Data',
   region: 'US',
@@ -101,6 +130,62 @@ export const catalogAgent = {
   providers: ['bigquery'] as const,
   createdAt: now,
   updatedAt: now,
+};
+
+const capabilityProfile = {
+  schemaVersion: 1 as const,
+  intendedUsers: [outcomes.audience],
+  businessDomain: outcomes.department,
+  triggers: ['User-requested build intake'],
+  tasks: [outcomes.purpose],
+  inputs: ['User-provided scope'],
+  outputs: outcomes.desiredOutcomes,
+  knowledgeClasses: [],
+  tools: [],
+  potentialActions: [],
+  successCriteria: outcomes.desiredOutcomes,
+  riskLevel: 'moderate' as const,
+};
+
+const trustChip = {
+  certificationState: 'certified' as const,
+  gatesPassed: 12,
+  gatesTotal: 12,
+  corpusSize: 240,
+  recertifiedAt: now,
+  label: 'Certified · 12/12 gates · corpus 240 · re-certified Jul 31',
+};
+
+const referredChoice = {
+  publicationId: catalogPublicationId,
+  subjectKind: 'agent' as const,
+  name: catalogAgent.name,
+  version: '1.0.0',
+  trustChip,
+  delta: {
+    has: ['businessDomain:Manufacturing Operations', 'tasks:Monitor supplier delays'],
+    lacks: ['outputs:Custom approval brief'],
+    offers: ['tools:Build genealogy lookup'],
+  },
+  match: {
+    score: 87,
+    structuredCoverage: 87,
+    embeddingCosine: null,
+    mode: 'structured_only_fallback' as const,
+    label: 'Structured-only fallback' as const,
+  },
+  provenance: {
+    owner: catalogAgent.owner,
+    department: catalogAgent.department,
+    resourceVersionId: agentId,
+    releaseId,
+    releaseDigest: 'a'.repeat(64),
+    publishedAt: now,
+  },
+  deployment: { total: 14, active: 9 },
+  success: { successfulRuns: 46, measuredRuns: 50, rate: 0.92 },
+  cost: { usdPerRun: 0.31, basis: 'observed' as const },
+  knownLimitations: ['Requires a project-specific approval overlay for external writes'],
 };
 
 export const certificationRun = {
@@ -249,11 +334,675 @@ type SpecFixture = {
 };
 
 let specFixture: SpecFixture | null = null;
+let platformRunState:
+  | 'awaiting_approval'
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'paused_budget' = 'awaiting_approval';
+let grantState: 'active' | 'revoked' | 'exhausted' | 'expired' = 'active';
+let automationScheduleState: 'active' | 'paused' = 'active';
+let improvementCandidateState: 'proposed' | 'incubating' | 'rejected' = 'proposed';
+let memoryCandidateState: 'staged' | 'accepted' | 'rejected' = 'staged';
+let degradedAttentionResolved = false;
+let httpPluginState: 'installed' | 'enabled' | 'disabled' | 'degraded' = 'enabled';
+let dbPluginInstalled = false;
 
 export function resetFixtures() {
   specFixture = null;
   lastOutcomesConfirmation = null;
   lastKnowledgeConfirmation = null;
+  platformRunState = 'awaiting_approval';
+  grantState = 'active';
+  automationScheduleState = 'active';
+  improvementCandidateState = 'proposed';
+  memoryCandidateState = 'staged';
+  degradedAttentionResolved = false;
+  httpPluginState = 'enabled';
+  dbPluginInstalled = false;
+  lastPluginApprovalScopes = null;
+  lastPluginSecretBindings = null;
+  lastBuilderDecision = null;
+  lastBuilderDecisionIdempotencyKey = null;
+}
+
+function attentionItem() {
+  const requestCount = 4;
+  return {
+    id: `execution_approval:${attentionApprovalGroupKey}`,
+    kind: 'execution_approval' as const,
+    shelf: 'decide' as const,
+    headline: `Daily Briefing wants authority for ${requestCount} runs.`,
+    delta: 'Calendar — read only · up to $0.12 per run',
+    status: 'decide' as const,
+    primaryAction: {
+      kind: 'approve_run' as const,
+      label: 'Review and approve',
+      consequence: `Queues these ${requestCount} runs under one bounded grant. Matching future runs may use it until its limits or expiry.`,
+      undo: 'Revoke the grant to prevent later matching runs from using it.',
+      resourceId: attentionApprovalGroupKey,
+      requiresRationale: true,
+    },
+    secondaryAction: {
+      kind: 'reject_run' as const,
+      label: 'Reject request',
+      consequence: `Cancels these ${requestCount} pending runs and records your reason.`,
+      undo: 'Create a new request if its scope or evidence changes.',
+      resourceId: attentionApprovalGroupKey,
+      requiresRationale: true,
+    },
+    cost: { period: 'run' as const, usd: 0.12, budgetUsd: 0.25 },
+    reason:
+      'Without approval, Daily Briefing remains paused and performs no work for these requests.',
+    provenance: {
+      sourceType: 'ApprovalRequestGroup',
+      sourceId: attentionApprovalGroupKey,
+      actorId: null,
+      requestId: null,
+      explanation: `The execution service grouped ${requestCount} exact pending runs with the same authority requirements.`,
+    },
+    occurredAt: now,
+    payload: {
+      sourceType: 'ApprovalRequestGroup',
+      sourceId: attentionApprovalGroupKey,
+      detailPath: `/runs?run=${executionRunId}`,
+      scopes: ['Calendar — read only'],
+      runId: executionRunId,
+      candidateId: null,
+      channelKey: null,
+      releaseId,
+      evaluationId: null,
+      expiresAt: null,
+      approvalGroupKey: attentionApprovalGroupKey,
+      requestCount,
+      subject: { name: 'Daily Briefing', kind: 'agent', version: '1.0.0' },
+      reviewFacts: [
+        { label: 'Subject', value: 'Daily Briefing · agent 1.0.0' },
+        { label: 'Requests', value: `${requestCount} matching pending runs` },
+        { label: 'Authority', value: 'Calendar — read only' },
+        { label: 'Immutable digest', value: 'b'.repeat(64) },
+        { label: 'Requester', value: 'worker-test' },
+      ],
+      metadata: { runIds: [executionRunId], releaseDigest: 'b'.repeat(64) },
+    },
+  };
+}
+
+function degradedAttentionItem() {
+  return {
+    id: `stalled_run:${executionRunId}`,
+    kind: 'stalled_run' as const,
+    shelf: 'degraded' as const,
+    headline: 'Daily Briefing failed before producing an outcome.',
+    delta: '40% complete · no new work can proceed',
+    status: 'degraded' as const,
+    primaryAction: {
+      kind: 'open_details' as const,
+      label: 'Review failure',
+      consequence: 'Opens the exact failure history without changing the run.',
+      undo: 'Close the detail to leave the immutable failure unchanged.',
+      resourceId: executionRunId,
+      requiresRationale: false,
+    },
+    secondaryAction: {
+      kind: 'resolve_item' as const,
+      label: 'Acknowledge failure',
+      consequence: 'Removes this resolved stop from your active review queue.',
+      undo: 'The immutable run history remains available in Runs and Evidence.',
+      resourceId: `stalled_run:${executionRunId}`,
+      requiresRationale: true,
+    },
+    cost: { period: 'run' as const, usd: 0.12, budgetUsd: 0.5 },
+    reason:
+      'Daily Briefing produced no outcome, and acknowledgement is available only after reviewing its recorder.',
+    provenance: {
+      sourceType: 'execution_run',
+      sourceId: executionRunId,
+      actorId: 'system:worker',
+      requestId: null,
+      explanation: 'The worker recorded a terminal failure after its final bounded retry.',
+    },
+    occurredAt: now,
+    payload: {
+      sourceType: 'execution_run',
+      sourceId: executionRunId,
+      detailPath: `/runs?run=${executionRunId}`,
+      scopes: [],
+      runId: executionRunId,
+      candidateId: null,
+      channelKey: null,
+      releaseId,
+      evaluationId: null,
+      expiresAt: null,
+      approvalGroupKey: null,
+      requestCount: 1,
+      subject: { name: 'Daily Briefing', kind: 'agent', version: '1.0.0' },
+      reviewFacts: [
+        { label: 'Subject', value: 'Daily Briefing · agent 1.0.0' },
+        { label: 'Run state', value: 'Failed after the final retry' },
+        { label: 'Cost', value: '$0.12 incurred' },
+      ],
+      metadata: {},
+    },
+  };
+}
+
+const platformResource = {
+  id: platformResourceId,
+  familyId: platformFamilyId,
+  kind: 'Skill' as const,
+  slug: 'daily-brief',
+  name: 'Daily Brief',
+  version: '1.0.0',
+  owner: 'Personal Operations',
+  purpose: 'Create a bounded daily briefing from synthetic priorities, tasks, and calendar items.',
+  lifecycle: 'candidate' as const,
+  digest: 'a'.repeat(64),
+  sourceCommit: 'test-commit',
+  provenance: { source: 'synthetic-test' },
+  dependencyPins: [],
+  definition: {
+    apiVersion: 'paul-os/v1' as const,
+    kind: 'Skill' as const,
+    metadata: {
+      id: platformFamilyId,
+      slug: 'daily-brief',
+      version: '1.0.0',
+      name: 'Daily Brief',
+      owner: 'Personal Operations',
+      purpose:
+        'Create a bounded daily briefing from synthetic priorities, tasks, and calendar items.',
+      lifecycle: 'candidate' as const,
+      provenance: { source: 'synthetic-test' },
+    },
+    dependencies: [],
+    spec: {},
+  },
+  revision: 1,
+  frozenAt: now,
+  createdAt: now,
+  updatedAt: now,
+};
+
+const pluginLimits = {
+  timeoutMs: 5_000,
+  maxResponseBytes: 250_000,
+  maxRecords: 100,
+  maxInvocationsPerRun: 5,
+  maxEstimatedCostUsd: 0.05,
+};
+
+function pluginCapability(
+  tool: string,
+  scopeDescription: string,
+  effect: 'read' | 'write' | 'destructive' = 'read',
+) {
+  return {
+    tool,
+    description: `${scopeDescription} through a typed, schema-checked test capability.`,
+    effect,
+    approval: effect === 'read' ? ('not_required' as const) : ('approval_required' as const),
+    scopeDescription,
+    limits: pluginLimits,
+  };
+}
+
+function pluginCatalog() {
+  return [
+    {
+      pluginVersionId: mcpPluginVersionId,
+      familyId: '37373737-3737-4373-8373-373737373737',
+      slug: 'team-messages',
+      name: 'Team messages',
+      version: '1.0.0',
+      digest: '2'.repeat(64),
+      transport: 'mcp' as const,
+      executionPlacement: 'control_plane' as const,
+      classification: 'internal' as const,
+      brand: { monogram: 'TM', accent: '#B9AAFF' },
+      capabilities: [pluginCapability('search_messages', 'Read matching team messages only')],
+      secretSlots: [],
+      activeScopeDescriptions: ['Read matching team messages only'],
+      costThisWeekUsd: 0.12,
+      installationId: mcpPluginInstallationId,
+      installationState: 'degraded' as const,
+      healthStatus: 'degraded' as const,
+      lastUsedAt: now,
+    },
+    {
+      pluginVersionId: httpPluginVersionId,
+      familyId: '38383838-3838-4383-8383-383838383838',
+      slug: 'calendar-api',
+      name: 'Calendar API',
+      version: '2.1.0',
+      digest: '3'.repeat(64),
+      transport: 'http' as const,
+      executionPlacement: 'control_plane' as const,
+      classification: 'internal' as const,
+      brand: { monogram: 'CA', accent: '#7F9CF5' },
+      capabilities: [
+        pluginCapability('list_events', 'Read calendar events in the requested window'),
+      ],
+      secretSlots: [
+        {
+          name: 'access-token',
+          description: 'Reference to the calendar API access token.',
+          required: true,
+        },
+      ],
+      activeScopeDescriptions: ['Read calendar events in the requested window'],
+      costThisWeekUsd: 0.04,
+      installationId: httpPluginInstallationId,
+      installationState: httpPluginState,
+      healthStatus:
+        httpPluginState === 'disabled' ? ('unavailable' as const) : ('healthy' as const),
+      lastUsedAt: now,
+    },
+    {
+      pluginVersionId: dbPluginVersionId,
+      familyId: '39393939-3939-4393-8393-393939393939',
+      slug: 'analytics-preview',
+      name: 'Analytics preview',
+      version: '1.2.0',
+      digest: '4'.repeat(64),
+      transport: 'db' as const,
+      executionPlacement: 'control_plane' as const,
+      classification: 'restricted' as const,
+      brand: { monogram: 'AP', accent: '#69D59A' },
+      capabilities: [pluginCapability('table_preview', 'Preview up to 100 governed records')],
+      secretSlots: [],
+      activeScopeDescriptions: [],
+      costThisWeekUsd: 0,
+      installationId: dbPluginInstalled ? dbPluginInstallationId : null,
+      installationState: dbPluginInstalled ? ('enabled' as const) : null,
+      healthStatus: dbPluginInstalled ? ('healthy' as const) : ('unknown' as const),
+      lastUsedAt: null,
+    },
+    {
+      pluginVersionId: cliPluginVersionId,
+      familyId: '40404040-4040-4404-8404-404040404040',
+      slug: 'local-files',
+      name: 'Local files',
+      version: '0.9.0',
+      digest: '5'.repeat(64),
+      transport: 'cli' as const,
+      executionPlacement: 'workstation' as const,
+      classification: 'internal' as const,
+      brand: { monogram: 'LF', accent: '#B9AAFF' },
+      capabilities: [pluginCapability('list_files', 'Read filenames under the selected folder')],
+      secretSlots: [],
+      activeScopeDescriptions: [],
+      costThisWeekUsd: 0,
+      installationId: null,
+      installationState: null,
+      healthStatus: 'unavailable' as const,
+      lastUsedAt: null,
+    },
+  ];
+}
+
+function pluginInstallation(installationId = httpPluginInstallationId) {
+  const versionId =
+    installationId === mcpPluginInstallationId
+      ? mcpPluginVersionId
+      : installationId === dbPluginInstallationId
+        ? dbPluginVersionId
+        : httpPluginVersionId;
+  return {
+    id: installationId,
+    pluginVersionId: versionId,
+    pluginDigest: versionId === httpPluginVersionId ? '3'.repeat(64) : '4'.repeat(64),
+    state: installationId === httpPluginInstallationId ? httpPluginState : ('enabled' as const),
+    executionPlacement: 'control_plane' as const,
+    developmentOnly: false,
+    secretBindings:
+      installationId === httpPluginInstallationId
+        ? [{ slot: 'access-token', configured: true }]
+        : [],
+    installedBy: 'test-operator',
+    installedAt: now,
+    configuredAt: now,
+    disabledAt: httpPluginState === 'disabled' ? now : null,
+    updatedAt: now,
+  };
+}
+
+function requiredPluginScope() {
+  return {
+    installationId: httpPluginInstallationId,
+    pluginVersionId: httpPluginVersionId,
+    pluginDigest: '3'.repeat(64),
+    tool: 'list_events',
+    effect: 'read' as const,
+    scopeDescription: 'Read calendar events in the requested window',
+    limits: pluginLimits,
+    executionPlacement: 'control_plane' as const,
+    approvalRequired: false,
+  };
+}
+
+function grantedPluginScope() {
+  const scope = requiredPluginScope();
+  return {
+    installationId: scope.installationId,
+    pluginVersionId: scope.pluginVersionId,
+    pluginDigest: scope.pluginDigest,
+    tool: scope.tool,
+    effect: scope.effect,
+    scopeDescription: scope.scopeDescription,
+    limits: scope.limits,
+  };
+}
+
+function platformRun() {
+  return {
+    id: executionRunId,
+    releaseId,
+    entryResourceVersionId: platformResourceId,
+    entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
+    legacyEntrypointUnresolved: false as const,
+    releaseDigest: 'b'.repeat(64),
+    contextDigest: 'd'.repeat(64),
+    contextProvenance: [
+      { source: 'core' as const, classification: 'public' as const, tokenContribution: 24 },
+    ],
+    contextClassification: 'public' as const,
+    contextEstimatedTokens: 24,
+    projectId: 'daily-operations',
+    authorityGrantId: platformRunState === 'awaiting_approval' ? null : authorityGrantId,
+    digestSnapshotId: null,
+    state: platformRunState,
+    input: { date: '2026-07-31' },
+    requiredToolScopes: ['read:calendar'],
+    requiredPluginScopes: [requiredPluginScope()],
+    requiresPluginApproval: false,
+    providerKind: 'deterministic' as const,
+    developmentDraft: false,
+    providerVersion: '1.0.0',
+    model: 'daily-brief-fixture',
+    maxInputTokens: 8_000,
+    maxOutputTokens: 2_000,
+    maxEstimatedCostUsd: 0.25,
+    estimatedUpperCostUsd: 0.12,
+    actualCostUsd: null,
+    pricingVersion: 'test-pricing-v1',
+    approvalReasons:
+      platformRunState === 'awaiting_approval'
+        ? ['First run of this immutable release requires human approval.']
+        : [],
+    progress: platformRunState === 'awaiting_approval' ? 0 : 10,
+    message:
+      platformRunState === 'awaiting_approval'
+        ? 'Awaiting a bounded authority envelope'
+        : 'Execution queued',
+    attempts: 0,
+    maxAttempts: 3,
+    retryBackoff: 'exponential' as const,
+    error: null,
+    requestedBy: 'test-operator',
+    startedAt: null,
+    finishedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function executionRunCounts() {
+  const counts = {
+    awaiting_approval: 26,
+    queued: 4,
+    running: 3,
+    succeeded: 30,
+    failed: 8,
+    cancelled: 5,
+    paused_budget: 2,
+    paused_plugin: 1,
+  };
+  counts[platformRunState] += 1;
+  return counts;
+}
+
+export function platformRunFixture() {
+  return platformRun();
+}
+
+function authorityGrant() {
+  return {
+    id: authorityGrantId,
+    releaseId,
+    entryResourceVersionId: platformResourceId,
+    entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
+    releaseDigest: 'b'.repeat(64),
+    contextDigest: 'd'.repeat(64),
+    projectId: 'daily-operations',
+    inputConstraints: {},
+    toolScopes: ['read:calendar'],
+    pluginScopes: [grantedPluginScope()],
+    validFrom: now,
+    validUntil: '2027-08-01T14:00:00.000Z',
+    maxRuns: 10,
+    usedRuns: 1,
+    maxEstimatedCostPerRunUsd: 0.25,
+    totalCostBudgetUsd: 2.5,
+    spentCostUsd: 0.1,
+    reservedCostUsd: 0,
+    state: grantState,
+    actorId: 'test-operator',
+    rationale: 'Permit bounded synthetic daily briefing executions.',
+    revokedAt: grantState === 'revoked' ? now : null,
+    createdAt: now,
+  };
+}
+
+function automationSchedule() {
+  return {
+    id: automationScheduleId,
+    name: `Compose daily brief ${automationScheduleId}`,
+    channelKey: 'daily-operations',
+    releaseId,
+    entryResourceVersionId: platformResourceId,
+    entrySubject: { name: 'Daily Brief', kind: 'skill', version: '1.0.0' },
+    releaseDigest: 'b'.repeat(64),
+    projectId: 'daily-operations',
+    authorityGrantId,
+    timezone: 'America/New_York',
+    intervalSeconds: 86_400,
+    nextRunAt: '2026-08-01T11:00:00.000Z',
+    inputTemplate: { date: '{{date}}', priorities: [] },
+    inputConstraints: { date: { format: 'date' } },
+    catchUpPolicy: 'latest_only' as const,
+    maxCatchUpRuns: 1,
+    deduplicationWindowSeconds: 3_600,
+    retry: { maximumAttempts: 3, backoff: 'exponential' as const },
+    cost: {
+      maxInputTokens: 8_000,
+      maxOutputTokens: 2_000,
+      maxEstimatedCostUsd: 0.25,
+    },
+    outcomeExpectations: { unresolvedItems: 0 },
+    state: automationScheduleState,
+    lastScheduledAt: null,
+    createdBy: 'test-operator',
+    updatedBy: 'test-operator',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function productionChannel() {
+  return {
+    key: 'daily-operations',
+    projectId: 'daily-operations',
+    currentReleaseId: releaseId,
+    currentReleaseDigest: 'b'.repeat(64),
+    priorReleaseId: null,
+    promotedBy: 'test-approver',
+    promotedAt: now,
+    updatedAt: now,
+  };
+}
+
+function releaseEvaluation() {
+  const gateResults = [
+    {
+      key: 'schema_conformance' as const,
+      category: 'contract' as const,
+      operator: 'gte' as const,
+      threshold: 1,
+      measuredValue: 1,
+      status: 'passed' as const,
+      sampleSize: 1,
+      evidenceSource: 'manifest_declaration' as const,
+      detail: 'Measured from deterministic assertions.',
+    },
+    {
+      key: 'citation_coverage' as const,
+      category: 'contract' as const,
+      operator: 'gte' as const,
+      threshold: 1,
+      measuredValue: 1,
+      status: 'passed' as const,
+      sampleSize: 1,
+      evidenceSource: 'manifest_declaration' as const,
+      detail: 'Measured from deterministic assertions.',
+    },
+    {
+      key: 'unauthorized_actions' as const,
+      category: 'contract' as const,
+      operator: 'lte' as const,
+      threshold: 0,
+      measuredValue: 0,
+      status: 'passed' as const,
+      sampleSize: 1,
+      evidenceSource: 'manifest_declaration' as const,
+      detail: 'Measured from deterministic assertions.',
+    },
+    ...(['mean_cost_usd', 'p95_latency_ms', 'mean_outcome_quality'] as const).map((key) => ({
+      key,
+      category:
+        key === 'mean_cost_usd'
+          ? ('cost' as const)
+          : key === 'p95_latency_ms'
+            ? ('latency' as const)
+            : ('outcome_history' as const),
+      operator: key === 'mean_outcome_quality' ? ('gte' as const) : ('lte' as const),
+      threshold: key === 'mean_cost_usd' ? 0.25 : key === 'p95_latency_ms' ? 5_000 : 0.85,
+      measuredValue: null,
+      status: 'not_applicable' as const,
+      sampleSize: 0,
+      evidenceSource: 'execution_history' as const,
+      detail: 'Requires 3 production samples; 0 are available.',
+    })),
+  ];
+  return {
+    id: releaseEvaluationId,
+    releaseId,
+    releaseDigest: 'b'.repeat(64),
+    suiteVersionId: evaluationSuiteVersionId,
+    suiteDigest: 'c'.repeat(64),
+    executorKind: 'deterministic_contract' as const,
+    executorVersion: '1.0.0' as const,
+    evaluationMode: 'contract_validation' as const,
+    historySnapshotDigest: '0'.repeat(64),
+    corpusVersion: 1,
+    verdict: 'passed' as const,
+    results: [
+      {
+        caseKey: 'synthetic-daily-brief',
+        assertions: [
+          {
+            key: 'output_schema_valid' as const,
+            passed: true,
+            detail: 'The deterministic fixture satisfied the declared output contract.',
+          },
+          {
+            key: 'citations_resolve_to_supplied_calendar_items' as const,
+            passed: true,
+            detail: 'Every fixture citation resolved to a supplied synthetic calendar item.',
+          },
+        ],
+        passed: true,
+      },
+    ],
+    gateScores: {
+      schemaConformance: 1,
+      citationCoverage: 1,
+      unauthorizedActions: 0,
+    },
+    gateResults,
+    disclaimer:
+      'Deterministic contract evidence validates declared fixtures and release composition; it does not measure semantic model quality.' as const,
+    evidence: {
+      schemaVersion: 1 as const,
+      historySnapshotDigest: '0'.repeat(64),
+      historyRunIds: [],
+      suiteCaseCount: 1,
+      assertionCount: 2,
+      subjectPresent: true,
+      subjectDigest: 'a'.repeat(64),
+      gateResults,
+    },
+    requestedBy: 'test-operator',
+    createdAt: now,
+    finishedAt: now,
+  };
+}
+
+function observation() {
+  return {
+    id: observationId,
+    signalKey: 'briefing-unresolved-priority',
+    signalType: 'outcome_review',
+    summary: 'A synthetic briefing left one priority without a supporting schedule reference.',
+    evidence: { controlledReference: 'fixture://observation/priority' },
+    provenance: { source: 'synthetic-test' },
+    sourceRunId: executionRunId,
+    sourceOutcomeId: outcomeId,
+    observedBy: 'test-operator',
+    observedAt: now,
+  };
+}
+
+function improvementCandidate() {
+  return {
+    id: improvementCandidateId,
+    observationId,
+    title: 'Require a schedule reference for time-bound priorities',
+    proposedTarget: 'daily-brief@next',
+    proposedChange: 'Add a bounded validation rule before a time-bound priority is emitted.',
+    evidenceRefs: [`observation:${observationId}`],
+    state: improvementCandidateState,
+    createdBy: 'test-operator',
+    reviewedBy: improvementCandidateState === 'proposed' ? null : 'test-operator',
+    reviewRationale:
+      improvementCandidateState === 'proposed'
+        ? null
+        : 'Human review confirmed the candidate disposition and retained its lineage.',
+    createdAt: now,
+    reviewedAt: improvementCandidateState === 'proposed' ? null : now,
+  };
+}
+
+function memoryCandidate() {
+  return {
+    id: memoryCandidateId,
+    sourceRunId: executionRunId,
+    namespace: 'preferences.briefing',
+    proposedValue: { ordering: 'schedule-risk-first' },
+    acceptedValue: memoryCandidateState === 'accepted' ? { ordering: 'schedule-risk-first' } : null,
+    provenance: { source: 'synthetic-test' },
+    state: memoryCandidateState,
+    stagedBy: 'test-operator',
+    reviewedBy: memoryCandidateState === 'staged' ? null : 'test-operator',
+    reviewRationale:
+      memoryCandidateState === 'staged'
+        ? null
+        : 'Human review recorded a bounded durable-memory decision.',
+    stagedAt: now,
+    reviewedAt: memoryCandidateState === 'staged' ? null : now,
+  };
 }
 
 function requireSpec() {
@@ -262,6 +1011,566 @@ function requireSpec() {
 }
 
 export const handlers = [
+  http.get('http://localhost/v1/attention', () => {
+    const decide = platformRunState === 'awaiting_approval' ? [attentionItem()] : [];
+    return HttpResponse.json({
+      generatedAt: now,
+      decide,
+      degraded: degradedAttentionResolved ? [] : [degradedAttentionItem()],
+      digest: {
+        headline: '34 runs · $2.10 · 2 promotions this week',
+        runCount: 34,
+        totalCostUsd: 2.1,
+        promotionCount: 2,
+        observationCount: 1,
+        windowStartedAt: '2026-07-30T14:00:00.000Z',
+        windowEndedAt: now,
+      },
+      decideBadgeCount: decide.length,
+      lastDeliveredBriefingAt: '2026-07-30T11:00:00.000Z',
+    });
+  }),
+
+  http.get('http://localhost/v1/attention-items/:itemId', ({ params }) =>
+    HttpResponse.json({
+      item: String(params.itemId).startsWith('stalled_run')
+        ? degradedAttentionItem()
+        : attentionItem(),
+      membership: String(params.itemId).startsWith('stalled_run')
+        ? null
+        : {
+            exactCount: 4,
+            records: [
+              '30303030-3030-4030-8030-303030303031',
+              '30303030-3030-4030-8030-303030303032',
+              '30303030-3030-4030-8030-303030303033',
+              '30303030-3030-4030-8030-303030303034',
+            ].map((approvalRequestId, index) => ({
+              label: `Authority request ${String(index + 1).padStart(2, '0')}`,
+              subject: { name: 'Daily Briefing', kind: 'agent', version: '1.0.0' },
+              occurredAt: `2026-07-30T10:0${index}:00.000Z`,
+              evidence: [
+                {
+                  label: 'Decision match',
+                  value: 'Exact authority, input, retry, and cost requirements match this group.',
+                },
+              ],
+              technicalReferences: [
+                { label: 'Approval request', value: approvalRequestId },
+                {
+                  label: 'Execution run',
+                  value:
+                    index === 0 ? executionRunId : `31313131-3131-4131-8131-31313131313${index}`,
+                },
+              ],
+            })),
+          },
+      timeline: [
+        {
+          id: '26262626-2626-4262-8262-262626262626',
+          phase: 'model-execution',
+          state: 'succeeded',
+          message: 'Model execution succeeded.',
+          durationMs: 18,
+          costUsd: 0.0042,
+          occurredAt: '2026-07-31T14:00:02.000Z',
+        },
+        {
+          id: '27272727-2727-4272-8272-272727272727',
+          phase: 'worker-claimed',
+          state: 'running',
+          message: 'The worker claimed the run.',
+          durationMs: null,
+          costUsd: null,
+          occurredAt: '2026-07-31T14:00:01.000Z',
+        },
+      ],
+      details: { releaseDigest: 'a'.repeat(64), toolScopeCount: 1 },
+    }),
+  ),
+
+  http.post('http://localhost/v1/attention-items/:itemId/resolve', async ({ params, request }) => {
+    const body = (await request.json()) as { rationale?: unknown };
+    if (typeof body.rationale !== 'string' || body.rationale.trim().length < 10) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'A rationale of at least 10 characters is required.',
+            requestId: 'test-request',
+          },
+        },
+        { status: 400 },
+      );
+    }
+    degradedAttentionResolved = true;
+    return HttpResponse.json({
+      id: '29292929-2929-4292-8292-292929292929',
+      itemId: String(params.itemId),
+      rationale: body.rationale.trim(),
+      resolvedBy: 'test-operator',
+      resolvedAt: now,
+    });
+  }),
+
+  http.get('http://localhost/v1/session', () =>
+    HttpResponse.json({
+      principal: {
+        principalId: '41414141-4141-4141-8141-414141414141',
+        actorId: 'test-operator',
+        workspaceId: '42424242-4242-4242-8242-424242424242',
+        departmentId: '43434343-4343-4343-8343-434343434343',
+        authentication: 'local',
+        roles: ['admin'],
+        requestId: 'test-request',
+      },
+      effectiveRoles: ['consumer', 'builder', 'owner', 'admin'],
+      permissions: [
+        'catalog:read',
+        'runs:execute',
+        'builder:author',
+        'evidence:review',
+        'release:govern',
+        'platform:administer',
+      ],
+      authorizationModel: 'workspace-role-v1',
+    }),
+  ),
+
+  http.get('http://localhost/v1/resources', () =>
+    HttpResponse.json({
+      items: [platformResource],
+      total: 137,
+      countsByLifecycle: {
+        experimental: 50,
+        candidate: 12,
+        evaluating: 10,
+        evaluated: 12,
+        certified: 28,
+        production: 23,
+        deprecated: 2,
+      },
+    }),
+  ),
+
+  http.get('http://localhost/v1/resources/:resourceVersionId', ({ params }) =>
+    params.resourceVersionId === platformResource.id
+      ? HttpResponse.json(platformResource)
+      : HttpResponse.json(
+          {
+            error: {
+              code: 'RESOURCE_NOT_FOUND',
+              message: 'Resource version was not found.',
+              requestId: 'test-request',
+            },
+          },
+          { status: 404 },
+        ),
+  ),
+
+  http.get('http://localhost/v1/catalog/publications', () => HttpResponse.json({ items: [] })),
+
+  http.get('http://localhost/v1/plugins', () => HttpResponse.json({ items: pluginCatalog() })),
+
+  http.get('http://localhost/v1/plugins/:pluginVersionId', ({ params }) => {
+    const plugin = pluginCatalog().find((item) => item.pluginVersionId === params.pluginVersionId);
+    return plugin
+      ? HttpResponse.json(plugin)
+      : HttpResponse.json(
+          { error: { code: 'NOT_FOUND', message: 'Plugin not found.' } },
+          { status: 404 },
+        );
+  }),
+
+  http.get('http://localhost/v1/plugin-installations', () =>
+    HttpResponse.json({
+      items: [
+        pluginInstallation(httpPluginInstallationId),
+        pluginInstallation(mcpPluginInstallationId),
+        ...(dbPluginInstalled ? [pluginInstallation(dbPluginInstallationId)] : []),
+      ],
+    }),
+  ),
+
+  http.post('http://localhost/v1/plugin-installations', async ({ request }) => {
+    const body = (await request.json()) as {
+      pluginVersionId?: unknown;
+      secretBindings?: unknown[];
+    };
+    lastPluginSecretBindings = body.secretBindings ?? null;
+    if (body.pluginVersionId !== dbPluginVersionId) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'PLUGIN_INSTALL_BLOCKED',
+            message: 'Only the fixture Plugin is installable.',
+          },
+        },
+        { status: 409 },
+      );
+    }
+    dbPluginInstalled = true;
+    return HttpResponse.json(pluginInstallation(dbPluginInstallationId), { status: 201 });
+  }),
+
+  http.get('http://localhost/v1/plugin-installations/:installationId', ({ params }) =>
+    HttpResponse.json(pluginInstallation(String(params.installationId))),
+  ),
+
+  http.post(
+    'http://localhost/v1/plugin-installations/:installationId/configure',
+    async ({ params, request }) => {
+      const body = (await request.json()) as { secretBindings?: unknown[] };
+      lastPluginSecretBindings = body.secretBindings ?? null;
+      return HttpResponse.json(pluginInstallation(String(params.installationId)));
+    },
+  ),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/health-check', ({ params }) =>
+    HttpResponse.json({
+      id: '41414141-4141-4414-8414-414141414141',
+      installationId: String(params.installationId),
+      status: 'healthy',
+      probeKind: 'http',
+      message: 'The bounded fixture health probe passed.',
+      latencyMs: 24,
+      checkedAt: now,
+    }),
+  ),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/enable', ({ params }) => {
+    if (params.installationId === httpPluginInstallationId) httpPluginState = 'enabled';
+    return HttpResponse.json(pluginInstallation(String(params.installationId)));
+  }),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/disable', ({ params }) => {
+    if (params.installationId === httpPluginInstallationId) httpPluginState = 'disabled';
+    return HttpResponse.json(pluginInstallation(String(params.installationId)));
+  }),
+
+  http.get('http://localhost/v1/plugin-installations/:installationId/used-by', ({ params }) => {
+    const blocked = params.installationId === httpPluginInstallationId;
+    return HttpResponse.json({
+      installationId: String(params.installationId),
+      items: blocked
+        ? [
+            {
+              kind: 'resource',
+              id: platformResourceId,
+              name: 'Daily Brief',
+              lifecycle: 'production',
+              digest: 'a'.repeat(64),
+            },
+          ]
+        : [],
+      uninstallBlocked: blocked,
+    });
+  }),
+
+  http.post('http://localhost/v1/plugin-installations/:installationId/uninstall', ({ params }) => {
+    if (params.installationId === dbPluginInstallationId) dbPluginInstalled = false;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get('http://localhost/v1/execution-runs', () =>
+    HttpResponse.json({ items: [platformRun()], total: 80, countsByState: executionRunCounts() }),
+  ),
+
+  http.get(`http://localhost/v1/execution-runs/${executionRunId}`, () =>
+    HttpResponse.json(platformRun()),
+  ),
+
+  http.post(
+    `http://localhost/v1/execution-approval-groups/${attentionApprovalGroupKey}/approve`,
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        maxRuns?: unknown;
+        totalCostBudgetUsd?: unknown;
+        pluginScopes?: unknown;
+      };
+      lastPluginApprovalScopes = Array.isArray(body.pluginScopes) ? body.pluginScopes : null;
+      if (
+        typeof body.maxRuns !== 'number' ||
+        body.maxRuns < 4 ||
+        typeof body.totalCostBudgetUsd !== 'number' ||
+        body.totalCostBudgetUsd < 0.48
+      ) {
+        return HttpResponse.json(
+          {
+            error: {
+              code: 'AUTHORITY_ENVELOPE_INSUFFICIENT',
+              message: 'Approval must cover every reviewed matching run.',
+              requestId: 'test-request',
+            },
+          },
+          { status: 422 },
+        );
+      }
+      platformRunState = 'queued';
+      return HttpResponse.json({
+        groupKey: attentionApprovalGroupKey,
+        grant: authorityGrant(),
+        runs: [platformRun()],
+      });
+    },
+  ),
+
+  http.post(
+    `http://localhost/v1/execution-approval-groups/${attentionApprovalGroupKey}/reject`,
+    async ({ request }) => {
+      const body = (await request.json()) as { rationale?: unknown };
+      if (typeof body.rationale !== 'string' || body.rationale.trim().length < 10) {
+        return HttpResponse.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'A rationale of at least 10 characters is required.',
+              requestId: 'test-request',
+            },
+          },
+          { status: 400 },
+        );
+      }
+      platformRunState = 'cancelled';
+      return HttpResponse.json({
+        groupKey: attentionApprovalGroupKey,
+        runs: [platformRun()],
+      });
+    },
+  ),
+
+  http.post(`http://localhost/v1/execution-runs/${executionRunId}/approve`, async ({ request }) => {
+    const body = (await request.json()) as {
+      entryResourceVersionId?: unknown;
+      projectId?: unknown;
+      inputConstraints?: unknown;
+      toolScopes?: unknown;
+      pluginScopes?: unknown;
+    };
+    lastPluginApprovalScopes = Array.isArray(body.pluginScopes) ? body.pluginScopes : null;
+    const pluginScope = Array.isArray(body.pluginScopes) ? body.pluginScopes[0] : null;
+    const limits =
+      pluginScope && typeof pluginScope === 'object'
+        ? (pluginScope as { limits?: Record<string, unknown> }).limits
+        : undefined;
+    const pluginScopeValid =
+      pluginScope !== null &&
+      typeof pluginScope === 'object' &&
+      (pluginScope as { installationId?: unknown }).installationId === httpPluginInstallationId &&
+      (pluginScope as { pluginVersionId?: unknown }).pluginVersionId === httpPluginVersionId &&
+      (pluginScope as { tool?: unknown }).tool === 'list_events' &&
+      limits !== undefined &&
+      Object.entries(limits).every(
+        ([key, value]) =>
+          typeof value === 'number' && value <= pluginLimits[key as keyof typeof pluginLimits],
+      );
+    if (
+      body.entryResourceVersionId !== platformResourceId ||
+      body.projectId !== 'daily-operations' ||
+      JSON.stringify(body.inputConstraints) !== JSON.stringify(platformRun().input) ||
+      JSON.stringify(body.toolScopes) !== JSON.stringify(['read:calendar']) ||
+      !pluginScopeValid
+    ) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'AUTHORITY_ENVELOPE_INSUFFICIENT',
+            message: 'Approval did not bind the server-derived project, input, and Plugin scopes.',
+            requestId: 'test-request',
+          },
+        },
+        { status: 422 },
+      );
+    }
+    platformRunState = 'queued';
+    return HttpResponse.json({ grant: authorityGrant(), run: platformRun() });
+  }),
+
+  http.post(`http://localhost/v1/execution-runs/${executionRunId}/cancel`, () => {
+    platformRunState = 'cancelled';
+    return HttpResponse.json(platformRun());
+  }),
+
+  http.post(`http://localhost/v1/execution-runs/${executionRunId}/reject`, () => {
+    platformRunState = 'cancelled';
+    return HttpResponse.json(platformRun());
+  }),
+
+  http.get('http://localhost/v1/authority-grants', () =>
+    HttpResponse.json({
+      items: [authorityGrant()],
+      total: 33,
+      activeTotal: grantState === 'active' ? 19 : 18,
+    }),
+  ),
+
+  http.post(`http://localhost/v1/authority-grants/${authorityGrantId}/revoke`, () => {
+    grantState = 'revoked';
+    return HttpResponse.json(authorityGrant());
+  }),
+
+  http.get('http://localhost/v1/automation-schedules', () =>
+    HttpResponse.json({
+      items: [automationSchedule()],
+      total: 12,
+      activeTotal: automationScheduleState === 'active' ? 8 : 7,
+    }),
+  ),
+
+  http.post(
+    `http://localhost/v1/automation-schedules/${automationScheduleId}/state`,
+    async ({ request }) => {
+      const body = (await request.json()) as { state: 'active' | 'paused' };
+      automationScheduleState = body.state;
+      return HttpResponse.json(automationSchedule());
+    },
+  ),
+
+  http.get('http://localhost/v1/production-channels/daily-operations', () =>
+    HttpResponse.json(productionChannel()),
+  ),
+
+  http.get(`http://localhost/v1/release-evaluations/${releaseEvaluationId}`, () =>
+    HttpResponse.json(releaseEvaluation()),
+  ),
+
+  http.get('http://localhost/v1/observations', () => HttpResponse.json({ items: [observation()] })),
+
+  http.get('http://localhost/v1/improvement-candidates', () =>
+    HttpResponse.json({ items: [improvementCandidate()] }),
+  ),
+
+  http.post(
+    `http://localhost/v1/improvement-candidates/${improvementCandidateId}/review`,
+    async ({ request }) => {
+      const body = (await request.json()) as { decision: 'incubate' | 'reject' };
+      improvementCandidateState = body.decision === 'incubate' ? 'incubating' : 'rejected';
+      return HttpResponse.json(improvementCandidate());
+    },
+  ),
+
+  http.get('http://localhost/v1/memory-candidates', () =>
+    HttpResponse.json({ items: [memoryCandidate()] }),
+  ),
+
+  http.post(
+    `http://localhost/v1/memory-candidates/${memoryCandidateId}/review`,
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        decision: 'accept' | 'edit_accept' | 'reject';
+        editedValue?: Record<string, unknown>;
+      };
+      memoryCandidateState = body.decision === 'reject' ? 'rejected' : 'accepted';
+      return HttpResponse.json({
+        ...memoryCandidate(),
+        acceptedValue:
+          body.decision === 'edit_accept'
+            ? (body.editedValue ?? null)
+            : memoryCandidate().acceptedValue,
+      });
+    },
+  ),
+
+  http.get('http://localhost/v1/outcomes', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: outcomeId,
+          runId: executionRunId,
+          output: { topPriorities: ['Protect the focus block'] },
+          confidence: 0.92,
+          citations: ['calendar:item-1'],
+          unresolvedItems: [],
+          qualityScore: 1,
+          createdAt: now,
+        },
+      ],
+    }),
+  ),
+
+  http.get('http://localhost/v1/metrics', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: metricId,
+          runId: executionRunId,
+          name: 'provider_cost_usd',
+          value: 0.0032,
+          unit: 'usd',
+          metadata: { provider: 'deterministic' },
+          observedAt: now,
+        },
+      ],
+    }),
+  ),
+
+  http.post('http://localhost/v1/builder/intakes', async ({ request }) => {
+    const body = (await request.json()) as { request: string; confirmed: boolean };
+    return HttpResponse.json(
+      {
+        id: builderIntakeId,
+        request: body.request,
+        requestedBy: 'test-builder',
+        department: outcomes.department,
+        state: body.confirmed ? 'confirmed' : 'interpreted',
+        capabilityProfile,
+        confirmedAt: body.confirmed ? now : null,
+        specificationId: null,
+        createdAt: now,
+      },
+      { status: 201 },
+    );
+  }),
+
+  http.get(`http://localhost/v1/builder/intakes/${builderIntakeId}/referred-choices`, () =>
+    HttpResponse.json({
+      intakeId: builderIntakeId,
+      referredChoices: [referredChoice],
+      compositionSuggestions: [],
+      generatedAt: now,
+    }),
+  ),
+
+  http.post(
+    `http://localhost/v1/builder/intakes/${builderIntakeId}/decisions`,
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        action: 'use_as_is' | 'configure' | 'extend' | 'build_new';
+        selectedPublicationId: string | null;
+        buildNewReason: string | null;
+      };
+      lastBuilderDecision = body;
+      lastBuilderDecisionIdempotencyKey = request.headers.get('Idempotency-Key');
+      const buildNewWithReason = body.action === 'build_new' && body.buildNewReason !== null;
+      return HttpResponse.json(
+        body.action === 'build_new'
+          ? {
+              id: builderDecisionId,
+              intakeId: builderIntakeId,
+              action: 'build_new',
+              selectedPublicationId: null,
+              buildNewReason: body.buildNewReason,
+              demandObservationId: buildNewWithReason ? demandObservationId : null,
+              decidedBy: 'test-builder',
+              highestReferredMatchScore: 87,
+              decidedAt: now,
+            }
+          : {
+              id: builderDecisionId,
+              intakeId: builderIntakeId,
+              action: body.action,
+              selectedPublicationId: body.selectedPublicationId,
+              buildNewReason: null,
+              demandObservationId: null,
+              decidedBy: 'test-builder',
+              highestReferredMatchScore: 87,
+              decidedAt: now,
+            },
+        { status: 201 },
+      );
+    },
+  ),
+
   http.get('http://localhost/agents', ({ request }) => {
     const params = new URL(request.url).searchParams;
     const query = params.get('query') ?? '';
@@ -307,7 +1616,7 @@ export const handlers = [
 
   http.get(`http://localhost/agents/${agentId}`, () => HttpResponse.json(catalogAgent)),
 
-  http.post('http://localhost/agents/specs/interpret', async ({ request }) => {
+  http.post('http://localhost/v1/builder/specs/interpret', async ({ request }) => {
     const body = (await request.json()) as { kind: string; prompt?: string };
     const asksForWrite = body.prompt?.toLocaleLowerCase().includes('write') ?? false;
     const mentionsUnknownErp = body.prompt?.toLocaleLowerCase().includes('our erp') ?? false;
@@ -406,11 +1715,11 @@ export const handlers = [
     }),
   ),
 
-  http.get('http://localhost/agents/sources', () =>
+  http.get('http://localhost/v1/builder/sources', () =>
     HttpResponse.json({ role: 'knowledge', items: [source] }),
   ),
 
-  http.post('http://localhost/agents/specs', async ({ request }) => {
+  http.post('http://localhost/v1/builder/specs', async ({ request }) => {
     const body = (await request.json()) as {
       outcomes: typeof outcomes;
       baseAgentId: string | null;
@@ -443,9 +1752,9 @@ export const handlers = [
     return HttpResponse.json(specFixture, { status: 201 });
   }),
 
-  http.get(`http://localhost/agents/specs/${specId}`, () => HttpResponse.json(requireSpec())),
+  http.get(`http://localhost/v1/builder/specs/${specId}`, () => HttpResponse.json(requireSpec())),
 
-  http.put(`http://localhost/agents/specs/${specId}/outcomes`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/outcomes`, async ({ request }) => {
     const body = (await request.json()) as {
       value: typeof outcomes;
       interpretationConfirmation?: TestInterpretationConfirmation;
@@ -474,7 +1783,7 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.put(`http://localhost/agents/specs/${specId}/knowledge`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/knowledge`, async ({ request }) => {
     const body = (await request.json()) as {
       value: NonNullable<SpecFixture['knowledge']>;
       interpretationConfirmation?: TestInterpretationConfirmation;
@@ -490,7 +1799,7 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.put(`http://localhost/agents/specs/${specId}/guardrails`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/guardrails`, async ({ request }) => {
     const body = (await request.json()) as { value: typeof guardrails };
     const spec = requireSpec();
     specFixture = {
@@ -502,7 +1811,7 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.put(`http://localhost/agents/specs/${specId}/outputs`, async ({ request }) => {
+  http.put(`http://localhost/v1/builder/specs/${specId}/outputs`, async ({ request }) => {
     const body = (await request.json()) as { value: typeof outputs };
     const spec = requireSpec();
     specFixture = {
@@ -515,19 +1824,19 @@ export const handlers = [
     return HttpResponse.json(specFixture);
   }),
 
-  http.post(`http://localhost/agents/specs/${specId}/generate`, () =>
+  http.post(`http://localhost/v1/builder/specs/${specId}/generate`, () =>
     HttpResponse.json(
       {
         jobId,
         agentId,
         state: 'queued',
-        statusUrl: `/agents/generation-jobs/${jobId}`,
+        statusUrl: `/v1/builder/generation-jobs/${jobId}`,
       },
       { status: 202 },
     ),
   ),
 
-  http.get(`http://localhost/agents/generation-jobs/${jobId}`, () =>
+  http.get(`http://localhost/v1/builder/generation-jobs/${jobId}`, () =>
     HttpResponse.json({
       id: jobId,
       agentId,
@@ -559,7 +1868,7 @@ export const handlers = [
     }),
   ),
 
-  http.post(`http://localhost/agents/${agentId}/shadow-deploy`, () =>
+  http.post(`http://localhost/v1/builder/agents/${agentId}/shadow-deploy`, () =>
     HttpResponse.json({
       deploymentId,
       agentId,
@@ -568,7 +1877,7 @@ export const handlers = [
     }),
   ),
 
-  http.get(`http://localhost/agents/${agentId}/evaluation`, () =>
+  http.get(`http://localhost/v1/builder/agents/${agentId}/evaluation`, () =>
     HttpResponse.json({
       agentId,
       status: 'complete',

@@ -1,0 +1,24 @@
+apiVersion: paul-os/v1
+kind: ImprovementCandidate
+metadata:
+  id: b0000000-0000-4000-8000-000000000001
+  slug: briefing-citation-observation
+  version: 1.0.0
+  owner: local-user
+  purpose: Demonstrate a sanitized candidate derived from an observed citation gap.
+  lifecycle: experimental
+  provenance: synthetic
+dependencies:
+  - familyId: 20000000-0000-4000-8000-000000000001
+    version: 1.1.0
+  - familyId: 90000000-0000-4000-8000-000000000001
+    version: 1.1.0
+spec:
+  signalType: outcome_quality
+  observation: A synthetic briefing omitted a source reference for one input-derived claim.
+  proposedTarget: daily-brief
+  proposedChange: Add a regression case covering complete source-reference mapping.
+  evidenceRefs: []
+  humanCurationRequired: true
+  automaticPatchApplication: false
+  automaticPromotion: false

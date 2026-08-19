@@ -3,3 +3,5 @@ dist
 coverage
 package-lock.json
 apps/backend/src/generated
+ops/helm/**/templates
+apps/workstation-broker/**/*.wxs

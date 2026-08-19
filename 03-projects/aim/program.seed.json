@@ -1,0 +1,2611 @@
+{
+  "schemaVersion": "aim.program/v2",
+  "program": {
+    "id": "aim_capability_vehicle",
+    "label": "AIM Capability Map",
+    "description": "A synthetic manufacturing capability map linking hardware ownership, make method, agent coverage, and evidence.",
+    "asOf": "2026-08-17T12:00:00Z",
+    "geometryDisclaimer": "CONCEPTUAL GEOMETRY — NOT VEHICLE CAD",
+    "synthetic": true
+  },
+  "displayPolicy": {
+    "showOwnerNames": false,
+    "groupGranularity": "aggregate",
+    "showNoGoAsFailure": false,
+    "showEvidenceLinks": false,
+    "showInternalSourceIds": false,
+    "showDetailedAgentLists": false,
+    "showDecisionLoopPerformance": true,
+    "defaultEvidenceFreshnessSlaHours": 8760,
+    "factoryMaturityMetricId": "factory_maturity"
+  },
+  "timeline": {
+    "startAt": "2026-08-01T00:00:00Z",
+    "endAt": "2027-06-30T23:59:59Z",
+    "markers": [
+      {
+        "id": "marker_today",
+        "label": "Baseline",
+        "at": "2026-08-17T12:00:00Z",
+        "kind": "today"
+      },
+      {
+        "id": "marker_day_30",
+        "label": "30 days",
+        "at": "2026-09-16T12:00:00Z",
+        "kind": "relative"
+      },
+      {
+        "id": "marker_day_60",
+        "label": "60 days",
+        "at": "2026-10-16T12:00:00Z",
+        "kind": "relative"
+      },
+      {
+        "id": "marker_day_90",
+        "label": "90 days",
+        "at": "2026-11-15T12:00:00Z",
+        "kind": "relative"
+      },
+      {
+        "id": "marker_q1",
+        "label": "Q1 planning view",
+        "at": "2027-01-01T12:00:00Z",
+        "kind": "quarter"
+      },
+      {
+        "id": "marker_q2",
+        "label": "Q2 planning view",
+        "at": "2027-04-01T12:00:00Z",
+        "kind": "quarter"
+      }
+    ]
+  },
+  "anchors": [
+    {
+      "id": "stage_one_region",
+      "label": "Stage one fallback region",
+      "kind": "region",
+      "description": "Generic fallback placement for conceptual stage one capability nodes.",
+      "aliases": []
+    },
+    {
+      "id": "stage_two_region",
+      "label": "Stage two fallback region",
+      "kind": "region",
+      "description": "Generic fallback placement for conceptual stage two capability nodes.",
+      "aliases": []
+    },
+    {
+      "id": "ground_region",
+      "label": "Ground fallback region",
+      "kind": "region",
+      "description": "Generic fallback placement for conceptual ground capability nodes.",
+      "aliases": []
+    },
+    {
+      "id": "s1_engines",
+      "label": "Stage 1 engine cluster",
+      "kind": "vehicle",
+      "aliases": ["booster_engine_cluster"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_thrust",
+      "label": "Stage 1 thrust structure",
+      "kind": "vehicle",
+      "aliases": ["booster_thrust_structure"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_fuel_tank",
+      "label": "Stage 1 fuel tank",
+      "kind": "vehicle",
+      "aliases": ["booster_fuel_volume"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_lox_tank",
+      "label": "Stage 1 oxidizer tank",
+      "kind": "vehicle",
+      "aliases": ["booster_oxidizer_volume"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_intertank",
+      "label": "Stage 1 intertank",
+      "kind": "vehicle",
+      "aliases": ["booster_intertank"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s1_feedlines",
+      "label": "Stage 1 propellant feedlines",
+      "kind": "vehicle",
+      "aliases": ["booster_feedline_proxy"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "interstage",
+      "label": "Interstage",
+      "kind": "vehicle",
+      "aliases": ["stage_transition"],
+      "fallbackRegion": "stage_one_region"
+    },
+    {
+      "id": "s2_engine",
+      "label": "Stage 2 engine",
+      "kind": "vehicle",
+      "aliases": ["upper_engine_proxy"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "s2_fuel_tank",
+      "label": "Stage 2 fuel tank",
+      "kind": "vehicle",
+      "aliases": ["upper_fuel_volume"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "s2_lox_tank",
+      "label": "Stage 2 oxidizer tank",
+      "kind": "vehicle",
+      "aliases": ["upper_oxidizer_volume"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "avionics_bay",
+      "label": "Avionics bay",
+      "kind": "vehicle",
+      "aliases": ["guidance_section"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "fts",
+      "label": "Flight termination system",
+      "kind": "vehicle",
+      "aliases": ["safety_control_proxy"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "payload_adapter",
+      "label": "Payload adapter",
+      "kind": "vehicle",
+      "aliases": ["outcome_adapter"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "fairing",
+      "label": "Payload fairing",
+      "kind": "vehicle",
+      "aliases": ["mission_shell"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "payload",
+      "label": "Payload",
+      "kind": "vehicle",
+      "aliases": ["outcome_payload"],
+      "fallbackRegion": "stage_two_region"
+    },
+    {
+      "id": "stargate",
+      "label": "Additive manufacturing cell",
+      "kind": "ground",
+      "aliases": ["factory_printer"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "gantries",
+      "label": "Production gantries",
+      "kind": "ground",
+      "aliases": ["factory_gantries"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "scanner",
+      "label": "Quality inspection scanner",
+      "kind": "ground",
+      "aliases": ["quality_scanner"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "sensors",
+      "label": "Test instrumentation sensors",
+      "kind": "ground",
+      "aliases": ["sensor_field"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "test_stand",
+      "label": "Test stand",
+      "kind": "ground",
+      "aliases": ["validation_stand"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "gse",
+      "label": "Ground support equipment",
+      "kind": "ground",
+      "aliases": ["platform_support"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "prop_farm",
+      "label": "Propellant farm",
+      "kind": "ground",
+      "aliases": ["resource_farm"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "range_safety",
+      "label": "Range safety system",
+      "kind": "ground",
+      "aliases": ["policy_console"],
+      "fallbackRegion": "ground_region"
+    },
+    {
+      "id": "fd_console",
+      "label": "Flight operations console",
+      "kind": "ground",
+      "aliases": ["program_console"],
+      "fallbackRegion": "ground_region"
+    }
+  ],
+  "groups": [
+    {
+      "id": "group_propulsion",
+      "label": "Propulsion",
+      "description": "Owns engines and propellant delivery hardware through build, integration, and hot-fire acceptance.",
+      "ownedAnchorIds": ["s1_engines", "s1_feedlines", "s2_engine"],
+      "participatingCapabilityIds": ["agent_operations", "simulation_loop"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "primary",
+      "displayOrder": 2
+    },
+    {
+      "id": "group_structures",
+      "label": "Structures",
+      "description": "Owns the load-bearing airframe, vehicle interfaces, and payload enclosure from manufacture through proof.",
+      "ownedAnchorIds": ["s1_thrust", "s1_intertank", "interstage", "payload_adapter", "fairing"],
+      "participatingCapabilityIds": ["data_foundation", "connected_systems"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "primary",
+      "displayOrder": 1
+    },
+    {
+      "id": "group_knowledge",
+      "label": "Knowledge and data",
+      "description": "Supports governed context, datasets, lineage, and evidence retrieval across hardware owners.",
+      "ownedAnchorIds": [],
+      "participatingCapabilityIds": ["governed_knowledge"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "supporting",
+      "displayOrder": 102
+    },
+    {
+      "id": "group_supply_chain",
+      "label": "Supply chain",
+      "description": "Supports purchased hardware, supplier commitments, receiving, and material availability across hardware owners.",
+      "ownedAnchorIds": [],
+      "participatingCapabilityIds": ["connected_systems"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "supporting",
+      "displayOrder": 101
+    },
+    {
+      "id": "group_integration",
+      "label": "Integration and test",
+      "description": "Owns vehicle integration, ground systems, test operations, and the readiness path to flight.",
+      "ownedAnchorIds": ["payload", "test_stand", "gse", "prop_farm", "fd_console"],
+      "participatingCapabilityIds": ["simulation_loop", "governed_decisions"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "primary",
+      "displayOrder": 4
+    },
+    {
+      "id": "group_platform",
+      "label": "Platform",
+      "description": "Supports shared observation, connector, runtime, and operational platform services.",
+      "ownedAnchorIds": [],
+      "participatingCapabilityIds": ["data_foundation", "connected_systems", "agent_operations"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "supporting",
+      "displayOrder": 103
+    },
+    {
+      "id": "group_policy",
+      "label": "Policy and governance",
+      "description": "Supports authority, holds, approvals, release controls, and auditability across operating groups.",
+      "ownedAnchorIds": [],
+      "participatingCapabilityIds": ["governed_decisions"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "supporting",
+      "displayOrder": 104
+    },
+    {
+      "id": "group_program",
+      "label": "Program outcomes",
+      "description": "Supports program-level priorities, readiness criteria, and evidence-backed outcome review.",
+      "ownedAnchorIds": [],
+      "participatingCapabilityIds": ["measurable_outcomes"],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "supporting",
+      "displayOrder": 105
+    },
+    {
+      "id": "group_factory",
+      "label": "Factory operations",
+      "description": "Owns additive tank production, production equipment, material flow, and first-pass manufacturing execution.",
+      "ownedAnchorIds": [
+        "s1_fuel_tank",
+        "s1_lox_tank",
+        "s2_fuel_tank",
+        "s2_lox_tank",
+        "stargate",
+        "gantries"
+      ],
+      "participatingCapabilityIds": ["data_foundation", "connected_systems"],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"],
+      "kind": "primary",
+      "displayOrder": 3
+    },
+    {
+      "id": "group_quality",
+      "label": "Quality",
+      "description": "Owns inspection evidence, nonconformance review, material review, disposition, and acceptance records.",
+      "kind": "primary",
+      "displayOrder": 5,
+      "ownedAnchorIds": ["scanner"],
+      "participatingCapabilityIds": [
+        "data_foundation",
+        "connected_systems",
+        "governed_decisions",
+        "agent_operations"
+      ],
+      "decisionLoopIds": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "group_avionics",
+      "label": "Avionics and safety",
+      "description": "Owns flight computers, harnessing, instrumentation, termination hardware, and flight safety interfaces.",
+      "kind": "primary",
+      "displayOrder": 6,
+      "ownedAnchorIds": ["avionics_bay", "fts", "sensors", "range_safety"],
+      "participatingCapabilityIds": [
+        "connected_systems",
+        "simulation_loop",
+        "governed_decisions",
+        "agent_operations"
+      ],
+      "decisionLoopIds": ["loop_primary_decision"],
+      "sourceRefs": ["synthetic_program_plan"]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "data_foundation",
+      "label": "Data foundation",
+      "layer": "foundation",
+      "description": "Stable definitions, provenance, and governed operational records.",
+      "dependencyIds": []
+    },
+    {
+      "id": "connected_systems",
+      "label": "Connected systems",
+      "layer": "connectivity",
+      "description": "Typed, bounded connections joining operational information flows.",
+      "dependencyIds": ["data_foundation"]
+    },
+    {
+      "id": "governed_knowledge",
+      "label": "Governed knowledge",
+      "layer": "knowledge",
+      "description": "Traceable context and knowledge with measurable coverage and freshness.",
+      "dependencyIds": ["data_foundation", "connected_systems"]
+    },
+    {
+      "id": "simulation_loop",
+      "label": "Simulation loop",
+      "layer": "simulation",
+      "description": "Testable alternatives evaluated before production-facing decisions.",
+      "dependencyIds": ["governed_knowledge"]
+    },
+    {
+      "id": "governed_decisions",
+      "label": "Governed decisions",
+      "layer": "decision",
+      "description": "Explainable decisions bounded by evidence, policy, and human authority.",
+      "dependencyIds": ["governed_knowledge", "simulation_loop"]
+    },
+    {
+      "id": "agent_operations",
+      "label": "Agent operations",
+      "layer": "agent",
+      "description": "Certified agent capabilities operating within governed authority envelopes.",
+      "dependencyIds": ["governed_decisions"]
+    },
+    {
+      "id": "measurable_outcomes",
+      "label": "Measurable outcomes",
+      "layer": "outcome",
+      "description": "Observable outcomes tied back to decisions, evidence, and cost.",
+      "dependencyIds": ["agent_operations"]
+    }
+  ],
+  "parts": [
+    {
+      "id": "s1_engines",
+      "label": "Stage 1 engine cluster",
+      "anchorId": "s1_engines",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["agent_operations"],
+      "participatingGroupIds": ["group_propulsion", "group_platform"],
+      "problem": "Provides primary propulsion for stage one and transfers thrust into the vehicle structure.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["s2_engine"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "go",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "agentStatusMetricId": "qualifying_agents_active",
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "printed",
+      "process": "Printed chambers and injectors are assembled, instrumented, and accepted by hot fire.",
+      "ownerGroupId": "group_propulsion",
+      "coverage": {
+        "agentIds": [
+          "agent_hot_fire_quicklook",
+          "agent_redline_recurrence",
+          "agent_engine_genealogy"
+        ],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s1_thrust",
+      "label": "Stage 1 thrust structure",
+      "anchorId": "s1_thrust",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["data_foundation"],
+      "participatingGroupIds": ["group_structures", "group_platform"],
+      "problem": "Transfers engine loads into the stage while maintaining alignment across engine interfaces.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["s1_engines", "s1_fuel_tank", "s1_lox_tank"],
+      "dependencyPartIds": [],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-08-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "printed",
+      "process": "Printed as an integrated structure, stress relieved, machined, inspected, and proof tested.",
+      "ownerGroupId": "group_structures",
+      "coverage": {
+        "agentIds": [
+          "agent_as_built_reconciliation",
+          "agent_print_parameter_drift",
+          "agent_proof_test_package"
+        ],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s1_fuel_tank",
+      "label": "Stage 1 fuel tank",
+      "anchorId": "s1_fuel_tank",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_factory", "group_knowledge"],
+      "problem": "Stores stage one fuel within the required structural, pressure, and thermal boundaries.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["s2_fuel_tank"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_metric_snapshot_60"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"],
+      "makeMethod": "printed",
+      "process": "Wire additive barrel and domes are machined, joined, inspected, proof tested, and leak tested.",
+      "ownerGroupId": "group_factory",
+      "coverage": {
+        "agentIds": ["agent_feedstock_genealogy", "agent_print_yield", "agent_scrap_transaction"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s1_lox_tank",
+      "label": "Stage 1 oxidizer tank",
+      "anchorId": "s1_lox_tank",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_factory", "group_knowledge"],
+      "problem": "Stores stage one oxidizer within the required structural, pressure, and thermal boundaries.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"],
+      "makeMethod": "printed",
+      "process": "Wire additive barrel and domes are machined, joined, inspected, proof tested, and leak tested.",
+      "ownerGroupId": "group_factory",
+      "coverage": {
+        "agentIds": ["agent_feedstock_genealogy", "agent_print_yield", "agent_scrap_transaction"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s1_intertank",
+      "label": "Stage 1 intertank",
+      "anchorId": "s1_intertank",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["data_foundation", "connected_systems"],
+      "participatingGroupIds": ["group_structures", "group_integration"],
+      "problem": "Carries loads and maintains alignment between the stage one propellant tanks.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "printed",
+      "process": "Printed barrel features are machined and joined between the two stage one tank sections.",
+      "ownerGroupId": "group_structures",
+      "coverage": {
+        "agentIds": ["agent_as_built_reconciliation"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s1_feedlines",
+      "label": "Stage 1 propellant feedlines",
+      "anchorId": "s1_feedlines",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["connected_systems"],
+      "participatingGroupIds": ["group_propulsion", "group_supply_chain", "group_platform"],
+      "problem": "Routes fuel and oxidizer from the tanks to the stage one engine cluster.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "purchased",
+      "process": "Purchased tube stock is formed, welded, cleaned, inspected, and proof tested in-house.",
+      "ownerGroupId": "group_propulsion",
+      "coverage": {
+        "agentIds": [
+          "agent_engine_genealogy",
+          "agent_supplier_delay_impact",
+          "agent_long_lead_watch"
+        ],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "interstage",
+      "label": "Interstage",
+      "anchorId": "interstage",
+      "fallbackRegion": "stage_one_region",
+      "capabilityIds": ["connected_systems", "governed_decisions"],
+      "participatingGroupIds": ["group_structures", "group_integration"],
+      "problem": "Joins the two stages, carries ascent loads, and supports the separation interface.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["s2_engine", "avionics_bay"],
+      "dependencyPartIds": ["s1_intertank", "s1_lox_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "printed",
+      "process": "A large-format printed barrel is stress relieved and machined at both vehicle interfaces.",
+      "ownerGroupId": "group_structures",
+      "coverage": {
+        "agentIds": [
+          "agent_as_built_reconciliation",
+          "agent_print_parameter_drift",
+          "agent_proof_test_package"
+        ],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s2_engine",
+      "label": "Stage 2 engine",
+      "anchorId": "s2_engine",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["simulation_loop"],
+      "participatingGroupIds": ["group_propulsion", "group_integration"],
+      "problem": "Provides upper-stage propulsion and the performance needed to complete payload insertion.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["avionics_bay"],
+      "dependencyPartIds": ["interstage"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "printed",
+      "process": "Printed chamber and injector hardware is assembled with the vacuum nozzle and hot-fire accepted.",
+      "ownerGroupId": "group_propulsion",
+      "coverage": {
+        "agentIds": [
+          "agent_hot_fire_quicklook",
+          "agent_redline_recurrence",
+          "agent_engine_genealogy"
+        ],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s2_fuel_tank",
+      "label": "Stage 2 fuel tank",
+      "anchorId": "s2_fuel_tank",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_factory", "group_knowledge"],
+      "problem": "Stores upper-stage fuel within tighter mass, pressure, and dimensional constraints.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["s1_fuel_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"],
+      "makeMethod": "printed",
+      "process": "Thin-wall additive sections are machined, joined, inspected, proof tested, and leak tested.",
+      "ownerGroupId": "group_factory",
+      "coverage": {
+        "agentIds": ["agent_feedstock_genealogy", "agent_print_yield", "agent_scrap_transaction"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "s2_lox_tank",
+      "label": "Stage 2 oxidizer tank",
+      "anchorId": "s2_lox_tank",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_knowledge"],
+      "participatingGroupIds": ["group_factory", "group_knowledge"],
+      "problem": "Stores upper-stage oxidizer within tighter mass, pressure, and dimensional constraints.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["s1_lox_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "knowledgeCoverageMetricId": "knowledge_coverage",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"],
+      "makeMethod": "printed",
+      "process": "Thin-wall additive sections are machined, joined, inspected, proof tested, and leak tested.",
+      "ownerGroupId": "group_factory",
+      "coverage": {
+        "agentIds": ["agent_feedstock_genealogy", "agent_print_yield", "agent_scrap_transaction"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "avionics_bay",
+      "label": "Avionics bay",
+      "anchorId": "avionics_bay",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["agent_operations", "governed_decisions"],
+      "participatingGroupIds": [
+        "group_avionics",
+        "group_platform",
+        "group_integration",
+        "group_policy"
+      ],
+      "problem": "Houses the flight computers, power distribution, communications, and vehicle instrumentation.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["interstage", "s2_engine"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "agentStatusMetricId": "qualifying_agents_active",
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"],
+      "makeMethod": "purchased",
+      "process": "Purchased flight electronics are integrated with in-house harnesses, software, and sensors.",
+      "ownerGroupId": "group_avionics",
+      "coverage": {
+        "agentIds": ["agent_harness_continuity", "agent_sensor_channel_coverage"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "fts",
+      "label": "Flight termination system",
+      "anchorId": "fts",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_decisions"],
+      "participatingGroupIds": ["group_avionics", "group_policy"],
+      "problem": "Provides an independent commanded safety function during flight operations.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload_adapter"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "purchased",
+      "process": "Qualified termination hardware is purchased, integrated, functionally tested, and independently verified.",
+      "ownerGroupId": "group_avionics",
+      "coverage": {
+        "agentIds": ["agent_harness_continuity"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "payload_adapter",
+      "label": "Payload adapter",
+      "anchorId": "payload_adapter",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["governed_decisions", "measurable_outcomes"],
+      "participatingGroupIds": ["group_structures", "group_integration", "group_program"],
+      "problem": "Carries the payload and provides its structural and separation interface to stage two.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload"],
+      "dependencyPartIds": ["avionics_bay", "s2_fuel_tank", "s2_lox_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "purchased",
+      "process": "Purchased separation hardware is inspected, fit checked, integrated, and verified to interface requirements.",
+      "ownerGroupId": "group_structures",
+      "coverage": {
+        "agentIds": ["agent_as_built_reconciliation"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "fairing",
+      "label": "Payload fairing",
+      "anchorId": "fairing",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["measurable_outcomes"],
+      "participatingGroupIds": ["group_structures", "group_program"],
+      "problem": "Protects the payload through ground handling and atmospheric ascent before separation.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["payload"],
+      "dependencyPartIds": ["payload_adapter"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-04-01T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "printed",
+      "process": "Printed frames and composite skins are assembled, inspected, and separation tested.",
+      "ownerGroupId": "group_structures",
+      "coverage": {
+        "agentIds": ["agent_print_parameter_drift"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "payload",
+      "label": "Payload",
+      "anchorId": "payload",
+      "fallbackRegion": "stage_two_region",
+      "capabilityIds": ["measurable_outcomes"],
+      "participatingGroupIds": ["group_integration", "group_program"],
+      "problem": "Represents the customer payload and its governed vehicle interfaces in this synthetic program.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": [],
+      "dependencyPartIds": ["payload_adapter", "fairing"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-04-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_outcome_report"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "purchased",
+      "process": "Customer-supplied payload interfaces are verified before mechanical and electrical integration.",
+      "ownerGroupId": "group_integration",
+      "coverage": {
+        "agentIds": ["agent_launch_readiness"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "stargate",
+      "label": "Additive manufacturing cell",
+      "anchorId": "stargate",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["data_foundation"],
+      "participatingGroupIds": ["group_factory"],
+      "problem": "Produces the large-format additive structures represented in this sanitized program seed.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["gantries", "s1_thrust"],
+      "dependencyPartIds": [],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan", "synthetic_metric_registry"],
+      "makeMethod": "facility",
+      "process": "The synthetic printer cell is calibrated, qualified, monitored, and maintained as production equipment.",
+      "ownerGroupId": "group_factory",
+      "coverage": {
+        "agentIds": ["agent_feedstock_genealogy"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "gantries",
+      "label": "Production gantries",
+      "anchorId": "gantries",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["connected_systems"],
+      "participatingGroupIds": ["group_factory", "group_platform"],
+      "problem": "Moves and positions large hardware safely through manufacturing and integration operations.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["scanner"],
+      "dependencyPartIds": ["stargate"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "lifecycle": "retired",
+          "readiness": "unknown",
+          "note": "Synthetic legacy path retired after capability consolidation.",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "facility",
+      "process": "Production handling equipment is installed, commissioned, inspected, and maintained on a controlled schedule.",
+      "ownerGroupId": "group_factory",
+      "coverage": {
+        "agentIds": ["agent_print_yield"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "scanner",
+      "label": "Quality inspection scanner",
+      "anchorId": "scanner",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["simulation_loop", "governed_decisions"],
+      "participatingGroupIds": ["group_quality", "group_integration"],
+      "problem": "Captures dimensional and surface evidence used for nonconformance and acceptance decisions.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["test_stand"],
+      "dependencyPartIds": ["gantries"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-09-15T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "facility",
+      "process": "Inspection equipment is calibrated against synthetic standards before controlled scans are accepted.",
+      "ownerGroupId": "group_quality",
+      "coverage": {
+        "agentIds": ["agent_ncr_triage", "agent_mrb_package"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "sensors",
+      "label": "Test instrumentation sensors",
+      "anchorId": "sensors",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["data_foundation", "connected_systems"],
+      "participatingGroupIds": ["group_avionics", "group_platform"],
+      "problem": "Measures vehicle and facility behavior during manufacturing, qualification, and acceptance tests.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["avionics_bay"],
+      "dependencyPartIds": ["gse"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "go",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "purchased",
+      "process": "Purchased sensors are calibrated, mapped to channels, installed, and checked before test.",
+      "ownerGroupId": "group_avionics",
+      "coverage": {
+        "agentIds": ["agent_harness_continuity", "agent_sensor_channel_coverage"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "test_stand",
+      "label": "Test stand",
+      "anchorId": "test_stand",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["simulation_loop", "governed_decisions"],
+      "participatingGroupIds": ["group_integration"],
+      "problem": "Supports controlled engine and stage testing with traceable configuration and instrumentation.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["interstage"],
+      "dependencyPartIds": ["scanner"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "facility",
+      "process": "The synthetic stand, plumbing, controls, and instrumentation are configured and verified before use.",
+      "ownerGroupId": "group_integration",
+      "coverage": {
+        "agentIds": ["agent_launch_readiness", "agent_test_readiness_package"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "gse",
+      "label": "Ground support equipment",
+      "anchorId": "gse",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["connected_systems"],
+      "participatingGroupIds": ["group_integration", "group_platform"],
+      "problem": "Provides the mechanical, electrical, and fluid services needed to handle and operate the vehicle.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["sensors", "s1_feedlines"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "facility",
+      "process": "Support equipment is configured, inspected, maintained, and checked against the test or launch configuration.",
+      "ownerGroupId": "group_integration",
+      "coverage": {
+        "agentIds": ["agent_launch_readiness", "agent_test_readiness_package"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "prop_farm",
+      "label": "Propellant farm",
+      "anchorId": "prop_farm",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["measurable_outcomes"],
+      "participatingGroupIds": ["group_integration", "group_supply_chain", "group_program"],
+      "problem": "Stores and conditions propellants for controlled transfer during test and launch operations.",
+      "decisionLoopIds": [],
+      "unlocksPartIds": ["s1_feedlines"],
+      "dependencyPartIds": [],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "planned",
+          "readiness": "unknown",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_outcome_report"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "facility",
+      "process": "Storage vessels, transfer systems, and sampling points are commissioned and maintained as site infrastructure.",
+      "ownerGroupId": "group_integration",
+      "coverage": {
+        "agentIds": [
+          "agent_supplier_delay_impact",
+          "agent_long_lead_watch",
+          "agent_launch_readiness"
+        ],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "range_safety",
+      "label": "Range safety system",
+      "anchorId": "range_safety",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["governed_decisions"],
+      "participatingGroupIds": ["group_avionics", "group_policy"],
+      "problem": "Provides the monitored safety boundary and command path required for flight operations.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["fts"],
+      "dependencyPartIds": ["s1_thrust"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_foundation_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "facility",
+      "process": "Safety communications, tracking, and command paths are configured, tested, and independently verified.",
+      "ownerGroupId": "group_avionics",
+      "coverage": {
+        "agentIds": ["agent_sensor_channel_coverage"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    },
+    {
+      "id": "fd_console",
+      "label": "Flight operations console",
+      "anchorId": "fd_console",
+      "fallbackRegion": "ground_region",
+      "capabilityIds": ["governed_decisions", "measurable_outcomes"],
+      "participatingGroupIds": ["group_integration", "group_program", "group_policy"],
+      "problem": "Provides an integrated operating position for readiness, test, and flight decisions.",
+      "decisionLoopIds": ["loop_primary_decision"],
+      "unlocksPartIds": ["payload"],
+      "dependencyPartIds": ["test_stand", "range_safety"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "lifecycle": "poc",
+          "readiness": "no_go",
+          "evidenceRefs": ["ev_seed_contract"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "lifecycle": "pilot",
+          "readiness": "conditional",
+          "evidenceRefs": ["ev_pilot_review"],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "lifecycle": "production",
+          "readiness": "go",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "evidenceRefs": ["ev_seed_contract"],
+      "sourceRefs": ["synthetic_program_plan"],
+      "makeMethod": "facility",
+      "process": "Console hardware, displays, communications, and approved procedures are configured for each operation.",
+      "ownerGroupId": "group_integration",
+      "coverage": {
+        "agentIds": ["agent_launch_readiness", "agent_test_readiness_package"],
+        "evidenceRefs": ["ev_seed_contract"]
+      }
+    }
+  ],
+  "milestones": [
+    {
+      "id": "milestone_foundation_gate",
+      "label": "Foundation evidence gate",
+      "date": "2026-10-15T00:00:00Z",
+      "ownerGroupIds": ["group_integration", "group_platform"],
+      "affectedPartIds": ["s1_thrust", "stargate", "test_stand"],
+      "gateCriteria": [
+        {
+          "id": "criterion_foundation_verified",
+          "label": "Foundation contract and test evidence verified",
+          "required": true,
+          "affectedPartIds": ["s1_thrust", "stargate", "test_stand"],
+          "requiredMetricIds": ["factory_maturity"],
+          "evidenceRefs": ["ev_foundation_test"],
+          "resultHistory": [
+            {
+              "effectiveAt": "2026-08-15T00:00:00Z",
+              "state": "unsatisfied",
+              "evidenceRefs": ["ev_foundation_test"],
+              "sourceRef": "synthetic_evidence_registry"
+            },
+            {
+              "effectiveAt": "2026-10-15T00:00:00Z",
+              "state": "satisfied",
+              "evidenceRefs": ["ev_production_gate"],
+              "sourceRef": "synthetic_evidence_registry"
+            }
+          ]
+        }
+      ],
+      "evidenceRefs": ["ev_foundation_test", "ev_production_gate"],
+      "sourceRefs": ["synthetic_evidence_registry"]
+    },
+    {
+      "id": "milestone_decision_gate",
+      "label": "First governed production decision",
+      "date": "2027-01-01T00:00:00Z",
+      "ownerGroupIds": ["group_program", "group_policy"],
+      "affectedPartIds": ["avionics_bay", "fd_console"],
+      "gateCriteria": [
+        {
+          "id": "criterion_decision_loop_verified",
+          "label": "Decision loop has evidence and measured latency",
+          "required": true,
+          "affectedPartIds": ["avionics_bay", "fd_console"],
+          "requiredMetricIds": [
+            "decision_latency_baseline",
+            "decision_latency_current",
+            "decision_latency_target"
+          ],
+          "evidenceRefs": ["ev_pilot_review", "ev_production_gate"],
+          "resultHistory": [
+            {
+              "effectiveAt": "2026-10-15T00:00:00Z",
+              "state": "unsatisfied",
+              "evidenceRefs": ["ev_pilot_review"],
+              "sourceRef": "synthetic_evidence_registry"
+            },
+            {
+              "effectiveAt": "2027-01-01T00:00:00Z",
+              "state": "satisfied",
+              "evidenceRefs": ["ev_production_gate"],
+              "sourceRef": "synthetic_evidence_registry"
+            }
+          ]
+        }
+      ],
+      "evidenceRefs": ["ev_pilot_review", "ev_production_gate"],
+      "sourceRefs": ["synthetic_evidence_registry"]
+    }
+  ],
+  "workstreams": [
+    {
+      "id": "workstream_print_cell_qualification",
+      "label": "Print cell qualification",
+      "ownerGroupId": "group_factory",
+      "affectedPartIds": ["stargate"],
+      "startAt": "2026-08-01T00:00:00Z",
+      "endAt": "2026-08-15T00:00:00Z",
+      "state": "complete",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": ["milestone_foundation_gate"]
+    },
+    {
+      "id": "workstream_tank_barrel_production",
+      "label": "Tank barrel production",
+      "ownerGroupId": "group_factory",
+      "affectedPartIds": ["s1_fuel_tank", "s1_lox_tank"],
+      "startAt": "2026-08-10T00:00:00Z",
+      "endAt": "2026-12-18T00:00:00Z",
+      "state": "in_work",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": []
+    },
+    {
+      "id": "workstream_thrust_structure_build",
+      "label": "Thrust structure build",
+      "ownerGroupId": "group_structures",
+      "affectedPartIds": ["s1_thrust"],
+      "startAt": "2026-08-10T00:00:00Z",
+      "endAt": "2027-01-08T00:00:00Z",
+      "state": "in_work",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": ["milestone_foundation_gate"]
+    },
+    {
+      "id": "workstream_interstage_fairing",
+      "label": "Interstage + fairing",
+      "ownerGroupId": "group_structures",
+      "affectedPartIds": ["interstage", "fairing"],
+      "startAt": "2026-11-01T00:00:00Z",
+      "endAt": "2027-02-15T00:00:00Z",
+      "state": "at_risk",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": []
+    },
+    {
+      "id": "workstream_engine_cluster_assembly",
+      "label": "Engine cluster assembly",
+      "ownerGroupId": "group_propulsion",
+      "affectedPartIds": ["s1_engines"],
+      "startAt": "2026-08-10T00:00:00Z",
+      "endAt": "2026-12-31T00:00:00Z",
+      "state": "in_work",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": []
+    },
+    {
+      "id": "workstream_stage_one_hot_fire",
+      "label": "Stage 1 hot fire campaign",
+      "ownerGroupId": "group_propulsion",
+      "affectedPartIds": ["s1_engines", "s1_feedlines"],
+      "startAt": "2027-01-01T00:00:00Z",
+      "endAt": "2027-03-15T00:00:00Z",
+      "state": "planned",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": []
+    },
+    {
+      "id": "workstream_stage_mate",
+      "label": "Stage mate",
+      "ownerGroupId": "group_integration",
+      "affectedPartIds": ["payload", "gse"],
+      "startAt": "2027-03-01T00:00:00Z",
+      "endAt": "2027-04-01T00:00:00Z",
+      "state": "planned",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": []
+    },
+    {
+      "id": "workstream_vehicle_integrated_test",
+      "label": "Vehicle integrated test",
+      "ownerGroupId": "group_integration",
+      "affectedPartIds": ["test_stand", "fd_console"],
+      "startAt": "2027-04-01T00:00:00Z",
+      "endAt": "2027-05-15T00:00:00Z",
+      "state": "planned",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": []
+    },
+    {
+      "id": "workstream_ncr_burndown",
+      "label": "Nonconformance burndown to flight",
+      "ownerGroupId": "group_quality",
+      "affectedPartIds": ["scanner"],
+      "startAt": "2026-08-15T00:00:00Z",
+      "endAt": "2027-05-15T00:00:00Z",
+      "state": "planned",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": []
+    },
+    {
+      "id": "workstream_avionics_integration",
+      "label": "Avionics integration",
+      "ownerGroupId": "group_avionics",
+      "affectedPartIds": ["avionics_bay", "fts", "sensors"],
+      "startAt": "2026-12-15T00:00:00Z",
+      "endAt": "2027-03-31T00:00:00Z",
+      "state": "planned",
+      "sourceRefs": ["synthetic_program_plan"],
+      "milestoneIds": ["milestone_decision_gate"]
+    }
+  ],
+  "decisionLoops": [
+    {
+      "id": "loop_primary_decision",
+      "label": "Primary governed decision loop",
+      "ownerGroupIds": [
+        "group_integration",
+        "group_platform",
+        "group_program",
+        "group_policy",
+        "group_propulsion",
+        "group_avionics"
+      ],
+      "sourceSystemIds": ["synthetic_metric_registry", "synthetic_program_plan"],
+      "partIds": ["sensors", "avionics_bay", "s2_engine", "fd_console", "payload"],
+      "baselineLatencyMetricId": "decision_latency_baseline",
+      "currentLatencyMetricId": "decision_latency_current",
+      "targetLatencyMetricId": "decision_latency_target",
+      "steps": [
+        {
+          "id": "step_observe",
+          "label": "Observe",
+          "phase": "observe",
+          "sequence": 0
+        },
+        {
+          "id": "step_contextualize",
+          "label": "Contextualize",
+          "phase": "contextualize",
+          "sequence": 1
+        },
+        {
+          "id": "step_explain",
+          "label": "Explain",
+          "phase": "explain",
+          "sequence": 2
+        },
+        {
+          "id": "step_simulate",
+          "label": "Simulate",
+          "phase": "simulate",
+          "sequence": 3
+        },
+        {
+          "id": "step_decide",
+          "label": "Decide",
+          "phase": "decide",
+          "sequence": 4
+        },
+        {
+          "id": "step_act",
+          "label": "Act",
+          "phase": "act",
+          "sequence": 5
+        },
+        {
+          "id": "step_measure",
+          "label": "Measure",
+          "phase": "measure",
+          "sequence": 6
+        }
+      ],
+      "manualHandoffs": [
+        {
+          "id": "handoff_context_to_explain",
+          "label": "Context-to-explanation handoff",
+          "fromStepId": "step_contextualize",
+          "toStepId": "step_explain",
+          "statusHistory": [
+            {
+              "effectiveAt": "2026-08-01T00:00:00Z",
+              "state": "manual",
+              "sourceRef": "synthetic_program_plan"
+            },
+            {
+              "effectiveAt": "2026-11-15T00:00:00Z",
+              "state": "governed",
+              "sourceRef": "synthetic_program_plan"
+            }
+          ]
+        }
+      ],
+      "sourceRefs": ["synthetic_metric_registry", "synthetic_program_plan"]
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "seam_s1_thrust_s1_fuel_tank",
+      "label": "Foundation-to-knowledge interface",
+      "partIds": ["s1_thrust", "s1_fuel_tank"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "manual",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-10-15T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_interface_test"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "seam_s1_lox_tank_interstage",
+      "label": "Knowledge-to-graduation interface",
+      "partIds": ["s1_lox_tank", "interstage"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "planned",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2026-11-15T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_interface_test"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_interface_test"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "seam_interstage_s2_engine",
+      "label": "Graduation-to-simulation interface",
+      "partIds": ["interstage", "s2_engine"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "planned",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_production_gate"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "seam_avionics_bay_payload_adapter",
+      "label": "Decision-to-outcome interface",
+      "partIds": ["avionics_bay", "payload_adapter"],
+      "statusHistory": [
+        {
+          "effectiveAt": "2026-08-01T00:00:00Z",
+          "state": "planned",
+          "evidenceRefs": [],
+          "sourceRef": "synthetic_program_plan"
+        },
+        {
+          "effectiveAt": "2027-01-01T00:00:00Z",
+          "state": "governed",
+          "evidenceRefs": ["ev_production_gate"],
+          "sourceRef": "synthetic_program_plan"
+        }
+      ],
+      "evidenceRefs": ["ev_production_gate"],
+      "sourceRefs": ["synthetic_program_plan"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_seed_contract",
+      "label": "Synthetic manifest contract review",
+      "type": "artifact",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-contract-001",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_foundation_test",
+      "label": "Synthetic foundation contract test",
+      "type": "test",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-test-001",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_interface_test",
+      "label": "Synthetic interface verification",
+      "type": "test",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-test-002",
+      "observedAt": "2026-09-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_metric_snapshot_30",
+      "label": "Synthetic 30-day metric snapshot",
+      "type": "metric",
+      "sourceId": "synthetic_metric_registry",
+      "externalId": "synthetic-metric-030",
+      "observedAt": "2026-09-16T12:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_pilot_review",
+      "label": "Synthetic pilot review",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-review-060",
+      "observedAt": "2026-10-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_metric_snapshot_60",
+      "label": "Synthetic 60-day metric snapshot",
+      "type": "metric",
+      "sourceId": "synthetic_metric_registry",
+      "externalId": "synthetic-metric-060",
+      "observedAt": "2026-10-16T12:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_production_gate",
+      "label": "Synthetic production gate decision",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-gate-090",
+      "observedAt": "2026-11-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_metric_snapshot_90",
+      "label": "Synthetic 90-day metric snapshot",
+      "type": "metric",
+      "sourceId": "synthetic_metric_registry",
+      "externalId": "synthetic-metric-090",
+      "observedAt": "2026-11-15T12:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_outcome_report",
+      "label": "Synthetic outcome report",
+      "type": "report",
+      "sourceId": "synthetic_evidence_registry",
+      "externalId": "synthetic-outcome-001",
+      "observedAt": "2027-01-01T00:00:00Z",
+      "freshnessSlaHours": 4380
+    },
+    {
+      "id": "ev_as_built_reconciliation_cert",
+      "label": "Synthetic certification fixture for As-built vs as-designed",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_print_parameter_drift_cert",
+      "label": "Synthetic certification fixture for Print parameter drift sentinel",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_hot_fire_quicklook_cert",
+      "label": "Synthetic certification fixture for Hot-fire quicklook",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_redline_recurrence_cert",
+      "label": "Synthetic certification fixture for Redline recurrence tracker",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_feedstock_genealogy_cert",
+      "label": "Synthetic certification fixture for Feedstock and print-lot genealogy",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_print_yield_cert",
+      "label": "Synthetic certification fixture for Print yield analyst",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_supplier_delay_impact_cert",
+      "label": "Synthetic certification fixture for Supplier delay impact",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_long_lead_watch_cert",
+      "label": "Synthetic certification fixture for Long-lead watch",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    },
+    {
+      "id": "ev_launch_readiness_cert",
+      "label": "Synthetic certification fixture for Launch-readiness burndown",
+      "type": "approval",
+      "sourceId": "synthetic_evidence_registry",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760
+    }
+  ],
+  "sources": [
+    {
+      "id": "synthetic_program_plan",
+      "label": "Synthetic program plan",
+      "kind": "seed",
+      "adapterVersion": "static-manifest@1.0.0",
+      "observedAt": "2026-08-15T00:00:00Z",
+      "freshnessSlaHours": 8760,
+      "classification": "public",
+      "synthetic": true,
+      "reconciliationStatus": "authoritative"
+    },
+    {
+      "id": "synthetic_metric_registry",
+      "label": "Synthetic metric registry",
+      "kind": "metric_registry",
+      "adapterVersion": "static-manifest@1.0.0",
+      "observedAt": "2026-08-16T00:00:00Z",
+      "freshnessSlaHours": 8760,
+      "classification": "public",
+      "synthetic": true,
+      "reconciliationStatus": "authoritative"
+    },
+    {
+      "id": "synthetic_evidence_registry",
+      "label": "Synthetic evidence registry",
+      "kind": "deployment_registry",
+      "adapterVersion": "static-manifest@1.0.0",
+      "observedAt": "2026-08-16T00:00:00Z",
+      "freshnessSlaHours": 8760,
+      "classification": "public",
+      "synthetic": true,
+      "reconciliationStatus": "authoritative"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "factory_maturity",
+      "label": "Factory capability maturity",
+      "kind": "maturity",
+      "unit": "score",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 20,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-09-16T12:00:00Z",
+          "value": 50,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-10-16T12:00:00Z",
+          "value": 85,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_60"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "knowledge_coverage",
+      "label": "Governed knowledge coverage",
+      "kind": "percentage",
+      "unit": "percent",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 25,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-09-16T12:00:00Z",
+          "value": 63,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-11-15T12:00:00Z",
+          "value": 90,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "qualifying_agents_active",
+      "label": "Qualifying agents active",
+      "kind": "count",
+      "unit": "count",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 0,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-11-15T12:00:00Z",
+          "value": 1,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "decision_latency_baseline",
+      "label": "Decision latency baseline",
+      "kind": "duration_hours",
+      "unit": "hours",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 120,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        }
+      ]
+    },
+    {
+      "id": "decision_latency_current",
+      "label": "Current decision latency",
+      "kind": "duration_hours",
+      "unit": "hours",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 120,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-09-16T12:00:00Z",
+          "value": 48,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_30"],
+          "confidence": "medium"
+        },
+        {
+          "observedAt": "2026-11-15T12:00:00Z",
+          "value": 16,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": ["ev_metric_snapshot_90"],
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "id": "decision_latency_target",
+      "label": "Target decision latency",
+      "kind": "duration_hours",
+      "unit": "hours",
+      "sourceRefs": ["synthetic_metric_registry"],
+      "observations": [
+        {
+          "observedAt": "2026-08-01T00:00:00Z",
+          "value": 8,
+          "sourceRef": "synthetic_metric_registry",
+          "evidenceRefs": [],
+          "confidence": "high"
+        }
+      ]
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent_as_built_reconciliation",
+      "label": "As-built vs as-designed",
+      "description": "Synthetic certified example: compares installed configuration with the released definition and names unsupported deltas.",
+      "tier": 3,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_structures"],
+      "partIds": ["s1_thrust", "s1_intertank", "interstage", "payload_adapter"],
+      "connectors": [
+        {
+          "id": "lifecycle",
+          "label": "Lifecycle management",
+          "monogram": "LM",
+          "accent": "#9578FF",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        },
+        {
+          "id": "work_items",
+          "label": "Work items",
+          "monogram": "WI",
+          "accent": "#D97757",
+          "access": "write"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_as_built_reconciliation_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_print_parameter_drift",
+      "label": "Print parameter drift sentinel",
+      "description": "Synthetic certified example: screens structural print telemetry for movement toward the edge of a qualified envelope.",
+      "tier": 2,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_structures"],
+      "partIds": ["s1_thrust", "interstage", "fairing"],
+      "connectors": [
+        {
+          "id": "historian",
+          "label": "Test historian",
+          "monogram": "TH",
+          "accent": "#2F9D82",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_print_parameter_drift_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_proof_test_package",
+      "label": "Proof-test package assembler",
+      "description": "Synthetic candidate example: assembles the evidence package for a completed structure and identifies missing records.",
+      "tier": 3,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_structures"],
+      "partIds": ["s1_thrust", "interstage"],
+      "connectors": [
+        {
+          "id": "lifecycle",
+          "label": "Lifecycle management",
+          "monogram": "LM",
+          "accent": "#9578FF",
+          "access": "read"
+        },
+        {
+          "id": "work_items",
+          "label": "Work items",
+          "monogram": "WI",
+          "accent": "#D97757",
+          "access": "write"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_hot_fire_quicklook",
+      "label": "Hot-fire quicklook",
+      "description": "Synthetic certified example: compares synthetic test channels with prior runs of the same configuration and ranks anomalies.",
+      "tier": 2,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_propulsion"],
+      "partIds": ["s1_engines", "s2_engine"],
+      "connectors": [
+        {
+          "id": "historian",
+          "label": "Test historian",
+          "monogram": "TH",
+          "accent": "#2F9D82",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_hot_fire_quicklook_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_redline_recurrence",
+      "label": "Redline recurrence tracker",
+      "description": "Synthetic certified example: finds limit exceedances that resemble earlier events and links their prior dispositions.",
+      "tier": 1,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_propulsion"],
+      "partIds": ["s1_engines", "s2_engine"],
+      "connectors": [
+        {
+          "id": "historian",
+          "label": "Test historian",
+          "monogram": "TH",
+          "accent": "#2F9D82",
+          "access": "read"
+        },
+        {
+          "id": "work_items",
+          "label": "Work items",
+          "monogram": "WI",
+          "accent": "#D97757",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_redline_recurrence_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_engine_genealogy",
+      "label": "Engine build genealogy",
+      "description": "Synthetic candidate example: traces a suspect synthetic part or lot through engine builds and current locations.",
+      "tier": 1,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_propulsion"],
+      "partIds": ["s1_engines", "s2_engine", "s1_feedlines"],
+      "connectors": [
+        {
+          "id": "erp",
+          "label": "Enterprise resource planning",
+          "monogram": "ERP",
+          "accent": "#C8102E",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_feedstock_genealogy",
+      "label": "Feedstock and print-lot genealogy",
+      "description": "Synthetic certified example: traces a synthetic wire lot to every represented tank and print operation it reached.",
+      "tier": 1,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_factory"],
+      "partIds": ["s1_fuel_tank", "s1_lox_tank", "s2_fuel_tank", "s2_lox_tank", "stargate"],
+      "connectors": [
+        {
+          "id": "erp",
+          "label": "Enterprise resource planning",
+          "monogram": "ERP",
+          "accent": "#C8102E",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_feedstock_genealogy_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_print_yield",
+      "label": "Print yield analyst",
+      "description": "Synthetic certified example: tracks synthetic first-pass yield by equipment and geometry family and flags drift.",
+      "tier": 1,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_factory"],
+      "partIds": ["s1_fuel_tank", "s1_lox_tank", "s2_fuel_tank", "s2_lox_tank", "gantries"],
+      "connectors": [
+        {
+          "id": "historian",
+          "label": "Test historian",
+          "monogram": "TH",
+          "accent": "#2F9D82",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_print_yield_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_scrap_transaction",
+      "label": "Scrap transaction agent",
+      "description": "Synthetic candidate example: prepares an approved synthetic scrap transaction for posting to the system of record.",
+      "tier": 4,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_factory"],
+      "partIds": ["s1_fuel_tank", "s1_lox_tank", "s2_fuel_tank", "s2_lox_tank"],
+      "connectors": [
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        },
+        {
+          "id": "erp",
+          "label": "Enterprise resource planning",
+          "monogram": "ERP",
+          "accent": "#C8102E",
+          "access": "write"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_supplier_delay_impact",
+      "label": "Supplier delay impact",
+      "description": "Synthetic certified example: resolves a synthetic supplier slip through parts to the tests and dates it threatens.",
+      "tier": 3,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_supply_chain", "group_propulsion", "group_integration"],
+      "partIds": ["s1_feedlines", "prop_farm"],
+      "connectors": [
+        {
+          "id": "erp",
+          "label": "Enterprise resource planning",
+          "monogram": "ERP",
+          "accent": "#C8102E",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        },
+        {
+          "id": "work_items",
+          "label": "Work items",
+          "monogram": "WI",
+          "accent": "#D97757",
+          "access": "write"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_supplier_delay_impact_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_long_lead_watch",
+      "label": "Long-lead watch",
+      "description": "Synthetic certified example: watches synthetic long-lead items against need dates and surfaces items losing margin.",
+      "tier": 1,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_supply_chain", "group_propulsion", "group_integration"],
+      "partIds": ["s1_feedlines", "prop_farm"],
+      "connectors": [
+        {
+          "id": "erp",
+          "label": "Enterprise resource planning",
+          "monogram": "ERP",
+          "accent": "#C8102E",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_long_lead_watch_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_launch_readiness",
+      "label": "Launch-readiness burndown",
+      "description": "Synthetic certified example: maps synthetic open items to hardware and identifies what sits on the readiness critical path.",
+      "tier": 2,
+      "certificationStatus": "certified",
+      "synthetic": true,
+      "groupIds": ["group_integration"],
+      "partIds": ["payload", "test_stand", "gse", "prop_farm", "fd_console"],
+      "connectors": [
+        {
+          "id": "erp",
+          "label": "Enterprise resource planning",
+          "monogram": "ERP",
+          "accent": "#C8102E",
+          "access": "read"
+        },
+        {
+          "id": "lifecycle",
+          "label": "Lifecycle management",
+          "monogram": "LM",
+          "accent": "#9578FF",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        },
+        {
+          "id": "work_items",
+          "label": "Work items",
+          "monogram": "WI",
+          "accent": "#D97757",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": ["ev_launch_readiness_cert"],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_test_readiness_package",
+      "label": "Test-readiness package",
+      "description": "Synthetic candidate example: assembles synthetic evidence for a test review and names what remains unavailable.",
+      "tier": 3,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_integration"],
+      "partIds": ["test_stand", "gse", "fd_console"],
+      "connectors": [
+        {
+          "id": "historian",
+          "label": "Test historian",
+          "monogram": "TH",
+          "accent": "#2F9D82",
+          "access": "read"
+        },
+        {
+          "id": "lifecycle",
+          "label": "Lifecycle management",
+          "monogram": "LM",
+          "accent": "#9578FF",
+          "access": "read"
+        },
+        {
+          "id": "work_items",
+          "label": "Work items",
+          "monogram": "WI",
+          "accent": "#D97757",
+          "access": "write"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_ncr_triage",
+      "label": "Nonconformance triage",
+      "description": "Synthetic candidate example: classifies a synthetic nonconformance, finds similar history, and prepares review context.",
+      "tier": 2,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_quality"],
+      "partIds": ["scanner"],
+      "connectors": [
+        {
+          "id": "quality_system",
+          "label": "Quality system",
+          "monogram": "QS",
+          "accent": "#E8B34B",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_mrb_package",
+      "label": "Material review package",
+      "description": "Synthetic candidate example: assembles a synthetic disposition package while leaving the decision with an authorized reviewer.",
+      "tier": 3,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_quality"],
+      "partIds": ["scanner"],
+      "connectors": [
+        {
+          "id": "quality_system",
+          "label": "Quality system",
+          "monogram": "QS",
+          "accent": "#E8B34B",
+          "access": "read"
+        },
+        {
+          "id": "work_items",
+          "label": "Work items",
+          "monogram": "WI",
+          "accent": "#D97757",
+          "access": "write"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_harness_continuity",
+      "label": "Harness continuity check",
+      "description": "Synthetic candidate example: compares synthetic continuity results with the released wiring definition.",
+      "tier": 1,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_avionics"],
+      "partIds": ["avionics_bay", "fts", "sensors"],
+      "connectors": [
+        {
+          "id": "lifecycle",
+          "label": "Lifecycle management",
+          "monogram": "LM",
+          "accent": "#9578FF",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    },
+    {
+      "id": "agent_sensor_channel_coverage",
+      "label": "Sensor channel coverage",
+      "description": "Synthetic candidate example: reports which synthetic planned measurements have no working channel before a test.",
+      "tier": 2,
+      "certificationStatus": "candidate",
+      "synthetic": true,
+      "groupIds": ["group_avionics"],
+      "partIds": ["avionics_bay", "sensors", "range_safety"],
+      "connectors": [
+        {
+          "id": "historian",
+          "label": "Test historian",
+          "monogram": "TH",
+          "accent": "#2F9D82",
+          "access": "read"
+        },
+        {
+          "id": "warehouse",
+          "label": "Analytics warehouse",
+          "monogram": "WH",
+          "accent": "#4285F4",
+          "access": "read"
+        }
+      ],
+      "certificationEvidenceRefs": [],
+      "sourceRefs": ["synthetic_program_plan"]
+    }
+  ]
+}

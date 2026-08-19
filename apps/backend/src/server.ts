@@ -11,7 +11,13 @@ export async function startServer(): Promise<Server> {
   const services = createServices(prisma, config, logger);
   await services.dispatcher.recoverAndResume();
   await services.certificationDispatcher.recoverAndResume();
+  if (services.platform.dispatchMode === 'in_process') {
+    await services.platform.executionDispatcher.recoverAndResume();
+  }
   await services.maintenance.start();
+  await services.automationScheduler.start();
+  await services.pluginHealthScheduler.start();
+  await services.catalogIndexScheduler.start();
 
   const server = createServer(createApp(services, logger, config));
   await new Promise<void>((resolve, reject) => {
@@ -21,14 +27,16 @@ export async function startServer(): Promise<Server> {
       resolve();
     });
   });
-  logger.info({ host: config.host, port: config.port }, 'Agent Builder backend listening');
+  logger.info({ host: config.host, port: config.port }, 'Paul OS backend listening');
 
   let shuttingDown = false;
   const shutdown = (signal: string): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     services.maintenance.stop();
-    logger.info({ signal }, 'Shutting down Agent Builder backend');
+    services.pluginHealthScheduler.stop();
+    services.catalogIndexScheduler.stop();
+    logger.info({ signal }, 'Shutting down Paul OS backend');
     const forceExit = setTimeout(() => {
       logger.error(
         { signal, timeoutMs: config.shutdownTimeoutMs },
@@ -38,7 +46,8 @@ export async function startServer(): Promise<Server> {
       void prisma.$disconnect().finally(() => process.exit(1));
     }, config.shutdownTimeoutMs);
     forceExit.unref();
-    server.close(() => {
+    const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
+    void Promise.all([serverClosed, services.automationScheduler.stop()]).then(() => {
       clearTimeout(forceExit);
       void prisma.$disconnect().finally(() => {
         process.exitCode = 0;

@@ -5,6 +5,7 @@ import { RouterProvider } from 'react-router-dom';
 import { queryClient } from './query-client';
 import { router } from './router';
 import './styles.css';
+import './console-shell.css';
 
 const root = document.getElementById('root');
 

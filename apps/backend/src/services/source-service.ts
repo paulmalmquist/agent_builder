@@ -1,6 +1,7 @@
 import { SourceRole, type PrismaClient } from '@prisma/client';
 import type { SourceDescriptor } from '@agent-builder/contracts';
 import { toSourceDescriptor } from '../mappers.js';
+import { aggregateScopeWhere } from '../scope.js';
 import type { SourceApi } from './types.js';
 
 const databaseRoles = {
@@ -17,10 +18,11 @@ export class SourceService implements SourceApi {
     const records =
       role === null
         ? await this.prisma.knowledgeSource.findMany({
+            where: aggregateScopeWhere(),
             orderBy: [{ role: 'asc' }, { displayName: 'asc' }],
           })
         : await this.prisma.knowledgeSource.findMany({
-            where: { role: databaseRoles[role] },
+            where: { role: databaseRoles[role], ...aggregateScopeWhere() },
             orderBy: [{ role: 'asc' }, { displayName: 'asc' }],
           });
     return records.map(toSourceDescriptor);
