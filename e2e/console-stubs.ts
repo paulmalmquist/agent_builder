@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { roadmapProgramFixture } from '../apps/frontend/src/test/roadmap-fixture.js';
 
 const now = '2026-08-17T12:00:00.000Z';
 const attentionApprovalGroupKey = 'a'.repeat(64);
@@ -177,6 +178,7 @@ export async function stubConsoleReadModels(
         authorizationModel: 'workspace-role-v1',
       },
       '/v1/resources': { items: [], total: 0, countsByLifecycle: emptyLifecycleCounts },
+      '/v1/roadmaps': roadmapProgramFixture,
       '/v1/catalog/publications': { items: [] },
       '/v1/plugins': { items: [] },
       '/v1/plugin-installations': { items: [] },

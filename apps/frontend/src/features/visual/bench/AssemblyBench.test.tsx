@@ -130,6 +130,15 @@ describe('AssemblyBench', () => {
     expect(
       screen.getByText(/exact connector and grant wiring is unavailable/i),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'KNOWS · DECLARED SOURCES' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'CAN DO · DECLARED WORKFLOW' })).toBeInTheDocument();
+    expect(screen.getByText('Synthetic supplier records')).toBeInTheDocument();
+    expect(screen.getByText('Retrieve governed evidence')).toBeInTheDocument();
+    expect(screen.getByText('Cannot: Changing purchase orders')).toBeInTheDocument();
+    expect(
+      screen.getByText('Stops when: Stop when a required source is unavailable'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No declared capabilities.')).not.toBeInTheDocument();
   });
 
   it('does not present one visible governed match as unique on a capped resource page', async () => {

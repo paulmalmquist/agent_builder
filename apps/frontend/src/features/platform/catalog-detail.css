@@ -345,7 +345,8 @@
   margin-top: 18px;
 }
 
-.catalog-version-list > a {
+.catalog-version-list > a,
+.catalog-version-current {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -357,14 +358,20 @@
   text-decoration: none;
 }
 
-.catalog-version-list > a[aria-current='page'] {
+.catalog-version-current {
   border-color: rgba(149, 120, 255, 0.55);
   background: rgba(149, 120, 255, 0.07);
 }
 
-.catalog-version-list > a > span:first-child {
+.catalog-version-list > a > span:first-child,
+.catalog-version-current > span:first-child,
+.catalog-version-state {
   display: grid;
   gap: 4px;
+}
+
+.catalog-version-state {
+  justify-items: end;
 }
 
 .catalog-version-list small {
@@ -538,9 +545,14 @@
     grid-template-columns: 1fr;
   }
 
-  .catalog-version-list > a {
+  .catalog-version-list > a,
+  .catalog-version-current {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .catalog-version-state {
+    justify-items: start;
   }
 
   .catalog-state-guide {

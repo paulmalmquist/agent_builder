@@ -1,14 +1,69 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { ResourceVersion } from '@agent-builder/contracts';
 import { App } from './App';
 import { renderWithClient } from './test/render';
 import {
   catalogPublicationId,
   lastBuilderDecision,
   lastBuilderDecisionIdempotencyKey,
+  platformResourceId,
   server,
 } from './test/server';
+
+const catalogSourceId = '81818181-8181-4181-8181-818181818181';
+const catalogSourceFamilyId = '82828282-8282-4282-8282-828282828282';
+const catalogSource: ResourceVersion = {
+  id: catalogSourceId,
+  familyId: catalogSourceFamilyId,
+  kind: 'Agent',
+  slug: 'inventory-risk-analyst',
+  name: 'Inventory Risk Analyst',
+  version: '1.4.0',
+  owner: 'Operations Analytics',
+  purpose: 'Review bounded inventory exposure and prepare a cited decision brief.',
+  lifecycle: 'candidate',
+  digest: '9'.repeat(64),
+  sourceCommit: 'builder-source-context-test',
+  provenance: { source: 'synthetic-test' },
+  dependencyPins: [],
+  definition: {
+    apiVersion: 'paul-os/v1',
+    kind: 'Agent',
+    metadata: {
+      id: catalogSourceFamilyId,
+      slug: 'inventory-risk-analyst',
+      version: '1.4.0',
+      name: 'Inventory Risk Analyst',
+      owner: 'Operations Analytics',
+      purpose: 'Review bounded inventory exposure and prepare a cited decision brief.',
+      lifecycle: 'candidate',
+      provenance: { source: 'synthetic-test' },
+    },
+    dependencies: [],
+    spec: {
+      objective: 'Review bounded inventory exposure and prepare a cited decision brief.',
+      skills: ['inventory-review@1.0.0'],
+      protocols: [],
+      contextPolicy: 'bounded-context@1.0.0',
+      knowledgeSources: [],
+      tools: [],
+      triggers: [],
+      executionLoop: {
+        maximumSteps: 8,
+        onUnresolved: 'fail_closed',
+        outputContract: 'inventory-decision-brief@1.0.0',
+      },
+      memoryPolicy: { reads: 'accepted_only', writes: 'staged_for_human_acceptance' },
+      production: { requiresImmutableRelease: true, authorityClass: 'R1' },
+    },
+  },
+  revision: 4,
+  frozenAt: '2026-08-20T12:00:00.000Z',
+  createdAt: '2026-08-20T12:00:00.000Z',
+  updatedAt: '2026-08-20T12:00:00.000Z',
+};
 
 async function defineScope(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /open step 01/i }));
@@ -56,6 +111,43 @@ async function completeSpecification(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('Agent Builder workflow', () => {
+  it('keeps an exact governed Catalog version visible as read-only Build context', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('http://localhost/v1/resources/:resourceVersionId', ({ params }) =>
+        params.resourceVersionId === catalogSource.id
+          ? HttpResponse.json(catalogSource)
+          : HttpResponse.json({}, { status: 404 }),
+      ),
+    );
+    renderWithClient(<App />, [`/build?source=${catalogSource.id}`]);
+
+    const source = await screen.findByRole('region', { name: 'Build source lineage' });
+    expect(source).toHaveTextContent('STARTING SOURCE · EXACT GOVERNED VERSION');
+    expect(source).toHaveTextContent('Inventory Risk Analyst · V1.4.0');
+    expect(source).toHaveTextContent(
+      /Durable lineage is recorded only with that reviewed decision/i,
+    );
+    expect(screen.queryByText(catalogSource.id)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'REVIEW EXACT CATALOG RECORD →' })).toHaveAttribute(
+      'href',
+      `/catalog?resource=${catalogSource.id}`,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'CLEAR SOURCE CONTEXT' }));
+    expect(screen.queryByRole('region', { name: 'Build source lineage' })).not.toBeInTheDocument();
+  });
+
+  it('fails closed when Build source context is not an exact governed Agent version', async () => {
+    renderWithClient(<App />, [`/build?source=${platformResourceId}`]);
+
+    const source = await screen.findByRole('region', { name: 'Build source lineage' });
+    expect(source).toHaveTextContent('STARTING SOURCE · UNAVAILABLE');
+    expect(source).toHaveTextContent(/No replacement is inferred/i);
+    expect(source).not.toHaveTextContent('Daily Brief');
+    expect(screen.queryByText(platformResourceId)).not.toBeInTheDocument();
+  });
+
   it('opens as the Build workbench with drafting-specific workflow marks', () => {
     renderWithClient(<App />);
 

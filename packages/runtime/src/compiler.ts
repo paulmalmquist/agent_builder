@@ -16,6 +16,7 @@ import {
   pluginResourceSpecSchema,
   projectSpecSchema,
   protocolSpecSchema,
+  roadmapResourceSpecSchema,
   referenceSpecSchema,
   resourceManifestSchema,
   skillSpecSchema,
@@ -49,6 +50,7 @@ function validateKindSpecificManifest(manifest: ResourceManifest): void {
     ContextPolicy: contextPolicySpecSchema,
     Skill: skillSpecSchema,
     Project: projectSpecSchema,
+    Roadmap: roadmapResourceSpecSchema,
     Automation: automationSpecSchema,
     Reference: referenceSpecSchema,
     BusinessDomain: businessDomainSpecSchema,
@@ -62,6 +64,25 @@ function validateKindSpecificManifest(manifest: ResourceManifest): void {
     PluginPack: pluginPackSpecSchema,
   } as const;
   schemas[manifest.kind].parse(manifest.spec);
+  if (manifest.kind === 'Roadmap') {
+    const spec = roadmapResourceSpecSchema.parse(manifest.spec);
+    const declaredPins = new Set(
+      manifest.dependencies.map(({ familyId, version }) => `${familyId.toLowerCase()}@${version}`),
+    );
+    const requiredPins = [
+      ...spec.definitionDependencies.map(({ target }) => target),
+      ...spec.relationships.flatMap(({ target }) =>
+        target.kind === 'resource_version' ? [target] : [],
+      ),
+    ];
+    for (const pin of requiredPins) {
+      if (!declaredPins.has(`${pin.familyId.toLowerCase()}@${pin.version}`)) {
+        throw new Error(
+          `Roadmap ${manifest.metadata.slug} must declare exact dependency ${pin.familyId}@${pin.version}`,
+        );
+      }
+    }
+  }
   if (manifest.kind === 'Skill' && manifest.metadata.slug === 'daily-brief') {
     const spec = skillSpecSchema.parse(manifest.spec);
     const expectedCaps = [

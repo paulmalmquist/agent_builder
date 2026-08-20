@@ -30,15 +30,16 @@ their real operating task before being assembled into a screen.
 Paul OS uses its numbered architecture as navigation identity:
 
 - `00` Today
-- `01` Attention
-- `02` Knowledge
-- `03` AIM
-- `04` Build
-- `05` Catalog
+- `01` Roadmaps
+- `02` Attention
+- `03` Build
+- `04` Catalog
+- `05` AIM
 - `06` Operate
 - `07` Connections
 - `08` Evidence
-- `09` Incubator
+- `09` Knowledge
+- `10` Incubator
 - Settings
 
 The rail expands to labels and collapses to numerals. The `[` shortcut and the control both toggle

@@ -1,5 +1,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { agentResourceSpecSchema, type ResourceVersion } from '@agent-builder/contracts';
+import {
+  agentResourceSpecSchema,
+  roadmapResourceSpecSchema,
+  type ResourceVersion,
+} from '@agent-builder/contracts';
 import { useNavigate } from 'react-router-dom';
 import { useAgentSearch, usePlatformResources } from '../api/hooks';
 import type { AgentSearchItem } from '../api/client';
@@ -50,6 +54,12 @@ function displayKind(kind: ResourceVersion['kind']) {
 function resourceRoute(resource: ResourceVersion) {
   if (resource.kind === 'Agent') {
     return `/catalog?${new URLSearchParams({ resource: resource.id }).toString()}`;
+  }
+  if (resource.kind === 'Roadmap') {
+    const parsed = roadmapResourceSpecSchema.safeParse(resource.definition.spec);
+    if (parsed.success) {
+      return `/roadmaps?${new URLSearchParams({ fork: parsed.data.fork.id }).toString()}`;
+    }
   }
   const type = knowledgeTypeByKind[resource.kind];
   if (type) {
@@ -211,7 +221,7 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
             autoComplete="off"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleInputKeyDown}
-            placeholder="Search agents, systems, datasets, rules…"
+            placeholder="Search agents, roadmaps, systems, datasets…"
             ref={inputRef}
             role="combobox"
             value={query}

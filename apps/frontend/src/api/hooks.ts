@@ -56,6 +56,7 @@ export const queryKeys = {
   platformResources: (filters: ResourceFilters) => ['platform-resources', filters] as const,
   platformResource: (resourceVersionId: string | null) =>
     ['platform-resource', resourceVersionId] as const,
+  roadmapProgram: ['roadmap-program'] as const,
   attention: ['attention'] as const,
   attentionItem: (itemId: string | null) => ['attention-item', itemId] as const,
   executionRuns: (filters: RunFilters) => ['execution-runs', filters] as const,
@@ -161,6 +162,13 @@ export function usePlatformResource(resourceVersionId: string | null) {
     queryKey: queryKeys.platformResource(resourceVersionId),
     queryFn: () => platformApi.getResource(resourceVersionId ?? ''),
     enabled: resourceVersionId !== null,
+  });
+}
+
+export function useRoadmapProgram() {
+  return useQuery({
+    queryKey: queryKeys.roadmapProgram,
+    queryFn: () => platformApi.getRoadmaps(),
   });
 }
 

@@ -686,12 +686,25 @@ describe('RegistryService release and import guard branches', () => {
     });
     const listQuery = (listAndGetPrisma.resourceVersion.findMany as jest.Mock).mock
       .calls[0]?.[0] as {
-      where: { AND: unknown[] };
+      where: {
+        AND: Array<{
+          OR?: Array<{
+            legacyAgent?: {
+              is: { slug: { equals: string; mode: string } };
+            };
+          }>;
+        }>;
+      };
     };
     expect(listQuery.where.AND).toContainEqual(userFacingResourceVersionWhere);
     expect(listQuery.where.AND).toEqual(
       expect.arrayContaining([expect.objectContaining({ OR: expect.any(Array) })]),
     );
+    expect(listQuery.where.AND.flatMap(({ OR }) => OR ?? [])).toContainEqual({
+      legacyAgent: {
+        is: { slug: { equals: 'branch', mode: 'insensitive' } },
+      },
+    });
     expect(listAndGetPrisma.resourceVersion.groupBy).toHaveBeenCalledWith({
       by: ['lifecycle'],
       where: {

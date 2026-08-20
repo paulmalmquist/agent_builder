@@ -10,6 +10,7 @@ import type {
   OutcomesSection,
   OutputsSection,
   CapabilityProfile,
+  ResourceVersion,
 } from '@agent-builder/contracts';
 import { featureFlags } from './config/feature-flags';
 import {
@@ -21,6 +22,7 @@ import {
   useEvaluation,
   useGenerationJob,
   useInterpretSpec,
+  usePlatformResource,
   useSourceCatalog,
   useUpdateSpecSection,
   queryKeys,
@@ -45,6 +47,7 @@ import {
   type PendingBuilderDecision,
 } from './features/builder/ReferredChoicesPanel';
 import { ReuseDecisionDialog } from './features/builder/ReuseDecisionDialog';
+import { isQuarantinedResource } from './lib/user-facing-index';
 
 type DialogId = 'scope' | 'knowledge' | 'guardrails' | 'outputs' | 'review' | 'process';
 type PendingDecision = PendingBuilderDecision & { idempotencyKey: string };
@@ -101,6 +104,85 @@ function intakeProfile(outcomes: OutcomesSection): CapabilityProfile {
   };
 }
 
+interface BuildSourceContextProps {
+  isLoading: boolean;
+  onClear: () => void;
+  resource: ResourceVersion | null;
+  unavailable: boolean;
+}
+
+function BuildSourceContext({
+  isLoading,
+  onClear,
+  resource,
+  unavailable,
+}: BuildSourceContextProps) {
+  if (isLoading) {
+    return (
+      <section aria-label="Build source lineage" className="builder-source-context" role="status">
+        <span>STARTING SOURCE · CHECKING EXACT VERSION</span>
+        <strong>Reading the governed Catalog record…</strong>
+      </section>
+    );
+  }
+
+  if (unavailable || resource === null) {
+    return (
+      <section aria-label="Build source lineage" className="builder-source-context error">
+        <span>STARTING SOURCE · UNAVAILABLE</span>
+        <strong>Build cannot verify the selected governed Agent version.</strong>
+        <p>
+          No replacement is inferred. Clear this context to begin a new request, or return to
+          Catalog and choose an available exact version.
+        </p>
+        <div>
+          <button className="secondary-button" onClick={onClear} type="button">
+            CLEAR SOURCE CONTEXT
+          </button>
+          <Link className="secondary-button" to="/catalog">
+            RETURN TO CATALOG →
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="Build source lineage" className="builder-source-context">
+      <span>STARTING SOURCE · EXACT GOVERNED VERSION</span>
+      <strong>
+        {resource.name} · V{resource.version}
+      </strong>
+      <p>
+        Build received this Catalog version as read-only starting context. Define the job below;
+        Paul OS still compares certified choices before any reuse, configuration, or extension
+        decision. Durable lineage is recorded only with that reviewed decision.
+      </p>
+      <dl>
+        <div>
+          <dt>Owner</dt>
+          <dd>{resource.owner}</dd>
+        </div>
+        <div>
+          <dt>Definition lifecycle</dt>
+          <dd>{resource.lifecycle.replaceAll('_', ' ')}</dd>
+        </div>
+      </dl>
+      <div>
+        <Link
+          className="secondary-button"
+          to={`/catalog?${new URLSearchParams({ resource: resource.id }).toString()}`}
+        >
+          REVIEW EXACT CATALOG RECORD →
+        </Link>
+        <button className="secondary-button" onClick={onClear} type="button">
+          CLEAR SOURCE CONTEXT
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -126,6 +208,20 @@ export function App() {
   const intakeId = searchParams.get('intake');
   const jobId = searchParams.get('job');
   const shadowDeployed = searchParams.get('shadow') === 'true';
+  const sourceResourceVersionId = searchParams.get('source');
+  const sourceResourceQuery = usePlatformResource(sourceResourceVersionId);
+  const sourceResource =
+    sourceResourceQuery.data?.kind === 'Agent' && !isQuarantinedResource(sourceResourceQuery.data)
+      ? sourceResourceQuery.data
+      : null;
+
+  function clearSourceContext() {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('source');
+      return next;
+    });
+  }
 
   function setUrlState(key: 'spec' | 'job' | 'shadow', value: string | null) {
     setSearchParams((current) => {
@@ -627,6 +723,14 @@ export function App() {
               new four-step definition only when reuse does not fit.
             </p>
           </div>
+          {sourceResourceVersionId ? (
+            <BuildSourceContext
+              isLoading={sourceResourceQuery.isLoading}
+              onClear={clearSourceContext}
+              resource={sourceResource}
+              unavailable={sourceResourceQuery.isError}
+            />
+          ) : null}
           {notice ? (
             <div className="dismissible-notice">
               <Notice tone="success">{notice}</Notice>

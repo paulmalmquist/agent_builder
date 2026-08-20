@@ -167,7 +167,7 @@ export function CatalogPage() {
             <h2>Governed agent versions</h2>
             <p>Open a card to inspect its exact definition and connected operational records.</p>
           </div>
-          <small>RESOURCEVERSION · NO LEGACY STATUS SUBSTITUTION</small>
+          <small>EXACT VERSION · NO LEGACY STATUS SUBSTITUTION</small>
         </header>
         {agents.isLoading ? (
           <div className="os-empty-state" role="status">

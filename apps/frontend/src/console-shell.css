@@ -250,6 +250,8 @@
 }
 
 .platform-workspace-header {
+  position: relative;
+  z-index: 2;
   min-height: 74px;
   display: flex;
   align-items: center;
@@ -280,6 +282,7 @@
 }
 
 .platform-workspace-header .global-search-results {
+  z-index: 1;
   left: 0;
   width: min(440px, calc(100vw - var(--platform-rail-width) - 36px));
   transform: none;

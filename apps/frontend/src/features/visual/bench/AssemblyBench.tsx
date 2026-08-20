@@ -12,7 +12,7 @@ import {
   type AgentConnectorCapability,
 } from '../../../components/connector-marks/AgentCapabilitySchematic';
 import { ConnectorMark } from '../../../components/connector-marks/ConnectorMark';
-import { createAssemblyBenchModel } from './bench-model';
+import { createAssemblyBenchModel, summarizeBenchManifest } from './bench-model';
 import { createBenchScene } from './scene';
 import type { AssemblyBenchModel, BenchCapability } from './types';
 import './assembly-bench.css';
@@ -217,6 +217,7 @@ function BenchNodeMap({ model }: { model: AssemblyBenchModel }) {
 function FlatBenchFallback({ model, reason }: { model: AssemblyBenchModel; reason: string }) {
   const capabilities = schematicCapabilities(model.capabilities);
   const unavailable = model.capabilities.filter(({ authority }) => authority === 'unavailable');
+  const manifestSummary = summarizeBenchManifest(model.manifest);
   return (
     <section className="assembly-bench-flat" data-testid="assembly-bench-flat-fallback">
       <div>
@@ -224,7 +225,11 @@ function FlatBenchFallback({ model, reason }: { model: AssemblyBenchModel; reaso
         <h2>{model.agentName} — knows / can do</h2>
         <p>{reason} The manifest and every available authority reading remain below.</p>
       </div>
-      <AgentCapabilitySchematic agentName={model.agentName} capabilities={capabilities} />
+      <AgentCapabilitySchematic
+        agentName={model.agentName}
+        capabilities={capabilities}
+        manifestSummary={manifestSummary}
+      />
       {unavailable.length > 0 ? (
         <section
           aria-label="Capabilities with unavailable authority"

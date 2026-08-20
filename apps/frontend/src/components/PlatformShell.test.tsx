@@ -1,17 +1,25 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { StrictMode, type ReactNode } from 'react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { PlatformShell } from './PlatformShell';
+import { useAttention } from '../api/hooks';
 import { renderWithClient } from '../test/render';
 import { server } from '../test/server';
 
-function renderShell(path = '/', attentionElement: ReactNode = <div>Attention route</div>) {
-  return renderWithClient(
+function TestShellRoutes({
+  attentionElement,
+  todayElement,
+}: {
+  attentionElement: ReactNode;
+  todayElement: ReactNode;
+}) {
+  return (
     <Routes>
       <Route element={<PlatformShell />} path="/">
-        <Route index element={<div>Today route</div>} />
+        <Route index element={todayElement} />
         <Route element={attentionElement} path="attention" />
         <Route element={<div>Knowledge route</div>} path="knowledge" />
         <Route element={<div>AIM route</div>} path="aim" />
@@ -28,13 +36,79 @@ function renderShell(path = '/', attentionElement: ReactNode = <div>Attention ro
         <Route element={<div>Roadmaps route</div>} path="roadmaps" />
         <Route element={<div>Settings route</div>} path="settings" />
       </Route>
-    </Routes>,
+    </Routes>
+  );
+}
+
+function AttentionQueryProbe() {
+  const attention = useAttention();
+  return <div>{attention.isSuccess ? 'Attention probe ready' : 'Attention probe pending'}</div>;
+}
+
+function renderShell(path = '/', attentionElement: ReactNode = <div>Attention route</div>) {
+  return renderWithClient(
+    <TestShellRoutes attentionElement={attentionElement} todayElement={<div>Today route</div>} />,
     [path],
   );
 }
 
+function renderShellWithProductionQueryDefaults(path: string, attentionElement: ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { refetchOnWindowFocus: false, retry: 2, staleTime: 30_000 },
+      mutations: { retry: 0 },
+    },
+  });
+  return {
+    client,
+    ...render(
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={[path]}>
+            <TestShellRoutes
+              attentionElement={attentionElement}
+              todayElement={<div>Today route</div>}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </StrictMode>,
+    ),
+  };
+}
+
 describe('Paul OS platform shell', () => {
   beforeEach(() => window.localStorage.clear());
+
+  it('shares one initial Attention request between the shell and the active route', async () => {
+    let requestCount = 0;
+    server.use(
+      http.get('http://localhost/v1/attention', () => {
+        requestCount += 1;
+        return HttpResponse.json({
+          generatedAt: '2026-08-20T14:00:00.000Z',
+          decide: [],
+          degraded: [],
+          digest: {
+            headline: 'No governed activity in this window',
+            runCount: 0,
+            totalCostUsd: 0,
+            promotionCount: 0,
+            observationCount: 0,
+            windowStartedAt: null,
+            windowEndedAt: '2026-08-20T14:00:00.000Z',
+          },
+          decideBadgeCount: 0,
+          lastDeliveredBriefingAt: null,
+        });
+      }),
+    );
+
+    renderShellWithProductionQueryDefaults('/attention', <AttentionQueryProbe />);
+
+    expect(await screen.findByText('Attention probe ready')).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(requestCount).toBe(1);
+  });
 
   it('uses the numbered 00–10 rail and reserves its only count badge for Attention', async () => {
     const user = userEvent.setup();
@@ -48,16 +122,16 @@ describe('Paul OS platform shell', () => {
     expect(links).toHaveLength(12);
     expect(links.map((link) => link.textContent?.trim())).toEqual([
       '00TODAY',
-      '01ATTENTION',
-      '02KNOWLEDGE',
-      '03AIM',
-      '04BUILD',
-      '05CATALOG',
+      '01ROADMAPS',
+      '02ATTENTION',
+      '03BUILD',
+      '04CATALOG',
+      '05AIM',
       '06OPERATE',
       '07CONNECTIONS',
       '08EVIDENCE',
-      '09INCUBATOR',
-      '10ROADMAPS',
+      '09KNOWLEDGE',
+      '10INCUBATOR',
       '—SETTINGS',
     ]);
     expect(within(navigation).getByRole('link', { name: /TODAY/i })).toHaveAttribute(

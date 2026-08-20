@@ -1,0 +1,128 @@
+apiVersion: paul-os/v1
+kind: Roadmap
+metadata:
+  id: 31000000-0000-4000-8000-000000000002
+  slug: roadmap-fork-02
+  version: 1.0.0
+  name: Roadmap fork 02
+  owner: local-user
+  purpose: Hold the second neutral, transfer-ready view of a private Jira-backed workflow.
+  lifecycle: candidate
+  provenance:
+    kind: synthetic
+    sourceRef: 03-projects/roadmaps/fork-02/manifest.yaml
+dependencies:
+  - familyId: 30000000-0000-4000-8000-000000000001
+    version: 1.1.0
+  - familyId: 70000000-0000-4000-8000-000000000002
+    version: 1.3.0
+  - familyId: 80000000-0000-4000-8000-000000000001
+    version: 1.1.0
+spec:
+  schemaVersion: roadmap.fork/v1
+  program:
+    id: personal_two_fork_roadmaps
+    title: Roadmaps
+    description: Compare two private Jira-backed workflow branches through neutral transfer slots; absent bindings remain unavailable.
+    synthetic: true
+    timeline:
+      startAt: 2026-08-01T00:00:00Z
+      endAt: 2027-01-31T23:59:59Z
+  fork:
+    id: fork_alternate
+    label: Roadmap fork 02
+    purpose: Neutral transfer slot for the second private workflow so its progress can be compared without merging the plans.
+    status: at_risk
+    jira:
+      state: awaiting_transfer
+      projectKey: null
+      filterId: null
+      includedIssueCount: null
+      totalIssueCount: null
+      lastSyncedAt: null
+    metrics:
+      - id: fork_alternate_progress
+        label: Resolved scope
+        value: 31%
+        detail: Synthetic shape only; Jira resolution history replaces this sample after transfer.
+        state: at_risk
+        source: synthetic
+      - id: fork_alternate_blocked
+        label: Blocked work
+        value: '9'
+        detail: Synthetic count shaped like Jira issue-link data.
+        state: at_risk
+        source: synthetic
+      - id: fork_alternate_cycle
+        label: Median cycle time
+        value: 12.1 d
+        detail: Synthetic changelog-derived duration, not a live operational measurement.
+        state: at_risk
+        source: synthetic
+    workstreams:
+      - id: fork_alternate_discovery
+        label: Alternate-path discovery
+        startAt: 2026-08-04T00:00:00Z
+        endAt: 2026-09-30T00:00:00Z
+        state: in_work
+        source: synthetic
+      - id: fork_alternate_delivery
+        label: Alternate delivery path
+        startAt: 2026-09-22T00:00:00Z
+        endAt: 2026-12-18T00:00:00Z
+        state: at_risk
+        source: synthetic
+      - id: fork_alternate_acceptance
+        label: Acceptance and rollout
+        startAt: 2026-12-01T00:00:00Z
+        endAt: 2027-01-29T00:00:00Z
+        state: planned
+        source: synthetic
+    actions:
+      - id: fork_alternate_mapping
+        label: Bind the second Jira filter and changelog
+        consequence: Without an exact filter, the alternate fork cannot report scope, aging, or forecast confidence.
+        dueAt: null
+        owner: Roadmap owner 02
+        state: next
+        source: synthetic
+      - id: fork_alternate_scope
+        label: Decide whether discovered scope stays in this fork
+        consequence: The representative finish date continues to drift while the scope boundary remains unresolved.
+        dueAt: 2026-08-21T17:00:00-04:00
+        owner: Roadmap owner 02
+        state: decision
+        source: synthetic
+  definitionDependencies:
+    - id: dependency_project_boundary
+      role: project_boundary
+      target:
+        familyId: 30000000-0000-4000-8000-000000000001
+        version: 1.1.0
+      provenance: synthetic
+    - id: dependency_console_protocol
+      role: protocol
+      target:
+        familyId: 70000000-0000-4000-8000-000000000002
+        version: 1.3.0
+      provenance: synthetic
+    - id: dependency_planning_source
+      role: source
+      target:
+        familyId: 80000000-0000-4000-8000-000000000001
+        version: 1.1.0
+      provenance: synthetic
+  relationships: []
+  relationshipCoverage:
+    vertical:
+      state: unmapped
+      detail: No governed Jira-to-vertical mapping is present on this machine.
+    aimGroup:
+      state: unmapped
+      detail: No exact AIM group mapping is declared for this neutral fork.
+    contributingAgents:
+      state: unmapped
+      detail: No exact-version contributing Agent is declared for this neutral fork.
+    executionRuns:
+      state: unavailable
+      detail: Run links require a live runtime binding and are never inferred from this tracked manifest.

@@ -1,4 +1,5 @@
-import { http, HttpResponse } from 'msw';
+import { roadmapProgramSchema } from '@agent-builder/contracts';
+import { delay, http, HttpResponse } from 'msw';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -48,6 +49,103 @@ const emptyGrants = { items: [], total: 0, activeTotal: 0 };
 const emptyPlugins = { items: [] };
 const emptySchedules = { items: [], total: 0, activeTotal: 0 };
 
+function roadmapFork(
+  index: number,
+  id: 'fork_primary' | 'fork_alternate',
+  label: string,
+  status: 'watch' | 'at_risk',
+) {
+  const suffix = String(index).padStart(12, '0');
+  return {
+    id,
+    label,
+    purpose: `Track the governed state of ${label}.`,
+    status,
+    jira: {
+      state: 'awaiting_transfer' as const,
+      projectKey: null,
+      filterId: null,
+      includedIssueCount: null,
+      totalIssueCount: null,
+      lastSyncedAt: null,
+    },
+    metrics: [
+      {
+        id: `${id}_status`,
+        label: 'Fork status',
+        value: status === 'watch' ? 'Watch' : 'At risk',
+        detail: 'Synthetic status retained until the private Jira binding transfers.',
+        state: status,
+        source: 'synthetic' as const,
+      },
+    ],
+    workstreams: [
+      {
+        id: `${id}_workstream`,
+        label: `${label} workstream`,
+        startAt: '2026-08-01T00:00:00.000Z',
+        endAt: '2026-09-01T00:00:00.000Z',
+        state: status === 'watch' ? ('in_work' as const) : ('at_risk' as const),
+        source: 'synthetic' as const,
+      },
+    ],
+    actions: [
+      {
+        id: `${id}_decision`,
+        label: `Resolve ${label} fork-only decision`,
+        consequence: 'This action belongs to its exact roadmap fork, not the global Today queue.',
+        dueAt: null,
+        owner: `${label} owner`,
+        state: 'decision' as const,
+        source: 'synthetic' as const,
+      },
+    ],
+    source: 'synthetic' as const,
+    resource: {
+      resourceVersionId: `41000000-0000-4000-8000-${suffix}`,
+      familyId: `42000000-0000-4000-8000-${suffix}`,
+      kind: 'Roadmap' as const,
+      slug: `roadmap-${id.replace('fork_', '')}`,
+      name: label,
+      version: '1.0.0',
+      lifecycle: 'candidate' as const,
+      digest: String(index).repeat(64),
+      sourceCommit: 'home-roadmap-test',
+      provenance: 'synthetic-test',
+    },
+    definitionDependencies: [],
+    relationships: [],
+    relationshipCoverage: {
+      vertical: { state: 'unmapped' as const, detail: 'No vertical mapping is loaded.' },
+      aimGroup: { state: 'unmapped' as const, detail: 'No AIM group mapping is loaded.' },
+      contributingAgents: {
+        state: 'unmapped' as const,
+        detail: 'No contributing Agent mapping is loaded.',
+      },
+      executionRuns: {
+        state: 'unavailable' as const,
+        detail: 'No runtime execution relationship is loaded.',
+      },
+    },
+  };
+}
+
+const governedRoadmapProgram = roadmapProgramSchema.parse({
+  schemaVersion: 'roadmaps.program/v2',
+  id: 'home_two_fork_roadmap',
+  title: 'Home two-fork roadmap',
+  description: 'Expose exact fork state without copying roadmap actions into Today.',
+  synthetic: true,
+  timeline: {
+    startAt: '2026-08-01T00:00:00.000Z',
+    endAt: '2027-02-01T00:00:00.000Z',
+  },
+  forks: [
+    roadmapFork(1, 'fork_primary', 'Primary flight path', 'watch'),
+    roadmapFork(2, 'fork_alternate', 'Alternate flight path', 'at_risk'),
+  ],
+});
+
 interface HomeResponses {
   attention?: unknown;
   attentionError?: boolean;
@@ -59,6 +157,9 @@ interface HomeResponses {
   runsError?: boolean;
   schedules?: unknown;
   schedulesError?: boolean;
+  roadmaps?: unknown;
+  roadmapsDelayMs?: number;
+  roadmapsError?: boolean;
 }
 
 function unavailableResponse() {
@@ -93,6 +194,12 @@ function useHomeResponses(responses: HomeResponses = {}) {
         ? unavailableResponse()
         : HttpResponse.json(responses.schedules ?? emptySchedules),
     ),
+    http.get('http://localhost/v1/roadmaps', async () => {
+      if (responses.roadmapsDelayMs !== undefined) await delay(responses.roadmapsDelayMs);
+      return responses.roadmapsError
+        ? unavailableResponse()
+        : HttpResponse.json(responses.roadmaps ?? governedRoadmapProgram);
+    }),
   );
 }
 
@@ -304,6 +411,65 @@ describe('HomePage', () => {
     expect(document.querySelector('.today-home svg')).not.toBeInTheDocument();
   });
 
+  it('shows both governed roadmap forks with exact status, source, and deep links', async () => {
+    useHomeResponses();
+    renderHome();
+
+    const strip = screen.getByTestId('home-roadmap-strip');
+    const primary = await within(strip).findByRole('link', {
+      name: 'Open Primary flight path: WATCH, SYNTHETIC',
+    });
+    const alternate = within(strip).getByRole('link', {
+      name: 'Open Alternate flight path: AT RISK, SYNTHETIC',
+    });
+    expect(primary).toHaveAttribute('href', '/roadmaps?fork=fork_primary');
+    expect(alternate).toHaveAttribute('href', '/roadmaps?fork=fork_alternate');
+    expect(primary).toHaveTextContent(/Primary flight path.*WATCH.*SYNTHETIC/);
+    expect(alternate).toHaveTextContent(/Alternate flight path.*AT RISK.*SYNTHETIC/);
+    expect(within(strip).getByRole('link', { name: 'COMPARE BOTH →' })).toHaveAttribute(
+      'href',
+      '/roadmaps',
+    );
+    expect(screen.queryByText(/fork-only decision/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps roadmap fork state unavailable while the governed projection is pending', async () => {
+    useHomeResponses({ roadmapsDelayMs: 75 });
+    renderHome();
+
+    const strip = screen.getByTestId('home-roadmap-strip');
+    expect(within(strip).getByText(/Roadmap fork status is still loading/i)).toBeVisible();
+    expect(within(strip).queryByRole('link', { name: /^Open /i })).not.toBeInTheDocument();
+    expect(within(strip).queryByRole('list')).not.toBeInTheDocument();
+    await within(strip).findByRole('link', {
+      name: 'Open Primary flight path: WATCH, SYNTHETIC',
+    });
+  });
+
+  it('fails roadmap state closed when the backend reports it unavailable', async () => {
+    useHomeResponses({ roadmapsError: true });
+    renderHome();
+
+    const strip = screen.getByTestId('home-roadmap-strip');
+    expect(await within(strip).findByText(/Roadmap fork status unavailable/i)).toBeVisible();
+    expect(within(strip).queryByRole('link', { name: /^Open /i })).not.toBeInTheDocument();
+    expect(within(strip).queryByRole('list')).not.toBeInTheDocument();
+    expect(strip).toHaveTextContent(/No zero or nominal state is inferred/i);
+  });
+
+  it('rejects a partial roadmap response without rendering one fork as complete', async () => {
+    useHomeResponses({
+      roadmaps: { ...governedRoadmapProgram, forks: [governedRoadmapProgram.forks[0]] },
+    });
+    renderHome();
+
+    const strip = screen.getByTestId('home-roadmap-strip');
+    expect(await within(strip).findByText(/Roadmap fork status unavailable/i)).toBeVisible();
+    expect(within(strip).queryByRole('link', { name: /^Open /i })).not.toBeInTheDocument();
+    expect(within(strip).queryByRole('list')).not.toBeInTheDocument();
+    expect(strip).toHaveTextContent(/No zero or nominal state is inferred/i);
+  });
+
   it('uses one history-backed Factory filter across metrics, plan, and action', async () => {
     const user = userEvent.setup();
     useHomeResponses();
@@ -494,6 +660,7 @@ describe('HomePage', () => {
       state: 'in_work',
     });
 
+    useHomeResponses();
     renderHome('/?vertical=group_factory', JSON.stringify(manifest));
     const unavailable = screen.getByTestId('home-workstream-workstream_print_cell_qualification');
     expect(unavailable).toHaveAttribute('role', 'status');

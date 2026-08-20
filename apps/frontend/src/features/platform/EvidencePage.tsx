@@ -379,38 +379,51 @@ export function EvidencePage() {
                 <span>Successful executions will write validated, provenance-bearing records.</span>
               </div>
             ) : null}
-            {outcomeItems.map((outcome) => (
-              <article className="evidence-card" key={outcome.id}>
-                <header>
-                  <div>
-                    <h2>Recorded outcome</h2>
-                    <p>Execution evidence · {new Date(outcome.createdAt).toLocaleString()}</p>
+            {outcomeItems.map((outcome) => {
+              const recordedAt = new Date(outcome.createdAt).toLocaleString();
+              const citationLabel = outcome.citations.length === 1 ? 'CITATION' : 'CITATIONS';
+              return (
+                <article className="evidence-card" key={outcome.id}>
+                  <header>
+                    <div>
+                      <h2 className="record-heading">
+                        <span>Recorded outcome</span>
+                        <small>
+                          OUTCOME ·{' '}
+                          {outcome.unresolvedItems.length === 0 ? 'resolved' : 'needs review'} ·{' '}
+                          {outcome.citations.length} {citationLabel} · RECORDED {recordedAt}
+                        </small>
+                      </h2>
+                      <p>Execution evidence · {recordedAt}</p>
+                    </div>
+                    <span
+                      className="os-status-chip"
+                      data-state={outcome.unresolvedItems.length === 0 ? 'succeeded' : 'running'}
+                    >
+                      {outcome.unresolvedItems.length === 0 ? 'resolved' : 'review'}
+                    </span>
+                  </header>
+                  <div className="run-metadata">
+                    <span>
+                      QUALITY ·{' '}
+                      {outcome.qualityScore === null ? 'not scored' : outcome.qualityScore}
+                    </span>
+                    <span>
+                      CONFIDENCE ·{' '}
+                      {outcome.confidence === null ? 'not reported' : outcome.confidence}
+                    </span>
+                    <span>CITATIONS · {outcome.citations.length}</span>
+                    <span>UNRESOLVED · {outcome.unresolvedItems.length}</span>
                   </div>
-                  <span
-                    className="os-status-chip"
-                    data-state={outcome.unresolvedItems.length === 0 ? 'succeeded' : 'running'}
-                  >
-                    {outcome.unresolvedItems.length === 0 ? 'resolved' : 'review'}
-                  </span>
-                </header>
-                <div className="run-metadata">
-                  <span>
-                    QUALITY · {outcome.qualityScore === null ? 'not scored' : outcome.qualityScore}
-                  </span>
-                  <span>
-                    CONFIDENCE · {outcome.confidence === null ? 'not reported' : outcome.confidence}
-                  </span>
-                  <span>CITATIONS · {outcome.citations.length}</span>
-                  <span>UNRESOLVED · {outcome.unresolvedItems.length}</span>
-                </div>
-                <TechnicalProvenance
-                  references={[
-                    ['OUTCOME RECORD', outcome.id],
-                    ['SOURCE RUN', outcome.runId],
-                  ]}
-                />
-              </article>
-            ))}
+                  <TechnicalProvenance
+                    references={[
+                      ['OUTCOME RECORD', outcome.id],
+                      ['SOURCE RUN', outcome.runId],
+                    ]}
+                  />
+                </article>
+              );
+            })}
           </div>
         </section>
         <section aria-busy={metrics.isLoading} className="os-panel">

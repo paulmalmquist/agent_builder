@@ -49,6 +49,7 @@ import type { MaintenanceSchedulerApi } from '../maintenance/scheduler.js';
 import type { ExecutionDispatcherApi } from '../execution/dispatcher.js';
 import type { ExecutionService } from './execution-service.js';
 import type { RegistryService } from './registry-service.js';
+import type { RoadmapService } from './roadmap-service.js';
 import type { AutomationLearningService } from './automation-learning-service.js';
 import type { ReleaseGovernanceService } from './release-governance-service.js';
 import type { AutomationSchedulerApi } from '../automation/scheduler.js';
@@ -181,6 +182,7 @@ export interface PlatformServices {
   plugins: PluginService;
   reuse: ReuseService;
   registry: RegistryService;
+  roadmaps: RoadmapService;
   releaseGovernance: ReleaseGovernanceService;
   execution: ExecutionService;
   automationLearning: AutomationLearningService;

@@ -40,6 +40,7 @@ const kindToDatabase = {
   ContextPolicy: DatabaseResourceKind.CONTEXT_POLICY,
   Skill: DatabaseResourceKind.SKILL,
   Project: DatabaseResourceKind.PROJECT,
+  Roadmap: DatabaseResourceKind.ROADMAP,
   Automation: DatabaseResourceKind.AUTOMATION,
   Reference: DatabaseResourceKind.REFERENCE,
   BusinessDomain: DatabaseResourceKind.BUSINESS_DOMAIN,
@@ -597,6 +598,11 @@ export class RegistryService {
                     OR: [
                       { family: { name: { contains: query.query, mode: 'insensitive' } } },
                       { family: { slug: { contains: query.query, mode: 'insensitive' } } },
+                      {
+                        legacyAgent: {
+                          is: { slug: { equals: query.query, mode: 'insensitive' } },
+                        },
+                      },
                       { purpose: { contains: query.query, mode: 'insensitive' } },
                     ],
                   }),

@@ -55,6 +55,7 @@ import {
   releaseEvaluationSchema,
   resourceListResponseSchema,
   resourceVersionSchema,
+  roadmapProgramSchema,
   sessionResponseSchema,
   type AgentCatalogQuery,
   type DerivationMode,
@@ -103,6 +104,7 @@ export type SourceListResponse = ReturnType<typeof sourceListResponseSchema.pars
 export type GenerationAccepted = ReturnType<typeof generationAcceptedSchema.parse>;
 export type EvaluationResponse = ReturnType<typeof evaluationResponseSchema.parse>;
 export type PlatformResourceList = ReturnType<typeof resourceListResponseSchema.parse>;
+export type RoadmapProgramResponse = ReturnType<typeof roadmapProgramSchema.parse>;
 export type PlatformSession = ReturnType<typeof sessionResponseSchema.parse>;
 export type CatalogPublicationList = ReturnType<typeof catalogPublicationListResponseSchema.parse>;
 export type PlatformRunList = ReturnType<typeof executionRunListResponseSchema.parse>;
@@ -738,6 +740,10 @@ export const platformApi = {
 
   getResource(resourceVersionId: string) {
     return request(platformApiRoutes.resource(resourceVersionId), resourceVersionSchema);
+  },
+
+  getRoadmaps() {
+    return request(platformApiRoutes.roadmaps, roadmapProgramSchema);
   },
 
   listPlugins(filters: PluginCatalogFilters = {}) {

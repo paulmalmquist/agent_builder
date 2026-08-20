@@ -3,6 +3,10 @@
   gap: 4px;
 }
 
+.global-search-results {
+  background: #07090d;
+}
+
 .global-search-results [role='group'] {
   overflow: hidden;
   border-radius: 8px;

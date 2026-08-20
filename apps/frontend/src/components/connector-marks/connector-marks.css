@@ -107,10 +107,31 @@
 }
 
 .agent-capability-group ul,
+.agent-capability-group ol,
 .agent-capability-strip {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.agent-capability-declarations,
+.agent-capability-boundaries ul {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-capability-declarations li,
+.agent-capability-boundaries li {
+  padding: 7px 9px;
+  border-left: 2px solid rgba(149, 120, 255, 0.46);
+  color: #d4d7de;
+  background: rgba(255, 255, 255, 0.022);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.agent-capability-boundaries li {
+  border-left-color: rgba(232, 179, 75, 0.5);
 }
 
 .agent-capability-group > p {
@@ -199,6 +220,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.agent-capability-legend p {
+  margin: 0;
 }
 
 .agent-capability-legend i[data-effect] {

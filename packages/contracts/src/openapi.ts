@@ -161,6 +161,7 @@ import {
   retireCatalogPublicationRequestSchema,
 } from './reuse-schemas.js';
 import { REUSE_OPENAPI_OPERATION_IDS } from './reuse-routes.js';
+import { roadmapProgramSchema } from './roadmap-schemas.js';
 
 extendZodWithOpenApi(z);
 
@@ -191,6 +192,7 @@ registry.register('CertificationRun', certificationRunDetailSchema);
 registry.register('CertificationGateConfig', certificationGateConfigSchema);
 registry.register('EvalCase', evalCaseSchema);
 registry.register('ResourceVersion', resourceVersionSchema);
+registry.register('RoadmapProgram', roadmapProgramSchema);
 registry.register('ReleaseBundle', releaseBundleSchema);
 registry.register('AuthorityGrant', authorityGrantSchema);
 registry.register('ExecutionRun', executionRunSchema);
@@ -576,6 +578,18 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'get',
+  path: '/v1/roadmaps',
+  operationId: 'getRoadmapProgram',
+  responses: {
+    200: {
+      description: 'Backend-owned projection of exactly two governed Roadmap resources',
+      content: json(roadmapProgramSchema),
+    },
+    503: errorResponse,
+  },
+});
 registry.registerPath({
   method: 'get',
   path: '/v1/resources',

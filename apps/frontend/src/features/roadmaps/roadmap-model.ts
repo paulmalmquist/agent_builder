@@ -1,26 +1,4 @@
-import { roadmapProgramSchema, type RoadmapProgram } from '@agent-builder/contracts';
-
-export type RoadmapLoadResult =
-  | { readonly ok: true; readonly program: RoadmapProgram }
-  | { readonly ok: false; readonly message: string };
-
-export function loadRoadmapProgram(manifestText: string): RoadmapLoadResult {
-  let input: unknown;
-  try {
-    input = JSON.parse(manifestText);
-  } catch {
-    return { ok: false, message: 'The roadmap manifest is not valid JSON.' };
-  }
-
-  const parsed = roadmapProgramSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      message: 'The roadmap manifest failed its governed two-fork contract.',
-    };
-  }
-  return { ok: true, program: parsed.data };
-}
+import type { RoadmapProgram } from '@agent-builder/contracts';
 
 export function isRoadmapForkFilter(
   program: RoadmapProgram,

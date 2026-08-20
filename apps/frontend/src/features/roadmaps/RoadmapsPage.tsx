@@ -1,18 +1,10 @@
-import { useMemo, type CSSProperties } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { type CSSProperties, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { RoadmapFork, RoadmapProgram, RoadmapSourceState } from '@agent-builder/contracts';
-import seedManifestText from '../../../../../03-projects/roadmaps/roadmaps.seed.json?raw';
-import {
-  filteredRoadmapForks,
-  isRoadmapForkFilter,
-  loadRoadmapProgram,
-  timelinePosition,
-} from './roadmap-model';
+import { getErrorMessage } from '../../api/client';
+import { useRoadmapProgram } from '../../api/hooks';
+import { filteredRoadmapForks, isRoadmapForkFilter, timelinePosition } from './roadmap-model';
 import './roadmaps.css';
-
-interface RoadmapsPageProps {
-  readonly manifestText?: string;
-}
 
 const sourceLabels: Record<RoadmapSourceState, string> = {
   live: 'LIVE',
@@ -34,6 +26,23 @@ const stateLabels: Record<RoadmapFork['workstreams'][number]['state'], string> =
   at_risk: 'AT RISK',
 };
 
+const relationshipPredicateLabels: Record<
+  RoadmapFork['relationships'][number]['predicate'],
+  string
+> = {
+  scoped_to_vertical: 'SCOPED TO VERTICAL',
+  maps_to_aim_group: 'MAPS TO AIM GROUP',
+  contributed_to_by_agent: 'CONTRIBUTED TO BY AGENT',
+  produced_execution_run: 'PRODUCED EXECUTION RUN',
+};
+
+const relationshipCoverageLabels = {
+  vertical: 'Program vertical',
+  aimGroup: 'AIM group',
+  contributingAgents: 'Contributing agents',
+  executionRuns: 'Execution runs',
+} as const;
+
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
   month: 'short',
@@ -52,6 +61,7 @@ function programSourceStates(program: RoadmapProgram): readonly RoadmapSourceSta
   const states = new Set<RoadmapSourceState>();
   if (program.synthetic) states.add('synthetic');
   for (const fork of program.forks) {
+    states.add(fork.source);
     states.add(fork.jira.state === 'live' ? 'live' : 'awaiting_transfer');
     for (const metric of fork.metrics) states.add(metric.source);
     for (const workstream of fork.workstreams) states.add(workstream.source);
@@ -142,12 +152,7 @@ function RoadmapBindingNote({ program }: { program: RoadmapProgram }) {
   );
 }
 
-function ForkSummary({ fork, programSynthetic }: { fork: RoadmapFork; programSynthetic: boolean }) {
-  const source: RoadmapSourceState = programSynthetic
-    ? 'synthetic'
-    : fork.jira.state === 'live'
-      ? 'live'
-      : 'awaiting_transfer';
+function ForkSummary({ fork }: { fork: RoadmapFork }) {
   return (
     <article className="roadmap-fork-summary" data-status={fork.status}>
       <header>
@@ -156,13 +161,157 @@ function ForkSummary({ fork, programSynthetic }: { fork: RoadmapFork; programSyn
           <h3>{fork.label}</h3>
         </div>
         <div className="roadmap-fork-status">
-          <SourceBadge source={source} />
+          <SourceBadge source={fork.source} />
           <strong>{statusLabels[fork.status]}</strong>
         </div>
       </header>
       <p>{fork.purpose}</p>
       <JiraBinding fork={fork} />
     </article>
+  );
+}
+
+type RoadmapRelationshipTarget = RoadmapFork['relationships'][number]['target'];
+
+function relationshipTarget(target: RoadmapRelationshipTarget): ReactNode {
+  if (target.kind === 'vertical') {
+    return (
+      <Link to={`/?${new URLSearchParams({ vertical: target.id }).toString()}`}>
+        {target.id.replace('group_', '').replaceAll('_', ' ')} ↗
+      </Link>
+    );
+  }
+  if (target.kind === 'aim_group') {
+    return (
+      <Link to={`/aim?${new URLSearchParams({ group: target.id }).toString()}`}>
+        {target.id.replace('group_', '').replaceAll('_', ' ')} ↗
+      </Link>
+    );
+  }
+  if (target.kind === 'resource_version') {
+    return (
+      <>
+        <Link
+          to={`/catalog?${new URLSearchParams({ resource: target.resourceVersionId }).toString()}`}
+        >
+          {target.name} · {target.version} ↗
+        </Link>
+        <small>{target.resourceKind}</small>
+      </>
+    );
+  }
+  return (
+    <Link to={`/operate?${new URLSearchParams({ run: target.id }).toString()}`}>
+      Execution run ↗
+    </Link>
+  );
+}
+
+function relationshipTargetIdentity(target: RoadmapRelationshipTarget): string {
+  if (target.kind === 'vertical' || target.kind === 'aim_group') {
+    return `${target.namespace}/${target.schemaVersion} · ${target.id}`;
+  }
+  if (target.kind === 'resource_version') {
+    return `${target.resourceKind} · ${target.familyId}@${target.version} · ${target.resourceVersionId}`;
+  }
+  return `execution_run · ${target.id}`;
+}
+
+function RoadmapConnections({ fork }: { fork: RoadmapFork }) {
+  const coverage = (
+    Object.entries(relationshipCoverageLabels) as Array<
+      [keyof typeof relationshipCoverageLabels, string]
+    >
+  ).map(([key, label]) => ({ key, label, ...fork.relationshipCoverage[key] }));
+
+  return (
+    <section aria-labelledby={`${fork.id}-connections-title`} className="roadmap-connections">
+      <header>
+        <div>
+          <span>GOVERNED DEFINITION RELATIONSHIPS · {fork.label}</span>
+          <h3 id={`${fork.id}-connections-title`}>What this fork is joined to</h3>
+        </div>
+        <small>{`${fork.resource.slug}@${fork.resource.version}`}</small>
+      </header>
+      <dl className="roadmap-coverage-list">
+        {coverage.map((item) => (
+          <div data-state={item.state} key={item.key}>
+            <dt>{item.label}</dt>
+            <dd>
+              <strong>{item.state.replaceAll('_', ' ').toUpperCase()}</strong>
+              <span>{item.detail}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {fork.relationships.length === 0 ? (
+        <p className="roadmap-no-edges">
+          No governed relationship edge is declared. Missing links remain unmapped or unavailable.
+        </p>
+      ) : (
+        <ol aria-label={`${fork.label} governed relationships`} className="roadmap-edge-list">
+          {fork.relationships.map((relationship) => (
+            <li key={relationship.id}>
+              <div>
+                <span>{relationshipPredicateLabels[relationship.predicate]}</span>
+                <strong>{relationshipTarget(relationship.target)}</strong>
+              </div>
+              <details>
+                <summary>EDGE EVIDENCE</summary>
+                <dl>
+                  <div>
+                    <dt>Direction</dt>
+                    <dd>{`${relationship.source.slug}@${relationship.source.version} → ${relationship.predicate}`}</dd>
+                  </div>
+                  <div>
+                    <dt>Source identity</dt>
+                    <dd>{`${relationship.source.familyId}@${relationship.source.version} · ${relationship.source.resourceVersionId}`}</dd>
+                  </div>
+                  <div>
+                    <dt>Source digest</dt>
+                    <dd>{relationship.source.digest}</dd>
+                  </div>
+                  <div>
+                    <dt>Target identity</dt>
+                    <dd>{relationshipTargetIdentity(relationship.target)}</dd>
+                  </div>
+                  {relationship.target.kind === 'resource_version' ? (
+                    <div>
+                      <dt>Target digest</dt>
+                      <dd>{relationship.target.digest}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>Provenance</dt>
+                    <dd>{relationship.provenance.toUpperCase()}</dd>
+                  </div>
+                  <div>
+                    <dt>Source reference</dt>
+                    <dd>{`${relationship.sourceRef.definitionDependencyId} · ${relationship.sourceRef.locator}`}</dd>
+                  </div>
+                </dl>
+              </details>
+            </li>
+          ))}
+        </ol>
+      )}
+      <details className="roadmap-definition-pins">
+        <summary>DEFINITION PINS · {fork.definitionDependencies.length}</summary>
+        {fork.definitionDependencies.length === 0 ? (
+          <p>No exact definition dependency is declared.</p>
+        ) : (
+          <ol>
+            {fork.definitionDependencies.map((dependency) => (
+              <li key={dependency.id}>
+                <strong>{`${dependency.target.name} · ${dependency.target.version}`}</strong>
+                <span>{`${dependency.role.replaceAll('_', ' ').toUpperCase()} · ${dependency.provenance.toUpperCase()}`}</span>
+                <small>{`${dependency.target.familyId}@${dependency.target.version} · ${dependency.target.resourceVersionId}`}</small>
+              </li>
+            ))}
+          </ol>
+        )}
+      </details>
+    </section>
   );
 }
 
@@ -231,26 +380,57 @@ function RoadmapTimeline({
   );
 }
 
-export function RoadmapsPage({ manifestText = seedManifestText }: RoadmapsPageProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const loaded = useMemo(() => loadRoadmapProgram(manifestText), [manifestText]);
-
-  if (!loaded.ok) {
-    return (
-      <main className="roadmaps-page">
-        <header className="roadmaps-header">
+function RoadmapUnavailable({ message }: { message: string }) {
+  return (
+    <main className="roadmaps-page">
+      <header className="roadmaps-header">
+        <div>
           <p>PAUL OS · ROADMAPS</p>
           <h1>Roadmap source unavailable</h1>
-          <p role="alert">{loaded.message} No progress or nominal state is inferred.</p>
-        </header>
-      </main>
+          <p role="alert">{message} No progress or nominal state is inferred.</p>
+        </div>
+      </header>
+    </main>
+  );
+}
+
+function RoadmapPending() {
+  return (
+    <main className="roadmaps-page">
+      <header className="roadmaps-header">
+        <div>
+          <p>PAUL OS · ROADMAPS</p>
+          <h1>Roadmaps</h1>
+          <p aria-live="polite" role="status">
+            Loading governed roadmaps…
+          </p>
+        </div>
+      </header>
+    </main>
+  );
+}
+
+export function RoadmapsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const roadmapProgram = useRoadmapProgram();
+
+  if (roadmapProgram.isPending) {
+    return <RoadmapPending />;
+  }
+  if (roadmapProgram.isError || roadmapProgram.data === undefined) {
+    return (
+      <RoadmapUnavailable
+        message={`The governed roadmap projection could not be loaded. ${getErrorMessage(roadmapProgram.error)}`}
+      />
     );
   }
 
+  const program = roadmapProgram.data;
+
   const requestedFork = searchParams.get('fork');
-  const selected = isRoadmapForkFilter(loaded.program, requestedFork) ? requestedFork : 'all';
-  const visibleForks = filteredRoadmapForks(loaded.program, selected);
-  const provenanceStates = programSourceStates(loaded.program);
+  const selected = isRoadmapForkFilter(program, requestedFork) ? requestedFork : 'all';
+  const visibleForks = filteredRoadmapForks(program, selected);
+  const provenanceStates = programSourceStates(program);
 
   function selectFork(nextFork: string) {
     setSearchParams((current) => {
@@ -266,8 +446,8 @@ export function RoadmapsPage({ manifestText = seedManifestText }: RoadmapsPagePr
       <header className="roadmaps-header">
         <div>
           <p>PAUL OS · TWO FORK ROADMAPS</p>
-          <h1>{loaded.program.title}</h1>
-          <p>{loaded.program.description}</p>
+          <h1>{program.title}</h1>
+          <p>{program.description}</p>
         </div>
         <div className="roadmaps-provenance">
           {provenanceStates.map((source) => (
@@ -276,7 +456,7 @@ export function RoadmapsPage({ manifestText = seedManifestText }: RoadmapsPagePr
         </div>
       </header>
 
-      <RoadmapBindingNote program={loaded.program} />
+      <RoadmapBindingNote program={program} />
 
       <nav aria-label="Roadmap fork filter" className="roadmap-fork-filter">
         <span>ONE FILTER · THREE BANDS</span>
@@ -290,7 +470,7 @@ export function RoadmapsPage({ manifestText = seedManifestText }: RoadmapsPagePr
               Compare both
             </button>
           </li>
-          {loaded.program.forks.map((fork) => (
+          {program.forks.map((fork) => (
             <li key={fork.id}>
               <button
                 aria-pressed={selected === fork.id}
@@ -308,12 +488,21 @@ export function RoadmapsPage({ manifestText = seedManifestText }: RoadmapsPagePr
         <BandHeading
           id="roadmap-state-title"
           number="01"
-          question="Which fork is moving, blocked, or waiting for a decision?"
+          question={
+            visibleForks.length === 1
+              ? 'Is this fork moving, blocked, or waiting for a decision?'
+              : 'Which fork is moving, blocked, or waiting for a decision?'
+          }
           title="State now"
         />
         <div className="roadmap-fork-grid">
           {visibleForks.map((fork) => (
-            <ForkSummary fork={fork} key={fork.id} programSynthetic={loaded.program.synthetic} />
+            <ForkSummary fork={fork} key={fork.id} />
+          ))}
+        </div>
+        <div className="roadmap-connections-grid">
+          {visibleForks.map((fork) => (
+            <RoadmapConnections fork={fork} key={fork.id} />
           ))}
         </div>
         <div className="roadmap-metric-grid">
@@ -337,10 +526,14 @@ export function RoadmapsPage({ manifestText = seedManifestText }: RoadmapsPagePr
         <BandHeading
           id="roadmap-plan-title"
           number="02"
-          question="Where do the two plans converge, diverge, and carry risk?"
+          question={
+            visibleForks.length === 1
+              ? 'Where does this plan carry sequence and risk?'
+              : 'Where do the two plans converge, diverge, and carry risk?'
+          }
           title="Plan across six months"
         />
-        <RoadmapTimeline forks={visibleForks} program={loaded.program} />
+        <RoadmapTimeline forks={visibleForks} program={program} />
       </section>
 
       <section aria-labelledby="roadmap-action-title" className="roadmap-band">

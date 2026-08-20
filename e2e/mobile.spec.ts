@@ -65,7 +65,7 @@ test('mobile Today scopes Factory Operations while containing the wide plan', as
 
   const metricCount = await health.locator('.today-metric').count();
   expect(metricCount).toBeGreaterThan(0);
-  await expect(health.getByTestId('kpi-source')).toHaveCount(metricCount);
+  await expect(health.locator('.today-metric [data-testid="kpi-source"]')).toHaveCount(metricCount);
   await expect(health.getByText('SYNTHETIC', { exact: true }).first()).toBeVisible();
   await expect(health.getByText('AWAITING TRANSFER', { exact: true })).toBeVisible();
   await expect(action.getByText('GLOBAL · READ-ONLY PREVIEW')).toBeVisible();
@@ -97,9 +97,7 @@ test('mobile Roadmaps contains the two-fork plan without widening the document',
   await stubConsoleReadModels(page, { attention: 'empty' });
   await page.goto('/roadmaps');
 
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'Two-fork roadmap demonstration' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Roadmaps' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Compare both' })).toBeVisible();
   await expect
     .poll(() =>

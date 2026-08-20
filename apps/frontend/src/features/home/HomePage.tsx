@@ -1,12 +1,13 @@
 import { useMemo, type CSSProperties } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { consoleCriticalCopy } from '@agent-builder/contracts';
+import { consoleCriticalCopy, type RoadmapFork } from '@agent-builder/contracts';
 import {
   useAttention,
   useAuthorityGrants,
   useAutomationSchedules,
   useExecutionRuns,
   usePlugins,
+  useRoadmapProgram,
 } from '../../api/hooks';
 import { featureFlags } from '../../config/feature-flags';
 import seedManifestText from '../../../../../03-projects/aim/program.seed.json?raw';
@@ -104,6 +105,13 @@ const workstreamStateLabels: Record<NonNullable<HomeWorkstream['state']>, string
   at_risk: 'AT RISK',
 };
 
+const roadmapStatusLabels: Record<RoadmapFork['status'], string> = {
+  on_track: 'ON TRACK',
+  watch: 'WATCH',
+  at_risk: 'AT RISK',
+  unavailable: 'UNAVAILABLE',
+};
+
 function SourceBadge({ source }: { source: HomeMetricSource }) {
   return (
     <span className="today-source-badge" data-source={source} data-testid="kpi-source">
@@ -157,6 +165,60 @@ function MetricCard({ metric }: { metric: HomeMetric }) {
         {metric.statusLabel ? <span>{metric.statusLabel}</span> : null}
       </footer>
     </article>
+  );
+}
+
+function RoadmapForkStrip({ roadmaps }: { roadmaps: ReturnType<typeof useRoadmapProgram> }) {
+  const forks = roadmaps.data?.forks ?? [];
+  const complete = forks.length === 2 && new Set(forks.map(({ id }) => id)).size === 2;
+
+  return (
+    <aside
+      aria-labelledby="today-roadmap-forks-title"
+      className="today-roadmap-strip"
+      data-testid="home-roadmap-strip"
+    >
+      <header>
+        <div>
+          <span>STATE NOW · GOVERNED ROADMAP</span>
+          <strong id="today-roadmap-forks-title">Roadmap forks</strong>
+        </div>
+        <Link to="/roadmaps">COMPARE BOTH →</Link>
+      </header>
+      {roadmaps.isPending ? (
+        <p className="today-loading" role="status">
+          <strong>Roadmap fork status is still loading.</strong> No fork status is shown until both
+          governed resources resolve.
+        </p>
+      ) : roadmaps.isError ? (
+        <SourceUnavailable>Roadmap fork status unavailable.</SourceUnavailable>
+      ) : !complete ? (
+        <SourceUnavailable>
+          The complete two-fork roadmap projection is unavailable.
+        </SourceUnavailable>
+      ) : (
+        <ul>
+          {forks.map((fork) => {
+            const query = new URLSearchParams({ fork: fork.id });
+            const status = roadmapStatusLabels[fork.status];
+            return (
+              <li data-status={fork.status} key={fork.id}>
+                <Link
+                  aria-label={`Open ${fork.label}: ${status}, ${sourceLabels[fork.source]}`}
+                  to={`/roadmaps?${query.toString()}`}
+                >
+                  <span>
+                    <strong>{fork.label}</strong>
+                    <small>{status}</small>
+                  </span>
+                  <SourceBadge source={fork.source} />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </aside>
   );
 }
 
@@ -575,6 +637,7 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
   const grants = useAuthorityGrants({ limit: 100 });
   const schedules = useAutomationSchedules();
   const plugins = usePlugins({ includeDisabled: true, limit: 100 });
+  const roadmaps = useRoadmapProgram();
 
   const program = useMemo(
     () => (manifestText === undefined ? homeProgram : loadHomeProgram(manifestText)),
@@ -732,6 +795,7 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
         <p className="today-source-note">
           {homeCopy.body?.[0]} {homeCopy.body?.[2]} {homeCopy.body?.[3]}
         </p>
+        <RoadmapForkStrip roadmaps={roadmaps} />
         <div aria-label={`${selectedLabel} health metrics`} className="today-metric-grid">
           {metrics.map((metric) => (
             <MetricCard key={metric.id} metric={metric} />

@@ -15,6 +15,7 @@ export const resourceKindSchema = z.enum([
   'ContextPolicy',
   'Skill',
   'Project',
+  'Roadmap',
   'Automation',
   'Reference',
   'BusinessDomain',

@@ -38,6 +38,7 @@ import {
   type EmbeddingProvider,
 } from '@agent-builder/contracts';
 import { RegistryService } from './registry-service.js';
+import { RoadmapService } from './roadmap-service.js';
 import { ReleaseGovernanceService } from './release-governance-service.js';
 import { ExecutionService } from './execution-service.js';
 import { AutomationLearningService } from './automation-learning-service.js';
@@ -184,6 +185,7 @@ export function createServices(
       plugins,
       reuse,
       registry: new RegistryService(prisma, config.repositorySourceCommit),
+      roadmaps: new RoadmapService(prisma),
       releaseGovernance: new ReleaseGovernanceService(prisma),
       execution,
       automationLearning,

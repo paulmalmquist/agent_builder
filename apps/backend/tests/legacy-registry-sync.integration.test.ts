@@ -3,11 +3,13 @@ import { AgentStatus, CertificationRunKind, PrismaClient, ResourceLifecycle } fr
 import { agentResourceSpecSchema, resourceManifestSchema } from '@agent-builder/contracts';
 import { canonicalJson, sha256 } from '@paul-os/runtime';
 import { LOCAL_DEPARTMENT_ID, LOCAL_WORKSPACE_ID } from '../src/scope-constants.js';
+import { RegistryService } from '../src/services/registry-service.js';
 
 const describeDatabase =
   process.env['RUN_DATABASE_INTEGRATION'] === 'true' && process.env['DATABASE_URL']
     ? describe
     : describe.skip;
+const inventoryAgentId = 'fbcbcd95-15be-49c0-a8a7-a2bc361b7521';
 
 describeDatabase('legacy registry compatibility synchronization', () => {
   const prisma = new PrismaClient();
@@ -16,11 +18,50 @@ describeDatabase('legacy registry compatibility synchronization', () => {
     await prisma.$disconnect();
   });
 
+  it('resolves the seeded inventory compatibility record by its exact legacy version slug', async () => {
+    const result = await new RegistryService(prisma, 'a'.repeat(40)).listResources({
+      kind: 'Agent',
+      query: 'inventory-risk-analyst-v1',
+      limit: 100,
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      id: inventoryAgentId,
+      familyId: inventoryAgentId,
+      kind: 'Agent',
+      lifecycle: 'candidate',
+      name: 'Inventory Risk Analyst',
+      owner: 'Operations Analytics',
+      purpose:
+        'Analyzes inventory exposure and material shortages to prioritize operational risk and mitigation actions.',
+      sourceCommit: 'legacy-unverified',
+      provenance: {
+        source: 'legacy-agent-compatibility-adapter',
+        verified: false,
+      },
+      definition: {
+        metadata: {
+          name: 'Inventory Risk Analyst',
+          owner: 'Operations Analytics',
+        },
+        spec: {
+          objective:
+            'Analyzes inventory exposure and material shortages to prioritize operational risk and mitigation actions.',
+          executionLoop: { outputContract: 'legacy-agent-output@1.0.0' },
+          legacyCompatibility: { agentId: inventoryAgentId },
+        },
+      },
+    });
+    expect(JSON.stringify(result.items[0])).not.toMatch(/supplier|supply chain/iu);
+  });
+
   it('mirrors new legacy agents/spec edits and links them with unverified provenance', async () => {
     const familyId = randomUUID();
     const agentId = randomUUID();
     const specId = randomUUID();
     const suffix = familyId.slice(0, 8);
+    const actor = 'human:governance-compatibility-spec';
     await prisma.agentFamily.create({
       data: {
         workspaceId: LOCAL_WORKSPACE_ID,
@@ -30,8 +71,8 @@ describeDatabase('legacy registry compatibility synchronization', () => {
         name: 'Compatibility test family',
         department: 'Synthetic Operations',
         owner: 'integration-test',
-        createdBy: 'integration-test',
-        updatedBy: 'integration-test',
+        createdBy: actor,
+        updatedBy: actor,
       },
     });
     await prisma.agent.create({
@@ -44,8 +85,8 @@ describeDatabase('legacy registry compatibility synchronization', () => {
         department: 'Synthetic Operations',
         purpose: 'Prove compatibility writes remain visible in the universal registry.',
         owner: 'integration-test',
-        createdBy: 'integration-test',
-        updatedBy: 'integration-test',
+        createdBy: actor,
+        updatedBy: actor,
       },
     });
 
@@ -62,8 +103,8 @@ describeDatabase('legacy registry compatibility synchronization', () => {
         id: specId,
         agentId,
         outcomes: { purpose: 'Synthetic compatibility outcome' },
-        createdBy: 'integration-test',
-        updatedBy: 'integration-test',
+        createdBy: actor,
+        updatedBy: actor,
       },
     });
     const afterSpec = await prisma.resourceVersion.findUniqueOrThrow({ where: { id: agentId } });
@@ -77,13 +118,36 @@ describeDatabase('legacy registry compatibility synchronization', () => {
 
     await prisma.agent.update({
       where: { id: agentId },
-      data: { status: AgentStatus.CERTIFIED, updatedBy: 'integration-test' },
+      data: { status: AgentStatus.CERTIFIED, updatedBy: actor },
     });
     const certified = await prisma.resourceVersion.findUniqueOrThrow({ where: { id: agentId } });
     // Legacy evidence remains linked, but it cannot bypass the universal release-governance
     // evaluator and production-channel promotion path.
     expect(certified.lifecycle).toBe(ResourceLifecycle.CANDIDATE);
     expect(certified.frozenAt).not.toBeNull();
+
+    const exactLegacySlug = await new RegistryService(prisma, 'a'.repeat(40)).listResources({
+      kind: 'Agent',
+      query: `compat-${suffix}-v1`,
+      limit: 100,
+    });
+    expect(exactLegacySlug.items).toHaveLength(1);
+    expect(exactLegacySlug.items[0]).toMatchObject({
+      id: agentId,
+      familyId,
+      kind: 'Agent',
+      lifecycle: 'candidate',
+      owner: 'integration-test',
+      version: '1.0.0',
+      definition: {
+        spec: {
+          objective: 'Prove compatibility writes remain visible in the universal registry.',
+          executionLoop: { outputContract: 'legacy-agent-output@1.0.0' },
+          legacyCompatibility: { agentId },
+        },
+      },
+    });
+    expect(JSON.stringify(exactLegacySlug.items[0])).not.toContain('supplier');
     await expect(prisma.agentSpec.delete({ where: { id: specId } })).rejects.toThrow();
     await expect(
       prisma.resourceVersion.update({
