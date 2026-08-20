@@ -4,6 +4,7 @@ import type {
   PluginInstallation,
   ResourceVersion,
 } from '@agent-builder/contracts';
+import { agentResourceSpecSchema } from '@agent-builder/contracts';
 import type { PluginCatalogItem } from '../../../api/client';
 import type {
   AssemblyBenchModel,
@@ -16,6 +17,15 @@ import type {
 
 const MAX_PAGE_SIZE = 100;
 const FALLBACK_CONNECTOR_BRAND = { monogram: 'PL', accent: '#8f96a3', assetSrc: null };
+const OPAQUE_IDENTIFIER_PATTERN =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[0-9a-f]{32,})$/iu;
+
+export interface BenchManifestSummary {
+  actions: readonly string[];
+  boundaries: readonly string[];
+  knowledge: readonly string[];
+  state: 'declared' | 'unavailable';
+}
 
 export interface BenchModelInput {
   agent: Agent;
@@ -39,6 +49,97 @@ interface ManifestSelection {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
+}
+
+function readableIdentifier(value: string): string {
+  const trimmed = value.trim();
+  const [name, version] = trimmed.split('@', 2);
+  const words = (name ?? trimmed).replaceAll(/[-_]+/gu, ' ').replaceAll(/\s+/gu, ' ').trim();
+  if (!words) return '';
+  const label = words.charAt(0).toLocaleUpperCase() + words.slice(1);
+  return version ? `${label} · V${version}` : label;
+}
+
+function visibleReferences(values: readonly string[], noun: string): string[] {
+  const visible: string[] = [];
+  let hidden = 0;
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (OPAQUE_IDENTIFIER_PATTERN.test(trimmed)) {
+      hidden += 1;
+      continue;
+    }
+    const label = readableIdentifier(trimmed);
+    if (label) visible.push(label);
+  }
+  if (hidden > 0) visible.push(`${hidden} governed ${noun}${hidden === 1 ? '' : 's'} declared`);
+  return unique(visible);
+}
+
+function visibleStatements(values: readonly string[], noun: string): string[] {
+  const visible: string[] = [];
+  let hidden = 0;
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (OPAQUE_IDENTIFIER_PATTERN.test(trimmed)) {
+      hidden += 1;
+      continue;
+    }
+    visible.push(trimmed);
+  }
+  if (hidden > 0) visible.push(`${hidden} governed ${noun}${hidden === 1 ? '' : 's'} declared`);
+  return unique(visible);
+}
+
+export function summarizeBenchManifest(manifest: BenchManifest): BenchManifestSummary {
+  if ('workflow' in manifest) {
+    const workflow =
+      manifest.workflow.length > 0 ? manifest.workflow : manifest.guardrails.workflowStages;
+    return {
+      knowledge: visibleReferences(manifest.knowledgeSourceIds, 'knowledge source'),
+      actions: visibleStatements(workflow, 'workflow stage'),
+      boundaries: unique([
+        ...visibleStatements(manifest.guardrails.prohibitedActions, 'prohibited action').map(
+          (value) => `Cannot: ${value}`,
+        ),
+        ...visibleStatements(manifest.guardrails.approvalRequirements, 'approval requirement').map(
+          (value) => `Approval required: ${value}`,
+        ),
+        ...visibleStatements(manifest.guardrails.failClosedConditions, 'fail-closed condition').map(
+          (value) => `Stops when: ${value}`,
+        ),
+      ]),
+      state: 'declared',
+    };
+  }
+
+  const parsed = agentResourceSpecSchema.safeParse(manifest.spec);
+  if (!parsed.success) {
+    return { knowledge: [], actions: [], boundaries: [], state: 'unavailable' };
+  }
+  const spec = parsed.data;
+  return {
+    knowledge: visibleReferences(spec.knowledgeSources, 'knowledge source'),
+    actions: unique([
+      ...visibleStatements([spec.objective], 'objective'),
+      ...visibleReferences(spec.skills, 'skill').map((value) => `Skill: ${value}`),
+      `Produces: ${readableIdentifier(spec.executionLoop.outputContract)}`,
+    ]),
+    boundaries: unique([
+      `Unresolved work: ${readableIdentifier(spec.executionLoop.onUnresolved)}`,
+      `Memory writes: ${readableIdentifier(spec.memoryPolicy.writes)}`,
+      ...(spec.production.requiresImmutableRelease
+        ? ['Production requires an immutable release.']
+        : []),
+    ]),
+    state: 'declared',
+  };
 }
 
 function containsSyntheticProvenance(value: unknown): boolean {
@@ -276,6 +377,11 @@ function buildIssues(
   }
   if (capabilities.some(({ connectorState }) => connectorState !== 'healthy')) {
     issues.push('One or more declared connectors are not healthy and available now.');
+  }
+  if (summarizeBenchManifest(selection.manifest).state === 'unavailable') {
+    issues.push(
+      'The governed Agent manifest does not pass the typed Agent contract; knowledge and workflow declarations remain unavailable.',
+    );
   }
   return [...new Set(issues)];
 }

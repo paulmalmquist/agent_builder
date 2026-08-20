@@ -65,6 +65,7 @@ import {
   releaseBundleSchema,
   repositoryImportRequestSchema,
   repositoryImportResponseSchema,
+  roadmapProgramSchema,
   resourceListQuerySchema,
   resourceListResponseSchema,
   resourceVersionSchema,
@@ -146,6 +147,12 @@ function send<TSchema extends z.ZodTypeAny>(
 }
 
 export function registerPlatformRoutes(router: Router, services: PlatformServices): void {
+  router.get(
+    '/v1/roadmaps',
+    asyncRoute(async (_request, response) => {
+      send(response, 200, roadmapProgramSchema, await services.roadmaps.getProgram());
+    }),
+  );
   router.get(
     '/v1/catalog/publications',
     asyncRoute(async (request, response) => {

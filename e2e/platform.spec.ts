@@ -43,7 +43,7 @@ test('canonical and compatibility routes settle through the numbered console', a
     { path: '/incubator', heading: 'Incubator', active: 'INCUBATOR' },
     {
       path: '/roadmaps',
-      heading: 'Two-fork roadmap demonstration',
+      heading: 'Roadmaps',
       active: 'ROADMAPS',
     },
     { path: '/settings', heading: 'Settings', active: 'SETTINGS' },
@@ -203,7 +203,7 @@ test('one Factory Operations selection scopes all three Home bands without hidin
   await expect(action.getByText('Daily Briefing wants authority for one run.')).toBeVisible();
 
   const metricCount = await health.locator('.today-metric').count();
-  await expect(health.getByTestId('kpi-source')).toHaveCount(metricCount);
+  await expect(health.locator('.today-metric [data-testid="kpi-source"]')).toHaveCount(metricCount);
 
   const ganttViewport = plan.getByTestId('home-gantt-viewport');
   await expect(ganttViewport).toBeVisible();
@@ -243,9 +243,7 @@ test('two neutral roadmap slots share one URL-backed comparison filter', async (
   const { unexpectedRequests } = await stubConsoleReadModels(page, { attention: 'empty' });
   await page.goto('/roadmaps');
 
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'Two-fork roadmap demonstration' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Roadmaps' })).toBeVisible();
   await expect(
     page.getByText('PRIVATE ROADMAP IDENTITIES ARE NOT PRESENT ON THIS MACHINE'),
   ).toBeVisible();

@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
+import { platformApi } from '../../api/client';
 import { renderWithClient } from '../../test/render';
 import {
   automationScheduleId,
@@ -125,15 +126,19 @@ describe('Paul OS console surfaces', () => {
     renderWithClient(<RunsPage />, ['/runs']);
 
     expect(await screen.findByText('awaiting approval')).toBeInTheDocument();
-    expect(screen.getByText('AWAITING APPROVAL').parentElement).toHaveTextContent('27');
-    expect(screen.getByText('ACTIVE RUNS').parentElement).toHaveTextContent('7');
-    expect(screen.getByText('ACTIVE GRANTS').parentElement).toHaveTextContent('19');
-    expect(screen.getByText('ACTIVE SCHEDULES').parentElement).toHaveTextContent('8');
+    expect(screen.getByText('CURRENT · AWAITING APPROVAL').parentElement).toHaveTextContent('27');
+    expect(screen.getByText('CURRENT · QUEUED OR RUNNING').parentElement).toHaveTextContent('7');
+    expect(screen.getByText('CURRENT · ACTIVE GRANTS').parentElement).toHaveTextContent('19');
+    expect(screen.getByText('CURRENT · ACTIVE SCHEDULES').parentElement).toHaveTextContent('8');
     expect(
       screen.getByText('Permit bounded synthetic daily briefing executions.'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Daily Brief' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Daily Brief authority' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Daily Brief RUN · awaiting approval/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Daily Brief authority GRANT · active/i }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('ENTRY · Daily Brief · skill · version 1.0.0')).toHaveLength(3);
     expect(screen.getByRole('heading', { name: 'Daily Brief schedule' })).toBeInTheDocument();
     expect(screen.getByText('COST · NOT RECORDED / $0.2500 ceiling')).toBeInTheDocument();
@@ -182,6 +187,110 @@ describe('Paul OS console surfaces', () => {
     expect(await screen.findByText('queued')).toBeInTheDocument();
   });
 
+  it('gives repeated runs, grants, and outcomes distinct human headings without raw IDs', async () => {
+    const [grantResponse, outcomeResponse] = await Promise.all([
+      platformApi.listAuthorityGrants(),
+      platformApi.listOutcomes(),
+    ]);
+    const baseGrant = grantResponse.items[0];
+    const baseOutcome = outcomeResponse.items[0];
+    if (!baseGrant || !baseOutcome) throw new Error('Expected governed platform fixtures.');
+
+    const firstRun = {
+      ...platformRunFixture(),
+      state: 'succeeded' as const,
+      authorityGrantId,
+      progress: 100,
+      message: 'Daily briefing completed.',
+      startedAt: '2026-08-20T12:00:00.000Z',
+      finishedAt: '2026-08-20T12:01:00.000Z',
+      createdAt: '2026-08-20T11:59:00.000Z',
+      updatedAt: '2026-08-20T12:01:00.000Z',
+    };
+    const secondRun = {
+      ...firstRun,
+      id: '34343434-3434-4434-8434-343434343434',
+      startedAt: '2026-08-20T13:00:00.000Z',
+      finishedAt: '2026-08-20T13:01:00.000Z',
+      createdAt: '2026-08-20T12:59:00.000Z',
+      updatedAt: '2026-08-20T13:01:00.000Z',
+    };
+    const firstGrant = {
+      ...baseGrant,
+      state: 'exhausted' as const,
+      usedRuns: baseGrant.maxRuns,
+      createdAt: '2026-08-19T12:00:00.000Z',
+    };
+    const secondGrant = {
+      ...firstGrant,
+      id: '35353535-3535-4535-8535-353535353535',
+      createdAt: '2026-08-20T12:00:00.000Z',
+    };
+    server.use(
+      http.get('http://localhost/v1/execution-runs', () =>
+        HttpResponse.json({
+          items: [secondRun, firstRun],
+          total: 2,
+          countsByState: {
+            awaiting_approval: 0,
+            queued: 0,
+            running: 0,
+            succeeded: 2,
+            failed: 0,
+            cancelled: 0,
+            paused_budget: 0,
+            paused_plugin: 0,
+          },
+        }),
+      ),
+      http.get('http://localhost/v1/authority-grants', () =>
+        HttpResponse.json({ items: [secondGrant, firstGrant], total: 2, activeTotal: 0 }),
+      ),
+    );
+
+    const runsView = renderWithClient(<RunsPage />, ['/operate']);
+    const runHeadings = await screen.findAllByRole('heading', {
+      name: /Daily Brief RUN · succeeded/i,
+    });
+    const grantHeadings = screen.getAllByRole('heading', {
+      name: /Daily Brief authority GRANT · exhausted/i,
+    });
+    expect(new Set(runHeadings.map((heading) => heading.textContent)).size).toBe(2);
+    expect(new Set(grantHeadings.map((heading) => heading.textContent)).size).toBe(2);
+    [...runHeadings, ...grantHeadings].forEach((heading) => {
+      expect(heading).not.toHaveTextContent(firstRun.id);
+      expect(heading).not.toHaveTextContent(secondRun.id);
+      expect(heading).not.toHaveTextContent(firstGrant.id);
+      expect(heading).not.toHaveTextContent(secondGrant.id);
+    });
+    runsView.unmount();
+
+    const firstOutcome = { ...baseOutcome, createdAt: '2026-08-20T12:01:00.000Z' };
+    const secondOutcome = {
+      ...baseOutcome,
+      id: '36363636-3636-4636-8636-363636363636',
+      runId: secondRun.id,
+      createdAt: '2026-08-20T13:01:00.000Z',
+    };
+    server.use(
+      http.get('http://localhost/v1/outcomes', () =>
+        HttpResponse.json({ items: [secondOutcome, firstOutcome] }),
+      ),
+    );
+    renderWithClient(<EvidencePage />, ['/evidence']);
+
+    const outcomeHeadings = await screen.findAllByRole('heading', {
+      name: /Recorded outcome OUTCOME · resolved/i,
+    });
+    expect(new Set(outcomeHeadings.map((heading) => heading.textContent)).size).toBe(2);
+    outcomeHeadings.forEach((heading) => {
+      expect(heading).not.toHaveTextContent(firstOutcome.id);
+      expect(heading).not.toHaveTextContent(secondOutcome.id);
+      expect(heading).not.toHaveTextContent(firstOutcome.runId);
+      expect(heading).not.toHaveTextContent(secondOutcome.runId);
+    });
+  });
+
   it('discloses every failed run dependency and hides cached ledger data', async () => {
     const { client } = renderWithClient(<RunsPage />, ['/runs']);
     expect(await screen.findByText('awaiting approval')).toBeInTheDocument();
@@ -222,7 +331,12 @@ describe('Paul OS console surfaces', () => {
     expect(screen.queryByText('No execution runs yet.')).not.toBeInTheDocument();
     expect(screen.queryByText('No authority has been granted.')).not.toBeInTheDocument();
     expect(screen.queryByText('No durable schedules configured.')).not.toBeInTheDocument();
-    for (const label of ['AWAITING APPROVAL', 'ACTIVE RUNS', 'ACTIVE GRANTS', 'ACTIVE SCHEDULES']) {
+    for (const label of [
+      'CURRENT · AWAITING APPROVAL',
+      'CURRENT · QUEUED OR RUNNING',
+      'CURRENT · ACTIVE GRANTS',
+      'CURRENT · ACTIVE SCHEDULES',
+    ]) {
       expect(screen.getByText(label).parentElement).toHaveTextContent('—');
     }
   });
@@ -230,7 +344,9 @@ describe('Paul OS console surfaces', () => {
   it('resolves a provenance link to the exact source run without promoting its ID to copy', async () => {
     renderWithClient(<RunsPage />, [`/operate?run=${executionRunId}`]);
 
-    const sourceRunHeading = await screen.findByRole('heading', { name: 'Daily Brief' });
+    const sourceRunHeading = await screen.findByRole('heading', {
+      name: /Daily Brief RUN · awaiting approval/i,
+    });
     expect(sourceRunHeading.closest('article')).toHaveAttribute('data-source-target', 'true');
     expect(document.body).not.toHaveTextContent(executionRunId.slice(0, 8));
   });
@@ -239,7 +355,9 @@ describe('Paul OS console surfaces', () => {
     const outcomeRecordId = '17171717-1717-4171-8171-171717171717';
     renderWithClient(<EvidencePage />, [`/evidence?evaluation=${releaseEvaluationId}`]);
 
-    expect(await screen.findByRole('heading', { name: 'Recorded outcome' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /Recorded outcome OUTCOME · resolved/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Current production release' })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Deterministic contract evaluation' }),
@@ -333,7 +451,9 @@ describe('Paul OS console surfaces', () => {
 
   it('discloses every failed evidence source and hides cached evidence', async () => {
     const { client } = renderWithClient(<EvidencePage />, ['/evidence']);
-    expect(await screen.findByRole('heading', { name: 'Recorded outcome' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /Recorded outcome OUTCOME · resolved/i }),
+    ).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Provider cost usd' })).toBeInTheDocument();
 
     server.use(
@@ -354,7 +474,9 @@ describe('Paul OS console surfaces', () => {
         'Metrics unavailable. Metrics are unavailable.',
       ]),
     );
-    expect(screen.queryByRole('heading', { name: 'Recorded outcome' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Recorded outcome OUTCOME/i }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Provider cost usd' })).not.toBeInTheDocument();
     expect(screen.queryByText('No outcomes have been recorded.')).not.toBeInTheDocument();
     expect(screen.queryByText('No metrics have been observed.')).not.toBeInTheDocument();

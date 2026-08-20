@@ -183,6 +183,7 @@ enum ResourceKind {
   CONTEXT_POLICY        @map("ContextPolicy")
   SKILL                 @map("Skill")
   PROJECT               @map("Project")
+  ROADMAP               @map("Roadmap")
   AUTOMATION            @map("Automation")
   REFERENCE             @map("Reference")
   BUSINESS_DOMAIN       @map("BusinessDomain")

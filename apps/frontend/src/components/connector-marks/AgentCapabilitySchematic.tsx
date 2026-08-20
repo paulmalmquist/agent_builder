@@ -15,6 +15,14 @@ export interface AgentConnectorCapability {
 interface AgentCapabilitySchematicProps {
   agentName: string;
   capabilities: readonly AgentConnectorCapability[];
+  manifestSummary?:
+    | {
+        actions: readonly string[];
+        boundaries: readonly string[];
+        knowledge: readonly string[];
+        state: 'declared' | 'unavailable';
+      }
+    | undefined;
 }
 
 interface CapabilityBranchProps {
@@ -62,23 +70,34 @@ function CapabilityBranch({ capability }: CapabilityBranchProps) {
 
 function CapabilityGroup({
   capabilities,
+  declarations = [],
+  emptyCopy,
   label,
 }: {
   capabilities: readonly AgentConnectorCapability[];
+  declarations?: readonly string[];
+  emptyCopy: string;
   label: string;
 }) {
   return (
     <section className="agent-capability-group">
       <h4>{label}</h4>
+      {declarations.length > 0 ? (
+        <ol className="agent-capability-declarations">
+          {declarations.map((declaration, index) => (
+            <li key={`${index}-${declaration}`}>{declaration}</li>
+          ))}
+        </ol>
+      ) : null}
       {capabilities.length > 0 ? (
         <ul>
           {capabilities.map((capability) => (
             <CapabilityBranch capability={capability} key={capability.id} />
           ))}
         </ul>
-      ) : (
-        <p>No declared capabilities.</p>
-      )}
+      ) : declarations.length === 0 ? (
+        <p>{emptyCopy}</p>
+      ) : null}
     </section>
   );
 }
@@ -86,6 +105,7 @@ function CapabilityGroup({
 export function AgentCapabilitySchematic({
   agentName,
   capabilities,
+  manifestSummary,
 }: AgentCapabilitySchematicProps) {
   const reads = capabilities.filter(({ effect }) => effect === 'read');
   const actions = capabilities.filter(({ effect }) => effect !== 'read');
@@ -97,22 +117,63 @@ export function AgentCapabilitySchematic({
         <span>AGENT</span>
       </div>
       <div className="agent-capability-groups">
-        <CapabilityGroup capabilities={reads} label="KNOWS · READ ONLY" />
-        <CapabilityGroup capabilities={actions} label="CAN DO" />
+        <CapabilityGroup
+          capabilities={reads}
+          declarations={manifestSummary?.knowledge ?? []}
+          emptyCopy={
+            manifestSummary?.state === 'declared'
+              ? 'No knowledge source is declared in this manifest.'
+              : manifestSummary
+                ? 'Knowledge declarations are unavailable.'
+                : 'No declared capabilities.'
+          }
+          label={manifestSummary ? 'KNOWS · DECLARED SOURCES' : 'KNOWS · READ ONLY'}
+        />
+        <CapabilityGroup
+          capabilities={actions}
+          declarations={manifestSummary?.actions ?? []}
+          emptyCopy={
+            manifestSummary?.state === 'declared'
+              ? 'No workflow stage is declared in this manifest.'
+              : manifestSummary
+                ? 'Action declarations are unavailable.'
+                : 'No declared capabilities.'
+          }
+          label={manifestSummary ? 'CAN DO · DECLARED WORKFLOW' : 'CAN DO'}
+        />
+        {manifestSummary && manifestSummary.boundaries.length > 0 ? (
+          <section className="agent-capability-group agent-capability-boundaries">
+            <h4>BOUNDARIES · MANIFEST CONTRACT</h4>
+            <ul>
+              {manifestSummary.boundaries.map((boundary, index) => (
+                <li key={`${index}-${boundary}`}>{boundary}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
       <div aria-label="Capability legend" className="agent-capability-legend">
-        <span>
-          <i aria-hidden="true" data-effect="read" /> Read
-        </span>
-        <span>
-          <i aria-hidden="true" data-effect="write" /> Write or destructive
-        </span>
-        <span>
-          <i aria-hidden="true" data-authority="granted" /> Allowed now
-        </span>
-        <span>
-          <i aria-hidden="true" data-authority="declared" /> Declared, not granted
-        </span>
+        {capabilities.length > 0 ? (
+          <>
+            <span>
+              <i aria-hidden="true" data-effect="read" /> Read
+            </span>
+            <span>
+              <i aria-hidden="true" data-effect="write" /> Write or destructive
+            </span>
+            <span>
+              <i aria-hidden="true" data-authority="granted" /> Allowed now
+            </span>
+            <span>
+              <i aria-hidden="true" data-authority="declared" /> Declared, not granted
+            </span>
+          </>
+        ) : null}
+        {manifestSummary?.state === 'declared' ? (
+          <p>Manifest declarations do not grant connector authority.</p>
+        ) : manifestSummary ? (
+          <p>The typed manifest contract is unavailable; no behavior is inferred.</p>
+        ) : null}
       </div>
     </section>
   );

@@ -32,6 +32,7 @@ export const platformApiRoutes = {
   resolveAttentionItem: (itemId: string) =>
     `/v1/attention-items/${encodeURIComponent(itemId)}/resolve`,
   resources: '/v1/resources',
+  roadmaps: '/v1/roadmaps',
   resource: (resourceVersionId: string) => `/v1/resources/${encodeURIComponent(resourceVersionId)}`,
   repositoryImports: '/v1/repository-imports',
   releases: '/v1/releases',

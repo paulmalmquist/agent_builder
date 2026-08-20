@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ResourceVersion } from '@agent-builder/contracts';
+import { roadmapResourceSpecSchema, type ResourceVersion } from '@agent-builder/contracts';
 import { useLocation } from 'react-router-dom';
 import { GlobalAgentSearch } from './GlobalAgentSearch';
 import { renderWithClient } from '../test/render';
@@ -24,7 +24,170 @@ function renderSearch(onSelectAgent = vi.fn()) {
   };
 }
 
+const roadmapResourceId = '85858585-8585-4585-8585-858585858585';
+const roadmapFamilyId = '86868686-8686-4686-8686-868686868686';
+const roadmapSpec = roadmapResourceSpecSchema.parse({
+  schemaVersion: 'roadmap.fork/v1',
+  program: {
+    id: 'two_fork_program',
+    title: 'Two-fork program',
+    description: 'Track the primary and alternate delivery paths.',
+    synthetic: true,
+    timeline: {
+      startAt: '2026-08-01T00:00:00.000Z',
+      endAt: '2027-02-01T00:00:00.000Z',
+    },
+  },
+  fork: {
+    id: 'fork_primary',
+    label: 'Roadmap fork 01',
+    purpose: 'Track the primary delivery path without inventing private Jira state.',
+    status: 'watch',
+    jira: {
+      state: 'awaiting_transfer',
+      projectKey: null,
+      filterId: null,
+      includedIssueCount: null,
+      totalIssueCount: null,
+      lastSyncedAt: null,
+    },
+    metrics: [
+      {
+        id: 'metric_progress',
+        label: 'Milestone progress',
+        value: '42%',
+        detail: 'Synthetic progress until the Jira binding transfers.',
+        state: 'watch',
+        source: 'synthetic',
+      },
+    ],
+    workstreams: [
+      {
+        id: 'workstream_primary',
+        label: 'Primary workstream',
+        startAt: '2026-08-01T00:00:00.000Z',
+        endAt: '2026-09-01T00:00:00.000Z',
+        state: 'in_work',
+        source: 'synthetic',
+      },
+    ],
+    actions: [],
+  },
+  definitionDependencies: [],
+  relationships: [],
+  relationshipCoverage: {
+    vertical: { state: 'unmapped', detail: 'No vertical relationship is declared.' },
+    aimGroup: { state: 'unmapped', detail: 'No AIM group relationship is declared.' },
+    contributingAgents: {
+      state: 'unmapped',
+      detail: 'No contributing Agent relationship is declared.',
+    },
+    executionRuns: { state: 'unavailable', detail: 'Runtime joins are not loaded.' },
+  },
+});
+
+const roadmapResource: ResourceVersion = {
+  id: roadmapResourceId,
+  familyId: roadmapFamilyId,
+  kind: 'Roadmap',
+  slug: 'roadmap-fork-primary',
+  name: 'Roadmap fork 01',
+  version: '1.0.0',
+  owner: 'Program Operations',
+  purpose: 'Track the primary delivery path.',
+  lifecycle: 'candidate',
+  digest: '8'.repeat(64),
+  sourceCommit: 'roadmap-search-test',
+  provenance: { source: 'synthetic-test' },
+  dependencyPins: [],
+  definition: {
+    apiVersion: 'paul-os/v1',
+    kind: 'Roadmap',
+    metadata: {
+      id: roadmapFamilyId,
+      slug: 'roadmap-fork-primary',
+      version: '1.0.0',
+      name: 'Roadmap fork 01',
+      owner: 'Program Operations',
+      purpose: 'Track the primary delivery path.',
+      lifecycle: 'candidate',
+      provenance: { source: 'synthetic-test' },
+    },
+    dependencies: [],
+    spec: roadmapSpec,
+  },
+  revision: 1,
+  frozenAt: '2026-08-20T12:00:00.000Z',
+  createdAt: '2026-08-20T12:00:00.000Z',
+  updatedAt: '2026-08-20T12:00:00.000Z',
+};
+
+function installRoadmapSearchResult(resource: ResourceVersion = roadmapResource) {
+  server.use(
+    http.get('http://localhost/agents', () =>
+      HttpResponse.json({ mode: 'catalog', query: 'roadmap', nextCursor: null, items: [] }),
+    ),
+    http.get('http://localhost/v1/resources', () =>
+      HttpResponse.json({
+        items: [resource],
+        total: 1,
+        countsByLifecycle: {
+          experimental: 0,
+          candidate: 1,
+          evaluating: 0,
+          evaluated: 0,
+          certified: 0,
+          production: 0,
+          deprecated: 0,
+        },
+      }),
+    ),
+  );
+}
+
 describe('global entity search', () => {
+  it('opens a typed Roadmap fork with a mouse selection', async () => {
+    installRoadmapSearchResult();
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole('button', { name: 'Search governed entities' }));
+    await user.type(screen.getByRole('combobox'), 'roadmap');
+    await user.click(await screen.findByRole('option', { name: /Roadmap fork 01/i }));
+
+    expect(screen.getByLabelText('Current route')).toHaveTextContent('/roadmaps?fork=fork_primary');
+  });
+
+  it('opens a typed Roadmap fork with the active keyboard selection', async () => {
+    installRoadmapSearchResult();
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.keyboard('{Control>}k{/Control}');
+    await user.type(screen.getByRole('combobox'), 'roadmap');
+    await screen.findByRole('option', { name: /Roadmap fork 01/i });
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByLabelText('Current route')).toHaveTextContent('/roadmaps?fork=fork_primary');
+  });
+
+  it('does not guess a fork route from an invalid Roadmap definition', async () => {
+    installRoadmapSearchResult({
+      ...roadmapResource,
+      definition: { ...roadmapResource.definition, spec: {} },
+    });
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole('button', { name: 'Search governed entities' }));
+    await user.type(screen.getByRole('combobox'), 'roadmap');
+    await user.click(await screen.findByRole('option', { name: /Roadmap fork 01/i }));
+
+    expect(screen.getByLabelText('Current route')).toHaveTextContent(
+      '/registry?query=roadmap-fork-primary',
+    );
+  });
+
   it('separates legacy agents from other governed definitions, then routes definitions into Knowledge', async () => {
     const user = userEvent.setup();
     const { onSelectAgent } = renderSearch();
@@ -36,7 +199,9 @@ describe('global entity search', () => {
 
     expect(await screen.findByText(/LEGACY AGENTS NOT YET IMPORTED · 1/i)).toBeInTheDocument();
     expect(screen.getByText(/OTHER GOVERNED DEFINITIONS · 1/i)).toBeInTheDocument();
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    const listbox = screen.getByRole('listbox');
+    expect(listbox).toBeInTheDocument();
+    expect(window.getComputedStyle(listbox.parentElement!).backgroundColor).toBe('rgb(7, 9, 13)');
     await user.click(screen.getByRole('option', { name: /Daily Brief/i }));
 
     await waitFor(() => {

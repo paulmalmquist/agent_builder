@@ -5,5 +5,5 @@
     "noEmit": true,
     "types": ["node", "@playwright/test"]
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "../apps/frontend/src/test/roadmap-fixture.ts"]
 }

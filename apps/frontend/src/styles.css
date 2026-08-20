@@ -799,6 +799,82 @@ a:focus-visible {
   align-items: center;
 }
 
+.builder-source-context {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 17px 18px;
+  border: 1px solid rgba(149, 120, 255, 0.3);
+  border-left: 2px solid var(--purple);
+  border-radius: 9px;
+  background: rgba(10, 12, 17, 0.96);
+}
+
+.builder-source-context.error {
+  border-color: rgba(232, 179, 75, 0.34);
+  border-left-color: var(--amber);
+}
+
+.builder-source-context > span,
+.builder-source-context dt {
+  color: #8f96a3;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.builder-source-context > strong {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.builder-source-context p,
+.builder-source-context dl,
+.builder-source-context dd {
+  margin: 0;
+}
+
+.builder-source-context p {
+  color: #aeb4bf;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.builder-source-context dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+}
+
+.builder-source-context dl > div {
+  display: grid;
+  gap: 3px;
+}
+
+.builder-source-context dd {
+  color: #d7dae1;
+  font-size: 12px;
+}
+
+.builder-source-context > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.builder-source-context .secondary-button {
+  min-height: 38px;
+  justify-content: center;
+  padding: 0 13px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+
 .suggestion-state {
   min-height: 72px;
   display: grid;
@@ -1964,6 +2040,19 @@ a:focus-visible {
   font-size: 23px;
   font-stretch: condensed;
   font-weight: 500;
+}
+.record-heading {
+  display: grid;
+  gap: 4px;
+}
+.record-heading > small {
+  color: #858c98;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.45;
+  text-transform: uppercase;
 }
 .resource-card p,
 .run-card p,

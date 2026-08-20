@@ -47,6 +47,10 @@ function referenceKey(resource: Pick<ResourceVersion, 'slug' | 'version'>): stri
   return `${resource.slug}@${resource.version}`;
 }
 
+function buildHref(resourceVersionId: string): string {
+  return `/build?${new URLSearchParams({ source: resourceVersionId }).toString()}`;
+}
+
 function provenanceLabel(provenance: ResourceVersion['provenance']): string {
   if (typeof provenance === 'string') return provenance;
   if (provenance === null || Array.isArray(provenance) || typeof provenance !== 'object') {
@@ -685,7 +689,10 @@ export function CatalogAgentDetailDrawer({
                 <span>05</span>
                 <div>
                   <h3>Version history</h3>
-                  <p>Other immutable versions in the same canonical Agent family.</p>
+                  <p>
+                    Immutable versions in the same canonical Agent family; the current record is
+                    marked in place.
+                  </p>
                 </div>
               </header>
               {agentVersionIndex.isError ? (
@@ -694,21 +701,32 @@ export function CatalogAgentDetailDrawer({
                 </Notice>
               ) : (
                 <div className="catalog-version-list">
-                  {familyVersions.map((version) => (
-                    <Link
-                      aria-current={version.id === resource.id ? 'page' : undefined}
-                      key={version.id}
-                      to={versionHref(version.id)}
-                    >
-                      <span>
-                        <strong>Version {version.version}</strong>
-                        <small>Revision {version.revision}</small>
-                      </span>
-                      <span className="os-status-chip" data-state={version.lifecycle}>
-                        {version.lifecycle} definition
-                      </span>
-                    </Link>
-                  ))}
+                  {familyVersions.map((version) => {
+                    const current = version.id === resource.id;
+                    const content = (
+                      <>
+                        <span>
+                          <strong>Version {version.version}</strong>
+                          <small>Revision {version.revision}</small>
+                        </span>
+                        <span className="catalog-version-state">
+                          <span className="os-status-chip" data-state={version.lifecycle}>
+                            {version.lifecycle} definition
+                          </span>
+                          {current ? <small>CURRENT VERSION</small> : null}
+                        </span>
+                      </>
+                    );
+                    return current ? (
+                      <div aria-current="page" className="catalog-version-current" key={version.id}>
+                        {content}
+                      </div>
+                    ) : (
+                      <Link key={version.id} to={versionHref(version.id)}>
+                        {content}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
               {agentVersionIndexPartial ? (
@@ -733,7 +751,7 @@ export function CatalogAgentDetailDrawer({
                 </p>
               </div>
               <div className="drawer-actions">
-                <Link className="primary-button" to="/build">
+                <Link className="primary-button" to={buildHref(resource.id)}>
                   {activePublication ? 'CHECK CERTIFIED FIT IN BUILD →' : 'OPEN BUILD →'}
                 </Link>
                 <Link

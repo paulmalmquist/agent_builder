@@ -6,7 +6,11 @@ import type {
   ResourceVersion,
 } from '@agent-builder/contracts';
 import type { PluginCatalogItem } from '../../../api/client';
-import { createAssemblyBenchModel, serializeBenchManifest } from './bench-model';
+import {
+  createAssemblyBenchModel,
+  serializeBenchManifest,
+  summarizeBenchManifest,
+} from './bench-model';
 
 const agentId = '11111111-1111-4111-8111-111111111111';
 const resourceId = '22222222-2222-4222-8222-222222222222';
@@ -225,6 +229,33 @@ const builderManifest: NonNullable<Agent['manifest']> = {
 };
 
 describe('assembly bench model', () => {
+  it('derives user-facing knowledge, workflow, and boundaries from the exact Builder manifest', () => {
+    const opaqueSource = '99999999-9999-4999-8999-999999999999';
+    const summary = summarizeBenchManifest({
+      ...builderManifest,
+      knowledgeSourceIds: ['synthetic-records', opaqueSource],
+      workflow: ['Retrieve governed evidence', 'Draft a cited report'],
+      guardrails: {
+        ...builderManifest.guardrails,
+        prohibitedActions: ['Changing source records'],
+        approvalRequirements: ['Human review before an external write'],
+        failClosedConditions: ['Stop when evidence is unavailable'],
+      },
+    });
+
+    expect(summary).toEqual({
+      knowledge: ['Synthetic records', '1 governed knowledge source declared'],
+      actions: ['Retrieve governed evidence', 'Draft a cited report'],
+      boundaries: [
+        'Cannot: Changing source records',
+        'Approval required: Human review before an external write',
+        'Stops when: Stop when evidence is unavailable',
+      ],
+      state: 'declared',
+    });
+    expect(JSON.stringify(summary)).not.toContain(opaqueSource);
+  });
+
   it('renders exact governed tool, connector, and grant records from one manifest', () => {
     const model = createAssemblyBenchModel({
       agent,

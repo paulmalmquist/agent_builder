@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { AuthorityGrant, CatalogPublication, ResourceVersion } from '@agent-builder/contracts';
+import { useLocation } from 'react-router-dom';
 import { CatalogPage } from './CatalogPage';
 import { renderWithClient } from '../../test/render';
 import {
@@ -226,6 +227,11 @@ function response(items: ResourceVersion[]) {
   };
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="Current route">{`${location.pathname}${location.search}`}</output>;
+}
+
 function installDetailedCatalogHandlers(agent: ResourceVersion = canonicalAgent) {
   const run = {
     ...platformRunFixture(),
@@ -284,7 +290,13 @@ describe('CatalogPage', () => {
   it('opens one exact governed record with truthful knowledge, connector, authority, and evidence', async () => {
     const user = userEvent.setup();
     const matchingRun = installDetailedCatalogHandlers();
-    renderWithClient(<CatalogPage />, ['/catalog']);
+    renderWithClient(
+      <>
+        <CatalogPage />
+        <LocationProbe />
+      </>,
+      ['/catalog'],
+    );
 
     const card = await screen.findByRole('link', {
       name: 'Open governed record for Synthetic Cost Sentinel, version 1.2.0',
@@ -305,15 +317,25 @@ describe('CatalogPage', () => {
     expect(within(dialog).getByText('EFFECT · read')).toBeInTheDocument();
     expect(within(dialog).getByText('ACTIVE MATCHING GRANT')).toBeInTheDocument();
     expect(within(dialog).getByText(/12\/12 gates · corpus 240/i)).toBeInTheDocument();
+    const currentVersion = within(dialog).getByText('CURRENT VERSION').closest('[aria-current]');
+    expect(currentVersion).toHaveAttribute('aria-current', 'page');
+    expect(currentVersion?.tagName).toBe('DIV');
+    expect(within(currentVersion as HTMLElement).getByText('Version 1.2.0')).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole('link', { name: /Version 1\.2\.0/i }),
+    ).not.toBeInTheDocument();
     expect(
       within(dialog).getByRole('link', { name: /Cited cost review completed\./i }),
     ).toHaveAttribute('href', `/runs?run=${matchingRun.id}`);
     expect(
       within(dialog).getByRole('link', { name: /CHECK CERTIFIED FIT IN BUILD/i }),
-    ).toHaveAttribute('href', '/build');
+    ).toHaveAttribute('href', `/build?source=${canonicalAgent.id}`);
     expect(within(dialog).getByText('INSPECT ASSEMBLY · NOT ENABLED')).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole('button', { name: 'Close governed agent record' }));
+    await user.click(within(dialog).getByRole('link', { name: /CHECK CERTIFIED FIT IN BUILD/i }));
+    expect(screen.getByLabelText('Current route')).toHaveTextContent(
+      `/build?source=${canonicalAgent.id}`,
+    );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 

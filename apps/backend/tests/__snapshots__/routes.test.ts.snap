@@ -6385,6 +6385,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "ContextPolicy",
                     "Skill",
                     "Project",
+                    "Roadmap",
                     "Automation",
                     "Reference",
                     "BusinessDomain",
@@ -6862,6 +6863,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                   "ContextPolicy",
                   "Skill",
                   "Project",
+                  "Roadmap",
                   "Automation",
                   "Reference",
                   "BusinessDomain",
@@ -7137,6 +7139,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               "ContextPolicy",
               "Skill",
               "Project",
+              "Roadmap",
               "Automation",
               "Reference",
               "BusinessDomain",
@@ -7215,6 +7218,917 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
           "frozenAt",
           "createdAt",
           "updatedAt",
+        ],
+        "type": "object",
+      },
+      "RoadmapProgram": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string",
+          },
+          "forks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "actions": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "consequence": {
+                        "maxLength": 360,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "dueAt": {
+                        "format": "date-time",
+                        "nullable": true,
+                        "type": "string",
+                      },
+                      "id": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "label": {
+                        "maxLength": 180,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "owner": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "source": {
+                        "enum": [
+                          "live",
+                          "synthetic",
+                          "awaiting_transfer",
+                        ],
+                        "type": "string",
+                      },
+                      "state": {
+                        "enum": [
+                          "decision",
+                          "blocked",
+                          "next",
+                        ],
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "consequence",
+                      "dueAt",
+                      "owner",
+                      "state",
+                      "source",
+                    ],
+                    "type": "object",
+                  },
+                  "maxItems": 25,
+                  "type": "array",
+                },
+                "definitionDependencies": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "maxLength": 160,
+                        "pattern": "^dependency_[a-z0-9_]+$",
+                        "type": "string",
+                      },
+                      "provenance": {
+                        "enum": [
+                          "live",
+                          "declared",
+                          "synthetic",
+                        ],
+                        "type": "string",
+                      },
+                      "role": {
+                        "enum": [
+                          "project_boundary",
+                          "source",
+                          "protocol",
+                        ],
+                        "type": "string",
+                      },
+                      "target": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "digest": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string",
+                          },
+                          "familyId": {
+                            "format": "uuid",
+                            "type": "string",
+                          },
+                          "kind": {
+                            "enum": [
+                              "CorePolicy",
+                              "ContextPolicy",
+                              "Skill",
+                              "Project",
+                              "Roadmap",
+                              "Automation",
+                              "Reference",
+                              "BusinessDomain",
+                              "Protocol",
+                              "KnowledgeSource",
+                              "EvaluationSuite",
+                              "MetricDefinition",
+                              "ImprovementCandidate",
+                              "Agent",
+                              "Plugin",
+                              "PluginPack",
+                            ],
+                            "type": "string",
+                          },
+                          "name": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "resourceVersionId": {
+                            "format": "uuid",
+                            "type": "string",
+                          },
+                          "slug": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "version": {
+                            "maxLength": 80,
+                            "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "resourceVersionId",
+                          "familyId",
+                          "kind",
+                          "slug",
+                          "name",
+                          "version",
+                          "digest",
+                        ],
+                        "type": "object",
+                      },
+                    },
+                    "required": [
+                      "id",
+                      "role",
+                      "provenance",
+                      "target",
+                    ],
+                    "type": "object",
+                  },
+                  "maxItems": 20,
+                  "type": "array",
+                },
+                "id": {
+                  "pattern": "^fork_[a-z0-9_]+$",
+                  "type": "string",
+                },
+                "jira": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "filterId": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "includedIssueCount": {
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "integer",
+                    },
+                    "lastSyncedAt": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "projectKey": {
+                      "maxLength": 32,
+                      "minLength": 1,
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "state": {
+                      "enum": [
+                        "awaiting_transfer",
+                        "configured",
+                        "live",
+                      ],
+                      "type": "string",
+                    },
+                    "totalIssueCount": {
+                      "minimum": 0,
+                      "nullable": true,
+                      "type": "integer",
+                    },
+                  },
+                  "required": [
+                    "state",
+                    "projectKey",
+                    "filterId",
+                    "includedIssueCount",
+                    "totalIssueCount",
+                    "lastSyncedAt",
+                  ],
+                  "type": "object",
+                },
+                "label": {
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "metrics": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "detail": {
+                        "maxLength": 360,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "id": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "label": {
+                        "maxLength": 160,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "source": {
+                        "enum": [
+                          "live",
+                          "synthetic",
+                          "awaiting_transfer",
+                        ],
+                        "type": "string",
+                      },
+                      "state": {
+                        "enum": [
+                          "nominal",
+                          "watch",
+                          "at_risk",
+                          "unavailable",
+                        ],
+                        "type": "string",
+                      },
+                      "value": {
+                        "maxLength": 80,
+                        "minLength": 1,
+                        "nullable": true,
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "value",
+                      "detail",
+                      "state",
+                      "source",
+                    ],
+                    "type": "object",
+                  },
+                  "maxItems": 12,
+                  "minItems": 1,
+                  "type": "array",
+                },
+                "purpose": {
+                  "maxLength": 360,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "relationshipCoverage": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "aimGroup": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "detail": {
+                          "maxLength": 360,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "state": {
+                          "enum": [
+                            "mapped",
+                            "unmapped",
+                            "unavailable",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "state",
+                        "detail",
+                      ],
+                      "type": "object",
+                    },
+                    "contributingAgents": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "detail": {
+                          "maxLength": 360,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "state": {
+                          "enum": [
+                            "mapped",
+                            "unmapped",
+                            "unavailable",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "state",
+                        "detail",
+                      ],
+                      "type": "object",
+                    },
+                    "executionRuns": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "detail": {
+                          "maxLength": 360,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "state": {
+                          "enum": [
+                            "mapped",
+                            "unmapped",
+                            "unavailable",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "state",
+                        "detail",
+                      ],
+                      "type": "object",
+                    },
+                    "vertical": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "detail": {
+                          "maxLength": 360,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "state": {
+                          "enum": [
+                            "mapped",
+                            "unmapped",
+                            "unavailable",
+                          ],
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "state",
+                        "detail",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "vertical",
+                    "aimGroup",
+                    "contributingAgents",
+                    "executionRuns",
+                  ],
+                  "type": "object",
+                },
+                "relationships": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "direction": {
+                        "enum": [
+                          "outbound",
+                        ],
+                        "type": "string",
+                      },
+                      "id": {
+                        "maxLength": 220,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "predicate": {
+                        "enum": [
+                          "scoped_to_vertical",
+                          "maps_to_aim_group",
+                          "contributed_to_by_agent",
+                          "produced_execution_run",
+                        ],
+                        "type": "string",
+                      },
+                      "provenance": {
+                        "enum": [
+                          "live",
+                          "declared",
+                          "synthetic",
+                        ],
+                        "type": "string",
+                      },
+                      "source": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "digest": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string",
+                          },
+                          "familyId": {
+                            "format": "uuid",
+                            "type": "string",
+                          },
+                          "kind": {
+                            "enum": [
+                              "Roadmap",
+                            ],
+                            "type": "string",
+                          },
+                          "lifecycle": {
+                            "enum": [
+                              "experimental",
+                              "candidate",
+                              "evaluating",
+                              "evaluated",
+                              "certified",
+                              "production",
+                              "deprecated",
+                            ],
+                            "type": "string",
+                          },
+                          "name": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "provenance": {
+                            "additionalProperties": true,
+                            "description": "Arbitrary JSON value.",
+                            "type": "object",
+                          },
+                          "resourceVersionId": {
+                            "format": "uuid",
+                            "type": "string",
+                          },
+                          "slug": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "sourceCommit": {
+                            "maxLength": 160,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "version": {
+                            "maxLength": 80,
+                            "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "resourceVersionId",
+                          "familyId",
+                          "kind",
+                          "slug",
+                          "name",
+                          "version",
+                          "lifecycle",
+                          "digest",
+                          "sourceCommit",
+                          "provenance",
+                        ],
+                        "type": "object",
+                      },
+                      "sourceRef": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "definitionDependencyId": {
+                            "maxLength": 160,
+                            "pattern": "^dependency_[a-z0-9_]+$",
+                            "type": "string",
+                          },
+                          "locator": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                        },
+                        "required": [
+                          "definitionDependencyId",
+                          "locator",
+                        ],
+                        "type": "object",
+                      },
+                      "target": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^group_[a-z0-9_]+$",
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "vertical",
+                                ],
+                                "type": "string",
+                              },
+                              "namespace": {
+                                "enum": [
+                                  "home.vertical",
+                                ],
+                                "type": "string",
+                              },
+                              "schemaVersion": {
+                                "enum": [
+                                  "v1",
+                                ],
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "kind",
+                              "namespace",
+                              "schemaVersion",
+                              "id",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^group_[a-z0-9_]+$",
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "aim_group",
+                                ],
+                                "type": "string",
+                              },
+                              "namespace": {
+                                "enum": [
+                                  "aim_capability_vehicle",
+                                ],
+                                "type": "string",
+                              },
+                              "schemaVersion": {
+                                "enum": [
+                                  "aim.program/v2",
+                                ],
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "kind",
+                              "namespace",
+                              "schemaVersion",
+                              "id",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "digest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "familyId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "resource_version",
+                                ],
+                                "type": "string",
+                              },
+                              "name": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "resourceKind": {
+                                "enum": [
+                                  "CorePolicy",
+                                  "ContextPolicy",
+                                  "Skill",
+                                  "Project",
+                                  "Roadmap",
+                                  "Automation",
+                                  "Reference",
+                                  "BusinessDomain",
+                                  "Protocol",
+                                  "KnowledgeSource",
+                                  "EvaluationSuite",
+                                  "MetricDefinition",
+                                  "ImprovementCandidate",
+                                  "Agent",
+                                  "Plugin",
+                                  "PluginPack",
+                                ],
+                                "type": "string",
+                              },
+                              "resourceVersionId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "slug": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "version": {
+                                "maxLength": 80,
+                                "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "familyId",
+                              "version",
+                              "kind",
+                              "resourceVersionId",
+                              "resourceKind",
+                              "slug",
+                              "name",
+                              "digest",
+                            ],
+                            "type": "object",
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "execution_run",
+                                ],
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "kind",
+                              "id",
+                            ],
+                            "type": "object",
+                          },
+                        ],
+                      },
+                    },
+                    "required": [
+                      "id",
+                      "direction",
+                      "predicate",
+                      "source",
+                      "target",
+                      "provenance",
+                      "sourceRef",
+                    ],
+                    "type": "object",
+                  },
+                  "maxItems": 100,
+                  "type": "array",
+                },
+                "resource": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "digest": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string",
+                    },
+                    "familyId": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "Roadmap",
+                      ],
+                      "type": "string",
+                    },
+                    "lifecycle": {
+                      "enum": [
+                        "experimental",
+                        "candidate",
+                        "evaluating",
+                        "evaluated",
+                        "certified",
+                        "production",
+                        "deprecated",
+                      ],
+                      "type": "string",
+                    },
+                    "name": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "provenance": {
+                      "additionalProperties": true,
+                      "description": "Arbitrary JSON value.",
+                      "type": "object",
+                    },
+                    "resourceVersionId": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "slug": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "sourceCommit": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "version": {
+                      "maxLength": 80,
+                      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "resourceVersionId",
+                    "familyId",
+                    "kind",
+                    "slug",
+                    "name",
+                    "version",
+                    "lifecycle",
+                    "digest",
+                    "sourceCommit",
+                    "provenance",
+                  ],
+                  "type": "object",
+                },
+                "source": {
+                  "enum": [
+                    "live",
+                    "synthetic",
+                    "awaiting_transfer",
+                  ],
+                  "type": "string",
+                },
+                "status": {
+                  "enum": [
+                    "on_track",
+                    "watch",
+                    "at_risk",
+                    "unavailable",
+                  ],
+                  "type": "string",
+                },
+                "workstreams": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "endAt": {
+                        "format": "date-time",
+                        "type": "string",
+                      },
+                      "id": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "label": {
+                        "maxLength": 160,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "source": {
+                        "enum": [
+                          "live",
+                          "synthetic",
+                          "awaiting_transfer",
+                        ],
+                        "type": "string",
+                      },
+                      "startAt": {
+                        "format": "date-time",
+                        "type": "string",
+                      },
+                      "state": {
+                        "enum": [
+                          "complete",
+                          "in_work",
+                          "planned",
+                          "at_risk",
+                        ],
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "startAt",
+                      "endAt",
+                      "state",
+                      "source",
+                    ],
+                    "type": "object",
+                  },
+                  "maxItems": 100,
+                  "minItems": 1,
+                  "type": "array",
+                },
+              },
+              "required": [
+                "id",
+                "label",
+                "purpose",
+                "status",
+                "jira",
+                "metrics",
+                "workstreams",
+                "actions",
+                "source",
+                "resource",
+                "definitionDependencies",
+                "relationships",
+                "relationshipCoverage",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "id": {
+            "maxLength": 120,
+            "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$",
+            "type": "string",
+          },
+          "schemaVersion": {
+            "enum": [
+              "roadmaps.program/v2",
+            ],
+            "type": "string",
+          },
+          "synthetic": {
+            "type": "boolean",
+          },
+          "timeline": {
+            "additionalProperties": false,
+            "properties": {
+              "endAt": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "startAt": {
+                "format": "date-time",
+                "type": "string",
+              },
+            },
+            "required": [
+              "startAt",
+              "endAt",
+            ],
+            "type": "object",
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "schemaVersion",
+          "id",
+          "title",
+          "description",
+          "synthetic",
+          "timeline",
+          "forks",
         ],
         "type": "object",
       },
@@ -47679,6 +48593,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "ContextPolicy",
                               "Skill",
                               "Project",
+                              "Roadmap",
                               "Automation",
                               "Reference",
                               "BusinessDomain",
@@ -47865,6 +48780,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "ContextPolicy",
                               "Skill",
                               "Project",
+                              "Roadmap",
                               "Automation",
                               "Reference",
                               "BusinessDomain",
@@ -48093,6 +49009,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "ContextPolicy",
                                 "Skill",
                                 "Project",
+                                "Roadmap",
                                 "Automation",
                                 "Reference",
                                 "BusinessDomain",
@@ -48368,6 +49285,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "ContextPolicy",
                             "Skill",
                             "Project",
+                            "Roadmap",
                             "Automation",
                             "Reference",
                             "BusinessDomain",
@@ -48646,6 +49564,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 "ContextPolicy",
                 "Skill",
                 "Project",
+                "Roadmap",
                 "Automation",
                 "Reference",
                 "BusinessDomain",
@@ -48796,6 +49715,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                   "ContextPolicy",
                                   "Skill",
                                   "Project",
+                                  "Roadmap",
                                   "Automation",
                                   "Reference",
                                   "BusinessDomain",
@@ -49071,6 +49991,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                               "ContextPolicy",
                               "Skill",
                               "Project",
+                              "Roadmap",
                               "Automation",
                               "Reference",
                               "BusinessDomain",
@@ -49237,6 +50158,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                             "ContextPolicy",
                             "Skill",
                             "Project",
+                            "Roadmap",
                             "Automation",
                             "Reference",
                             "BusinessDomain",
@@ -49512,6 +50434,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                         "ContextPolicy",
                         "Skill",
                         "Project",
+                        "Roadmap",
                         "Automation",
                         "Reference",
                         "BusinessDomain",
@@ -49729,6 +50652,973 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               },
             },
             "description": "Materialized resource lineage",
+          },
+        },
+      },
+    },
+    "/v1/roadmaps": {
+      "get": {
+        "operationId": "getRoadmapProgram",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "description": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                    "forks": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actions": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "consequence": {
+                                  "maxLength": 360,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "dueAt": {
+                                  "format": "date-time",
+                                  "nullable": true,
+                                  "type": "string",
+                                },
+                                "id": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "label": {
+                                  "maxLength": 180,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "owner": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "source": {
+                                  "enum": [
+                                    "live",
+                                    "synthetic",
+                                    "awaiting_transfer",
+                                  ],
+                                  "type": "string",
+                                },
+                                "state": {
+                                  "enum": [
+                                    "decision",
+                                    "blocked",
+                                    "next",
+                                  ],
+                                  "type": "string",
+                                },
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "consequence",
+                                "dueAt",
+                                "owner",
+                                "state",
+                                "source",
+                              ],
+                              "type": "object",
+                            },
+                            "maxItems": 25,
+                            "type": "array",
+                          },
+                          "definitionDependencies": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "maxLength": 160,
+                                  "pattern": "^dependency_[a-z0-9_]+$",
+                                  "type": "string",
+                                },
+                                "provenance": {
+                                  "enum": [
+                                    "live",
+                                    "declared",
+                                    "synthetic",
+                                  ],
+                                  "type": "string",
+                                },
+                                "role": {
+                                  "enum": [
+                                    "project_boundary",
+                                    "source",
+                                    "protocol",
+                                  ],
+                                  "type": "string",
+                                },
+                                "target": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "digest": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string",
+                                    },
+                                    "familyId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "kind": {
+                                      "enum": [
+                                        "CorePolicy",
+                                        "ContextPolicy",
+                                        "Skill",
+                                        "Project",
+                                        "Roadmap",
+                                        "Automation",
+                                        "Reference",
+                                        "BusinessDomain",
+                                        "Protocol",
+                                        "KnowledgeSource",
+                                        "EvaluationSuite",
+                                        "MetricDefinition",
+                                        "ImprovementCandidate",
+                                        "Agent",
+                                        "Plugin",
+                                        "PluginPack",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "name": {
+                                      "maxLength": 160,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "resourceVersionId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "slug": {
+                                      "maxLength": 160,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "version": {
+                                      "maxLength": 80,
+                                      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "resourceVersionId",
+                                    "familyId",
+                                    "kind",
+                                    "slug",
+                                    "name",
+                                    "version",
+                                    "digest",
+                                  ],
+                                  "type": "object",
+                                },
+                              },
+                              "required": [
+                                "id",
+                                "role",
+                                "provenance",
+                                "target",
+                              ],
+                              "type": "object",
+                            },
+                            "maxItems": 20,
+                            "type": "array",
+                          },
+                          "id": {
+                            "pattern": "^fork_[a-z0-9_]+$",
+                            "type": "string",
+                          },
+                          "jira": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "filterId": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "includedIssueCount": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "integer",
+                              },
+                              "lastSyncedAt": {
+                                "format": "date-time",
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "projectKey": {
+                                "maxLength": 32,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": "string",
+                              },
+                              "state": {
+                                "enum": [
+                                  "awaiting_transfer",
+                                  "configured",
+                                  "live",
+                                ],
+                                "type": "string",
+                              },
+                              "totalIssueCount": {
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": "integer",
+                              },
+                            },
+                            "required": [
+                              "state",
+                              "projectKey",
+                              "filterId",
+                              "includedIssueCount",
+                              "totalIssueCount",
+                              "lastSyncedAt",
+                            ],
+                            "type": "object",
+                          },
+                          "label": {
+                            "maxLength": 120,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "metrics": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "detail": {
+                                  "maxLength": 360,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "id": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "label": {
+                                  "maxLength": 160,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "source": {
+                                  "enum": [
+                                    "live",
+                                    "synthetic",
+                                    "awaiting_transfer",
+                                  ],
+                                  "type": "string",
+                                },
+                                "state": {
+                                  "enum": [
+                                    "nominal",
+                                    "watch",
+                                    "at_risk",
+                                    "unavailable",
+                                  ],
+                                  "type": "string",
+                                },
+                                "value": {
+                                  "maxLength": 80,
+                                  "minLength": 1,
+                                  "nullable": true,
+                                  "type": "string",
+                                },
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "value",
+                                "detail",
+                                "state",
+                                "source",
+                              ],
+                              "type": "object",
+                            },
+                            "maxItems": 12,
+                            "minItems": 1,
+                            "type": "array",
+                          },
+                          "purpose": {
+                            "maxLength": 360,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "relationshipCoverage": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "aimGroup": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "detail": {
+                                    "maxLength": 360,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "mapped",
+                                      "unmapped",
+                                      "unavailable",
+                                    ],
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "state",
+                                  "detail",
+                                ],
+                                "type": "object",
+                              },
+                              "contributingAgents": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "detail": {
+                                    "maxLength": 360,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "mapped",
+                                      "unmapped",
+                                      "unavailable",
+                                    ],
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "state",
+                                  "detail",
+                                ],
+                                "type": "object",
+                              },
+                              "executionRuns": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "detail": {
+                                    "maxLength": 360,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "mapped",
+                                      "unmapped",
+                                      "unavailable",
+                                    ],
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "state",
+                                  "detail",
+                                ],
+                                "type": "object",
+                              },
+                              "vertical": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "detail": {
+                                    "maxLength": 360,
+                                    "minLength": 1,
+                                    "type": "string",
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "mapped",
+                                      "unmapped",
+                                      "unavailable",
+                                    ],
+                                    "type": "string",
+                                  },
+                                },
+                                "required": [
+                                  "state",
+                                  "detail",
+                                ],
+                                "type": "object",
+                              },
+                            },
+                            "required": [
+                              "vertical",
+                              "aimGroup",
+                              "contributingAgents",
+                              "executionRuns",
+                            ],
+                            "type": "object",
+                          },
+                          "relationships": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "direction": {
+                                  "enum": [
+                                    "outbound",
+                                  ],
+                                  "type": "string",
+                                },
+                                "id": {
+                                  "maxLength": 220,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "predicate": {
+                                  "enum": [
+                                    "scoped_to_vertical",
+                                    "maps_to_aim_group",
+                                    "contributed_to_by_agent",
+                                    "produced_execution_run",
+                                  ],
+                                  "type": "string",
+                                },
+                                "provenance": {
+                                  "enum": [
+                                    "live",
+                                    "declared",
+                                    "synthetic",
+                                  ],
+                                  "type": "string",
+                                },
+                                "source": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "digest": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string",
+                                    },
+                                    "familyId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "kind": {
+                                      "enum": [
+                                        "Roadmap",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "lifecycle": {
+                                      "enum": [
+                                        "experimental",
+                                        "candidate",
+                                        "evaluating",
+                                        "evaluated",
+                                        "certified",
+                                        "production",
+                                        "deprecated",
+                                      ],
+                                      "type": "string",
+                                    },
+                                    "name": {
+                                      "maxLength": 160,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "provenance": {
+                                      "additionalProperties": true,
+                                      "description": "Arbitrary JSON value.",
+                                      "type": "object",
+                                    },
+                                    "resourceVersionId": {
+                                      "format": "uuid",
+                                      "type": "string",
+                                    },
+                                    "slug": {
+                                      "maxLength": 160,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "sourceCommit": {
+                                      "maxLength": 160,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                    "version": {
+                                      "maxLength": 80,
+                                      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "resourceVersionId",
+                                    "familyId",
+                                    "kind",
+                                    "slug",
+                                    "name",
+                                    "version",
+                                    "lifecycle",
+                                    "digest",
+                                    "sourceCommit",
+                                    "provenance",
+                                  ],
+                                  "type": "object",
+                                },
+                                "sourceRef": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "definitionDependencyId": {
+                                      "maxLength": 160,
+                                      "pattern": "^dependency_[a-z0-9_]+$",
+                                      "type": "string",
+                                    },
+                                    "locator": {
+                                      "maxLength": 500,
+                                      "minLength": 1,
+                                      "type": "string",
+                                    },
+                                  },
+                                  "required": [
+                                    "definitionDependencyId",
+                                    "locator",
+                                  ],
+                                  "type": "object",
+                                },
+                                "target": {
+                                  "oneOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "pattern": "^group_[a-z0-9_]+$",
+                                          "type": "string",
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "vertical",
+                                          ],
+                                          "type": "string",
+                                        },
+                                        "namespace": {
+                                          "enum": [
+                                            "home.vertical",
+                                          ],
+                                          "type": "string",
+                                        },
+                                        "schemaVersion": {
+                                          "enum": [
+                                            "v1",
+                                          ],
+                                          "type": "string",
+                                        },
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "namespace",
+                                        "schemaVersion",
+                                        "id",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "pattern": "^group_[a-z0-9_]+$",
+                                          "type": "string",
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "aim_group",
+                                          ],
+                                          "type": "string",
+                                        },
+                                        "namespace": {
+                                          "enum": [
+                                            "aim_capability_vehicle",
+                                          ],
+                                          "type": "string",
+                                        },
+                                        "schemaVersion": {
+                                          "enum": [
+                                            "aim.program/v2",
+                                          ],
+                                          "type": "string",
+                                        },
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "namespace",
+                                        "schemaVersion",
+                                        "id",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "digest": {
+                                          "pattern": "^[a-f0-9]{64}$",
+                                          "type": "string",
+                                        },
+                                        "familyId": {
+                                          "format": "uuid",
+                                          "type": "string",
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "resource_version",
+                                          ],
+                                          "type": "string",
+                                        },
+                                        "name": {
+                                          "maxLength": 160,
+                                          "minLength": 1,
+                                          "type": "string",
+                                        },
+                                        "resourceKind": {
+                                          "enum": [
+                                            "CorePolicy",
+                                            "ContextPolicy",
+                                            "Skill",
+                                            "Project",
+                                            "Roadmap",
+                                            "Automation",
+                                            "Reference",
+                                            "BusinessDomain",
+                                            "Protocol",
+                                            "KnowledgeSource",
+                                            "EvaluationSuite",
+                                            "MetricDefinition",
+                                            "ImprovementCandidate",
+                                            "Agent",
+                                            "Plugin",
+                                            "PluginPack",
+                                          ],
+                                          "type": "string",
+                                        },
+                                        "resourceVersionId": {
+                                          "format": "uuid",
+                                          "type": "string",
+                                        },
+                                        "slug": {
+                                          "maxLength": 160,
+                                          "minLength": 1,
+                                          "type": "string",
+                                        },
+                                        "version": {
+                                          "maxLength": 80,
+                                          "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                                          "type": "string",
+                                        },
+                                      },
+                                      "required": [
+                                        "familyId",
+                                        "version",
+                                        "kind",
+                                        "resourceVersionId",
+                                        "resourceKind",
+                                        "slug",
+                                        "name",
+                                        "digest",
+                                      ],
+                                      "type": "object",
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "format": "uuid",
+                                          "type": "string",
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "execution_run",
+                                          ],
+                                          "type": "string",
+                                        },
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "id",
+                                      ],
+                                      "type": "object",
+                                    },
+                                  ],
+                                },
+                              },
+                              "required": [
+                                "id",
+                                "direction",
+                                "predicate",
+                                "source",
+                                "target",
+                                "provenance",
+                                "sourceRef",
+                              ],
+                              "type": "object",
+                            },
+                            "maxItems": 100,
+                            "type": "array",
+                          },
+                          "resource": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "digest": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string",
+                              },
+                              "familyId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "kind": {
+                                "enum": [
+                                  "Roadmap",
+                                ],
+                                "type": "string",
+                              },
+                              "lifecycle": {
+                                "enum": [
+                                  "experimental",
+                                  "candidate",
+                                  "evaluating",
+                                  "evaluated",
+                                  "certified",
+                                  "production",
+                                  "deprecated",
+                                ],
+                                "type": "string",
+                              },
+                              "name": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "provenance": {
+                                "additionalProperties": true,
+                                "description": "Arbitrary JSON value.",
+                                "type": "object",
+                              },
+                              "resourceVersionId": {
+                                "format": "uuid",
+                                "type": "string",
+                              },
+                              "slug": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "sourceCommit": {
+                                "maxLength": 160,
+                                "minLength": 1,
+                                "type": "string",
+                              },
+                              "version": {
+                                "maxLength": 80,
+                                "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "resourceVersionId",
+                              "familyId",
+                              "kind",
+                              "slug",
+                              "name",
+                              "version",
+                              "lifecycle",
+                              "digest",
+                              "sourceCommit",
+                              "provenance",
+                            ],
+                            "type": "object",
+                          },
+                          "source": {
+                            "enum": [
+                              "live",
+                              "synthetic",
+                              "awaiting_transfer",
+                            ],
+                            "type": "string",
+                          },
+                          "status": {
+                            "enum": [
+                              "on_track",
+                              "watch",
+                              "at_risk",
+                              "unavailable",
+                            ],
+                            "type": "string",
+                          },
+                          "workstreams": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "endAt": {
+                                  "format": "date-time",
+                                  "type": "string",
+                                },
+                                "id": {
+                                  "maxLength": 120,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "label": {
+                                  "maxLength": 160,
+                                  "minLength": 1,
+                                  "type": "string",
+                                },
+                                "source": {
+                                  "enum": [
+                                    "live",
+                                    "synthetic",
+                                    "awaiting_transfer",
+                                  ],
+                                  "type": "string",
+                                },
+                                "startAt": {
+                                  "format": "date-time",
+                                  "type": "string",
+                                },
+                                "state": {
+                                  "enum": [
+                                    "complete",
+                                    "in_work",
+                                    "planned",
+                                    "at_risk",
+                                  ],
+                                  "type": "string",
+                                },
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "startAt",
+                                "endAt",
+                                "state",
+                                "source",
+                              ],
+                              "type": "object",
+                            },
+                            "maxItems": 100,
+                            "minItems": 1,
+                            "type": "array",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "purpose",
+                          "status",
+                          "jira",
+                          "metrics",
+                          "workstreams",
+                          "actions",
+                          "source",
+                          "resource",
+                          "definitionDependencies",
+                          "relationships",
+                          "relationshipCoverage",
+                        ],
+                        "type": "object",
+                      },
+                      "type": "array",
+                    },
+                    "id": {
+                      "maxLength": 120,
+                      "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$",
+                      "type": "string",
+                    },
+                    "schemaVersion": {
+                      "enum": [
+                        "roadmaps.program/v2",
+                      ],
+                      "type": "string",
+                    },
+                    "synthetic": {
+                      "type": "boolean",
+                    },
+                    "timeline": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "endAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                        "startAt": {
+                          "format": "date-time",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "startAt",
+                        "endAt",
+                      ],
+                      "type": "object",
+                    },
+                    "title": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "id",
+                    "title",
+                    "description",
+                    "synthetic",
+                    "timeline",
+                    "forks",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Backend-owned projection of exactly two governed Roadmap resources",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
           },
         },
       },

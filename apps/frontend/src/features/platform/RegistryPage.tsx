@@ -12,6 +12,7 @@ const resourceKinds: Array<ResourceVersion['kind']> = [
   'Skill',
   'Agent',
   'Project',
+  'Roadmap',
   'Automation',
   'Protocol',
   'KnowledgeSource',

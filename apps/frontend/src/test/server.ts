@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { InterpretationConfirmation } from '@agent-builder/contracts';
+import { roadmapProgramFixture } from './roadmap-fixture';
 
 const agentId = '11111111-1111-4111-8111-111111111111';
 const familyId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -1152,6 +1153,8 @@ export const handlers = [
       },
     }),
   ),
+
+  http.get('http://localhost/v1/roadmaps', () => HttpResponse.json(roadmapProgramFixture)),
 
   http.get('http://localhost/v1/resources/:resourceVersionId', ({ params }) =>
     params.resourceVersionId === platformResource.id

@@ -334,25 +334,25 @@ export function RunsPage() {
       <InstrumentStrip
         readings={[
           {
-            label: 'AWAITING APPROVAL',
+            label: 'CURRENT · AWAITING APPROVAL',
             value:
               runs.data !== undefined && !runs.isError
                 ? runs.data.countsByState.awaiting_approval
                 : '—',
           },
           {
-            label: 'ACTIVE RUNS',
+            label: 'CURRENT · QUEUED OR RUNNING',
             value:
               runs.data !== undefined && !runs.isError
                 ? runs.data.countsByState.queued + runs.data.countsByState.running
                 : '—',
           },
           {
-            label: 'ACTIVE GRANTS',
+            label: 'CURRENT · ACTIVE GRANTS',
             value: grants.data !== undefined && !grants.isError ? grants.data.activeTotal : '—',
           },
           {
-            label: 'ACTIVE SCHEDULES',
+            label: 'CURRENT · ACTIVE SCHEDULES',
             value:
               schedules.data !== undefined && !schedules.isError ? schedules.data.activeTotal : '—',
           },
@@ -371,7 +371,7 @@ export function RunsPage() {
         <section aria-busy={runs.isLoading} className="os-panel" id="operate-runs">
           <header className="os-panel-heading">
             <h2>Execution ledger</h2>
-            <small>NEWEST FIRST · AUTO REFRESH</small>
+            <small>CURRENT + HISTORY · NEWEST FIRST</small>
           </header>
           {runs.isError ? (
             <Notice tone="error">
@@ -395,7 +395,12 @@ export function RunsPage() {
               >
                 <header>
                   <div>
-                    <h2>{subjectName(run.entrySubject)}</h2>
+                    <h2 className="record-heading">
+                      <span>{subjectName(run.entrySubject)}</span>
+                      <small>
+                        RUN · {run.state.replaceAll('_', ' ')} · REQUESTED {time(run.createdAt)}
+                      </small>
+                    </h2>
                     <p>{runMessage(run)}</p>
                   </div>
                   <span className="os-status-chip" data-state={run.state}>
@@ -451,7 +456,7 @@ export function RunsPage() {
         <section aria-busy={grants.isLoading} className="os-panel" id="operate-authority">
           <header className="os-panel-heading">
             <h2>Authority envelopes</h2>
-            <small>EXACT RELEASE DIGESTS</small>
+            <small>CURRENT + HISTORY · EXACT RELEASE DIGESTS</small>
           </header>
           {grants.isError ? (
             <Notice tone="error">
@@ -472,7 +477,12 @@ export function RunsPage() {
               <article className="approval-card" key={grant.id}>
                 <header>
                   <div>
-                    <h2>{subjectName(grant.entrySubject)} authority</h2>
+                    <h2 className="record-heading">
+                      <span>{subjectName(grant.entrySubject)} authority</span>
+                      <small>
+                        GRANT · {grant.state.replaceAll('_', ' ')} · CREATED {time(grant.createdAt)}
+                      </small>
+                    </h2>
                     <p>{grant.rationale}</p>
                   </div>
                   <span className="os-status-chip" data-state={grant.state}>
@@ -532,7 +542,7 @@ export function RunsPage() {
       >
         <header className="os-panel-heading">
           <h2>Durable schedules</h2>
-          <small>PRODUCTION POINTER · DEDUPLICATED DISPATCH</small>
+          <small>CURRENT + HISTORY · DEDUPLICATED DISPATCH</small>
         </header>
         {schedules.isError ? (
           <Notice tone="error">

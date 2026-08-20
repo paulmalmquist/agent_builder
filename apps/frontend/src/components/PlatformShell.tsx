@@ -77,7 +77,7 @@ export function PlatformShell() {
   );
   const persistentSearch = useMemo(() => {
     const persistent = new URLSearchParams();
-    (['intake', 'spec', 'job', 'shadow', 'mode'] as const).forEach((key) => {
+    (['intake', 'spec', 'job', 'shadow', 'mode', 'source'] as const).forEach((key) => {
       const value = searchParams.get(key);
       if (value) persistent.set(key, value);
     });
@@ -117,35 +117,26 @@ export function PlatformShell() {
     },
     {
       group: 'daily',
-      label: 'ATTENTION',
+      label: 'ROADMAPS',
       number: '01',
+      path: '/roadmaps',
+      active: location.pathname === '/roadmaps',
+      badge: 0,
+      unavailable: false,
+    },
+    {
+      group: 'daily',
+      label: 'ATTENTION',
+      number: '02',
       path: '/attention',
       active: location.pathname === '/attention',
       badge: attention.isError ? 0 : (attention.data?.decideBadgeCount ?? 0),
       unavailable: attention.isError,
     },
     {
-      group: 'daily',
-      label: 'KNOWLEDGE',
-      number: '02',
-      path: '/knowledge',
-      active: location.pathname === '/knowledge',
-    },
-    ...(featureFlags.aimEnabled
-      ? [
-          {
-            group: 'workspace' as const,
-            label: 'AIM',
-            number: '03',
-            path: '/aim',
-            active: location.pathname === '/aim',
-          },
-        ]
-      : []),
-    {
       group: 'workspace',
       label: 'BUILD',
-      number: '04',
+      number: '03',
       path: buildPath,
       active: location.pathname === '/build',
       badge: 0,
@@ -154,12 +145,23 @@ export function PlatformShell() {
     {
       group: 'workspace',
       label: 'CATALOG',
-      number: '05',
+      number: '04',
       path: '/catalog',
       active: ['/catalog', '/registry', '/library'].includes(location.pathname),
       badge: 0,
       unavailable: false,
     },
+    ...(featureFlags.aimEnabled
+      ? [
+          {
+            group: 'workspace' as const,
+            label: 'AIM',
+            number: '05',
+            path: '/aim',
+            active: location.pathname === '/aim',
+          },
+        ]
+      : []),
     {
       group: 'workspace',
       label: 'OPERATE',
@@ -187,19 +189,17 @@ export function PlatformShell() {
     },
     {
       group: 'workspace',
-      label: 'INCUBATOR',
+      label: 'KNOWLEDGE',
       number: '09',
-      path: '/incubator',
-      active: location.pathname === '/incubator',
-      badge: 0,
-      unavailable: false,
+      path: '/knowledge',
+      active: location.pathname === '/knowledge',
     },
     {
       group: 'workspace',
-      label: 'ROADMAPS',
+      label: 'INCUBATOR',
       number: '10',
-      path: '/roadmaps',
-      active: location.pathname === '/roadmaps',
+      path: '/incubator',
+      active: location.pathname === '/incubator',
       badge: 0,
       unavailable: false,
     },
