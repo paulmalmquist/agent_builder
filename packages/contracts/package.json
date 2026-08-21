@@ -34,7 +34,7 @@
     "clean": "tsc -b --clean"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "7.3.0",
-    "zod": "3.24.2"
+    "@asteasolutions/zod-to-openapi": "9.1.0",
+    "zod": "4.4.3"
   }
 }
