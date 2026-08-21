@@ -14,8 +14,14 @@ gesture and corrects these source claims:
 - Workstreams are now an explicit validated AIM collection with exact group, part, milestone,
   source, and timeline references. The UI does not own a second hardcoded row list.
 - Attention decisions and operating exceptions remain global until a governed vertical edge exists.
-- The Objective resource and its drill-through remain L2 work. Home does not render dead objective
-  links before that contract exists.
+- Every KPI opens a URL-backed L1 trace over its existing inputs, related workstream/action counts,
+  and exact AIM, Operate, or Connections destination. The trace names the Objective binding as not
+  declared; it does not invent a target or render a dead objective link before the L2 contract
+  exists.
+- Timeline and dated-list modes render the same validated workstream collection. The view choice is
+  URL-backed and does not create a second program filter.
+- Today reports scheduled work from the schedule endpoint, deduplicates exact schedule identities,
+  and reconciles a quiet active day with returned paused schedules in Operate.
 - Red remains reserved for an explicit safety stop. Coverage gaps use amber plus a written state.
 
 Current browser-visible values are therefore six synthetic AIM rollups, two live briefing-ledger

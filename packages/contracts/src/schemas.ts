@@ -405,6 +405,11 @@ export const healthResponseSchema = z.object({
   status: z.literal('ok'),
   database: z.literal('connected'),
   timestamp: isoDateTimeSchema,
+  commit: z
+    .string()
+    .regex(/^[a-f0-9]{7,64}$/i)
+    .nullable(),
+  buildTimestamp: isoDateTimeSchema.nullable(),
 });
 
 export const generatorInputSchema = z.object({

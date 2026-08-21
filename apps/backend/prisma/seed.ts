@@ -116,6 +116,7 @@ const rejectedChallengerId = '7e2ab2cc-52e8-4cb8-92c3-256626cdade7';
 const passingChallengerId = '84357d19-acf2-435d-a8aa-959d493aa8c2';
 const inventoryFamilyId = 'fbcbcd95-15be-49c0-a8a7-a2bc361b7521';
 const inventoryChampionId = 'fbcbcd95-15be-49c0-a8a7-a2bc361b7521';
+const inventoryCorrectedId = 'fbcbcd95-15be-49c0-a8a7-a2bc361b7522';
 const gateConfigId = 'c064fe82-ec1b-4e96-91b6-b7cfd62cc13f';
 const corpusId = '417be137-2786-48ef-bde1-52216b46f5fb';
 const inventoryCorpusId = '2c6f52a9-503d-4909-8d9c-cd8c8230465f';
@@ -198,6 +199,78 @@ const supplierOutputs = outputsSectionSchema.parse({
       name: 'Known delayed supplier',
       input: { supplierId: 'SUP-104', delayDays: 5 },
       expectedResult: { affectedBuilds: ['BUILD-42'], escalationRequired: true },
+    },
+  ],
+});
+
+const inventoryOutcomes = outcomesSectionSchema.parse({
+  name: 'Inventory Risk Analyst',
+  department: 'Operations',
+  purpose:
+    'Analyzes inventory exposure and material shortages to prioritize operational risk and mitigation actions.',
+  audience: 'Operations planning leaders',
+  desiredOutcomes: [
+    'Identify parts whose available inventory cannot cover recorded requirements',
+    'Prepare a cited inventory-risk brief for human review',
+  ],
+  humanBaseline: 'An operations analyst reconciles inventory and requirements in two hours.',
+  exclusions: ['Never alter inventory allocations, demand records, or source-system data'],
+});
+const inventoryKnowledge = knowledgeSectionSchema.parse({
+  sources: [
+    {
+      descriptorId: 'bq-operations-inventory',
+      purpose: 'Reconcile available inventory with recorded part requirements',
+      requiredCitations: true,
+    },
+  ],
+});
+const inventoryGuardrails = guardrailsSectionSchema.parse({
+  workflowStages: [
+    'Validate inventory snapshot freshness',
+    'Reconcile available units with recorded requirements',
+    'Rank material-shortage exposure',
+    'Prepare a cited mitigation brief for human review',
+  ],
+  prohibitedActions: [
+    'Modify inventory allocations',
+    'Change demand records',
+    'Write to source systems',
+  ],
+  approvalRequirements: [
+    'Operations planning approval before any mitigation recommendation is acted on',
+  ],
+  failClosedConditions: [
+    'Stop when the inventory snapshot is unavailable or stale',
+    'Stop when recorded requirements are unavailable',
+    'Stop when governed citations cannot be produced',
+  ],
+  responseRequirements: { citations: true, confidence: true, unresolvedConflicts: true },
+});
+const inventoryOutputs = outputsSectionSchema.parse({
+  outputType: 'decision_brief',
+  outputSchema: {
+    name: 'InventoryRiskDecisionBrief',
+    fields: [
+      'partId',
+      'availableUnits',
+      'requiredUnits',
+      'shortageUnits',
+      'risk',
+      'evidence',
+      'recommendedMitigation',
+    ],
+  },
+  successMetrics: [
+    { name: 'Factual accuracy', operator: 'gte', threshold: 0.98, unit: null },
+    { name: 'Citation coverage', operator: 'eq', threshold: 1, unit: null },
+    { name: 'Unauthorized actions', operator: 'eq', threshold: 0, unit: 'count' },
+  ],
+  acceptanceTests: [
+    {
+      name: 'Known inventory shortage',
+      input: { partId: 'PART-17', availableUnits: 4, requiredUnits: 25 },
+      expectedResult: { risk: 'high', shortageUnits: 21 },
     },
   ],
 });
@@ -446,6 +519,34 @@ const inventoryDriftManifest = agentManifestSchema.parse({
   ],
   generatedAt: '2026-08-04T00:00:00.000Z',
 });
+const inventoryCorrectedManifest = agentManifestSchema.parse({
+  agentId: inventoryCorrectedId,
+  name: inventoryOutcomes.name,
+  department: inventoryOutcomes.department,
+  purpose: inventoryOutcomes.purpose,
+  version: '2.0.0',
+  specRevision: 1,
+  generatorVersion: '0.2.0',
+  workflow: inventoryGuardrails.workflowStages,
+  knowledgeSourceIds: inventoryKnowledge.sources.map((source) => source.descriptorId),
+  guardrails: inventoryGuardrails,
+  outputType: inventoryOutputs.outputType,
+  outputSchema: inventoryOutputs.outputSchema,
+  evaluations: [
+    {
+      name: inventoryEvalCase.name,
+      input: inventoryEvalCase.input,
+      expectedResult: {
+        __fixture: {
+          output: inventoryEvalCase.expectedOutput,
+          citations: ['bq-operations-inventory'],
+          attemptedActions: [],
+        },
+      },
+    },
+  ],
+  generatedAt: '2026-08-21T00:00:00.000Z',
+});
 const corpusHash = sha256(
   evalCases.map(({ key, input, expectedOutput }) => ({ key, input, expectedOutput })),
 );
@@ -459,6 +560,26 @@ const inventoryCorpusHash = sha256([
 
 const refreshedAt = new Date('2026-07-30T12:00:00.000Z');
 const sources = [
+  [
+    'bq-operations-inventory',
+    SourceRole.KNOWLEDGE,
+    SourceProvider.BIGQUERY,
+    'Operations Inventory Position',
+    'bigquery://agent-builder-demo/operations/gold_inventory_position',
+    SourceAuthority.SYSTEM_OF_RECORD,
+    'Operations Data Platform',
+    'US',
+    true,
+    true,
+    {
+      project: 'agent-builder-demo',
+      dataset: 'operations',
+      table: 'gold_inventory_position',
+      location: 'US',
+      columns: ['part_id', 'available_units', 'required_units', 'snapshot_at'],
+      slice: 'inventory-position',
+    },
+  ],
   [
     'bq-operations-builds',
     SourceRole.KNOWLEDGE,
@@ -756,6 +877,29 @@ async function seedFamiliesAndVersions(): Promise<void> {
         'mitigation recommendations',
       ],
     },
+    {
+      id: inventoryCorrectedId,
+      familyId: inventoryFamilyId,
+      versionNumber: 2,
+      slug: 'inventory-risk-analyst-v2',
+      predecessorAgentId: inventoryChampionId,
+      derivationMode: AgentDerivationMode.CONFIGURE,
+      name: inventoryOutcomes.name,
+      department: inventoryOutcomes.department,
+      purpose: inventoryOutcomes.purpose,
+      owner: 'Operations Analytics',
+      status: AgentStatus.READY,
+      certificationHealth: CertificationHealth.NOT_CERTIFIED,
+      manifest: inventoryCorrectedManifest,
+      manifestHash: sha256(inventoryCorrectedManifest),
+      legacyActivation: false,
+      capabilities: [
+        'inventory exposure',
+        'material shortage analysis',
+        'risk prioritization',
+        'mitigation recommendations',
+      ],
+    },
   ] as const;
 
   for (const version of versions) {
@@ -812,6 +956,23 @@ async function seedFamiliesAndVersions(): Promise<void> {
       update: {},
     });
   }
+  await prisma.agentSpec.upsert({
+    where: { agentId: inventoryCorrectedId },
+    create: {
+      agentId: inventoryCorrectedId,
+      baseAgentId: inventoryChampionId,
+      derivationMode: AgentDerivationMode.CONFIGURE,
+      status: SpecStatus.GENERATED,
+      revision: 1,
+      outcomes: inventoryOutcomes,
+      knowledge: inventoryKnowledge,
+      guardrails: inventoryGuardrails,
+      outputs: inventoryOutputs,
+      createdBy: seedActor,
+      updatedBy: seedActor,
+    },
+    update: {},
+  });
 }
 
 async function seedSources(): Promise<void> {
@@ -869,6 +1030,25 @@ async function seedSources(): Promise<void> {
         update: { purpose: selection.purpose, citations: selection.requiredCitations },
       });
     }
+  }
+  for (const selection of inventoryKnowledge.sources) {
+    await prisma.agentKnowledgeSource.upsert({
+      where: {
+        agentId_workspaceId_sourceId: {
+          agentId: inventoryCorrectedId,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          sourceId: selection.descriptorId,
+        },
+      },
+      create: {
+        agentId: inventoryCorrectedId,
+        workspaceId: LOCAL_WORKSPACE_ID,
+        sourceId: selection.descriptorId,
+        purpose: selection.purpose,
+        citations: selection.requiredCitations,
+      },
+      update: { purpose: selection.purpose, citations: selection.requiredCitations },
+    });
   }
 }
 

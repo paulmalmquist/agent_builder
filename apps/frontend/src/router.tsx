@@ -179,6 +179,13 @@ export function createPaulOsRouteObjects(
             return { Component: SettingsPage };
           },
         },
+        {
+          path: 'selftest',
+          lazy: async () => {
+            const { SelfTestPage } = await import('./features/selftest/SelfTestPage');
+            return { Component: SelfTestPage };
+          },
+        },
         ...createAimRoutes(flags),
         ...createVisualRoutes(flags),
         {

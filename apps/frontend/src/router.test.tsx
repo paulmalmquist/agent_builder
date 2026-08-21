@@ -43,6 +43,7 @@ describe('Paul OS route map', () => {
       'incubator',
       'roadmaps',
       'settings',
+      'selftest',
       'library',
       'registry',
       'runs',

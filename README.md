@@ -65,6 +65,10 @@ The composed frontend is available on `http://localhost:8080`. PostgreSQL data i
 named volume, migrations use `prisma migrate deploy`, and seeds are idempotent. Compose runs the
 dedicated worker and configures the backend with `EXECUTION_DISPATCH_MODE=external`, so only the
 worker claims model-execution runs.
+Set `REPOSITORY_SOURCE_COMMIT` to the exact Git revision before building when the served console
+must be review-verifiable. The frontend embeds that revision and the backend image records it with
+its build timestamp. Settings declares a verified running commit only when the frontend and
+read-only `/v1/health` declarations match; missing or conflicting values remain unavailable.
 Compose publishes its development ports on `127.0.0.1` only. The image runs seeds only when
 `SEED_ON_BOOT=true`; leave that flag unset outside disposable/demo environments. Compose performs
 migrations and optional demo seeding in its one-shot `migrate` service before starting the backend.

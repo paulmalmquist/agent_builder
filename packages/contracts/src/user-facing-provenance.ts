@@ -18,6 +18,50 @@ export const QUARANTINED_TEST_ACTOR_PREFIXES = [
   'human:reuse-',
 ] as const;
 
+// These records were written by the pre-provenance full-flow harness under the background actor,
+// so their actor fields no longer distinguish them from real background work. Exact multi-field
+// fingerprints quarantine only the known legacy fixtures; new test records must use reserved test
+// provenance instead.
+export const QUARANTINED_LEGACY_FIXTURE_FINGERPRINTS = [
+  {
+    name: 'Integration Conflict Probe',
+    owner: 'Supply Chain Agent Owner',
+    purpose:
+      'Produces an evidence-backed supplier risk briefing for production planners and escalation owners.',
+  },
+  {
+    name: 'Integration Orphan Recovery Probe',
+    owner: 'Supply Chain Agent Owner',
+    purpose:
+      'Produces an evidence-backed supplier risk briefing for production planners and escalation owners.',
+  },
+  {
+    name: 'Integration Queued Resume Probe',
+    owner: 'Supply Chain Agent Owner',
+    purpose:
+      'Produces an evidence-backed supplier risk briefing for production planners and escalation owners.',
+  },
+  {
+    name: 'Integration Readiness Probe',
+    owner: 'Supply Chain Agent Owner',
+    purpose:
+      'Produces an evidence-backed supplier risk briefing for production planners and escalation owners.',
+  },
+] as const;
+
+export function isQuarantinedLegacyFixture(input: {
+  name: string;
+  owner: string;
+  purpose: string;
+}): boolean {
+  return QUARANTINED_LEGACY_FIXTURE_FINGERPRINTS.some(
+    (fingerprint) =>
+      input.name === fingerprint.name &&
+      input.owner === fingerprint.owner &&
+      input.purpose === fingerprint.purpose,
+  );
+}
+
 export interface UserFacingProvenanceFields {
   createdBy?: string | null | undefined;
   updatedBy?: string | null | undefined;

@@ -26,6 +26,7 @@ function testApp() {
     }),
   );
   app.get('/health', (_request, response) => response.json({ public: true }));
+  app.get('/v1/health', (_request, response) => response.json({ public: true }));
   app.get('/agents', (_request, response) => response.json(currentRequestContext()));
   app.get('/agents/background', (_request, response) =>
     response.json(runAsSystem(() => currentRequestContext())),
@@ -43,6 +44,7 @@ describe('request identity context', () => {
   it('keeps health public while protecting governed API routes', async () => {
     const app = testApp();
     await request(app).get('/health').expect(200, { public: true });
+    await request(app).get('/v1/health').expect(200, { public: true });
     const rejected = await request(app).get('/agents').expect(401);
     expect(rejected.headers['www-authenticate']).toBe('Bearer');
     expect(rejected.body).toEqual({ code: 'AUTHENTICATION_REQUIRED' });

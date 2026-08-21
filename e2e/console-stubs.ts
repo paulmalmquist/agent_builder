@@ -156,6 +156,13 @@ export async function stubConsoleReadModels(
     }
 
     const readResponses: Record<string, object> = {
+      '/v1/health': {
+        status: 'ok',
+        database: 'connected',
+        timestamp: now,
+        commit: null,
+        buildTimestamp: null,
+      },
       '/v1/session': {
         principal: {
           principalId: '41414141-4141-4141-8141-414141414141',

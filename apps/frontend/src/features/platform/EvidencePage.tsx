@@ -91,6 +91,7 @@ export function EvidencePage() {
   const rollback = useRollbackRelease(channelKey);
   const [rollbackOpen, setRollbackOpen] = useState(false);
   const outcomeItems = outcomes.isError ? [] : (outcomes.data?.items ?? []);
+  const citedOutcomeCount = outcomeItems.filter((outcome) => outcome.citations.length > 0).length;
   const metricItems = metrics.isError ? [] : (metrics.data?.items ?? []);
   const rollbackReleaseId = productionChannel.data?.priorReleaseId ?? null;
   const channelLabel = humanizeLabel(channelKey);
@@ -119,10 +120,7 @@ export function EvidencePage() {
           },
           {
             label: 'CITED SHOWN',
-            value:
-              outcomes.data !== undefined && !outcomes.isError
-                ? outcomeItems.filter((outcome) => outcome.citations.length > 0).length
-                : '—',
+            value: outcomes.data !== undefined && !outcomes.isError ? citedOutcomeCount : '—',
           },
           {
             label: 'UNRESOLVED SHOWN',
@@ -370,6 +368,16 @@ export function EvidencePage() {
           </header>
           {outcomes.isError ? (
             <Notice tone="error">Outcomes unavailable. {getErrorMessage(outcomes.error)}</Notice>
+          ) : null}
+          {!outcomes.isLoading &&
+          !outcomes.isError &&
+          outcomeItems.length > 0 &&
+          citedOutcomeCount === 0 ? (
+            <Notice>
+              <strong>NO RECORDED CITATION CHAINS.</strong> Every outcome in this loaded ledger has
+              an empty citations array, so Paul OS has no governed source chain to show for these
+              records. A resolved state or quality score does not prove cited evidence.
+            </Notice>
           ) : null}
           <div className="evidence-list">
             {outcomes.isLoading ? <div className="os-empty-state">Loading outcomes…</div> : null}

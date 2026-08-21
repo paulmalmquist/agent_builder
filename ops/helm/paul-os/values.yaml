@@ -53,6 +53,7 @@ backend:
   # backend.replicaCount stays one until scheduler/maintenance ownership is extracted.
   replicaCount: 1
   servicePort: 3000
+  selfTestTimeoutMs: 240000
   resources:
     requests:
       cpu: 250m

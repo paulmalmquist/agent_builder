@@ -1,7 +1,10 @@
 import type { ResourceVersion } from '@agent-builder/contracts';
+import { Link } from 'react-router-dom';
 import { getErrorMessage } from '../../api/client';
-import { usePlatformResources, useSession } from '../../api/hooks';
+import type { PlatformHealth } from '../../api/client';
+import { useHealth, usePlatformResources, useSession } from '../../api/hooks';
 import { Notice } from '../../components/Notice';
+import { consoleBuildCommit } from '../../config/build-identity';
 import { SurfaceHeader } from '../platform/SurfaceHeader';
 import './settings.css';
 
@@ -31,8 +34,88 @@ function departmentLabel(authentication: string, departmentId: string | null) {
     : 'Current department';
 }
 
+export function SettingsBuildIdentity({
+  build,
+  frontendCommit,
+  error = null,
+  loading = false,
+}: {
+  build: Pick<PlatformHealth, 'commit' | 'buildTimestamp'> | null;
+  frontendCommit: string | null;
+  error?: string | null;
+  loading?: boolean;
+}) {
+  const commitsMatch =
+    frontendCommit !== null &&
+    build !== null &&
+    build.commit !== null &&
+    frontendCommit === build.commit;
+  const verifiedCommit =
+    commitsMatch && build !== null && build.buildTimestamp !== null ? build.commit : null;
+  const complete = verifiedCommit !== null;
+  const mismatch =
+    frontendCommit !== null &&
+    build !== null &&
+    build.commit !== null &&
+    frontendCommit !== build.commit;
+  return (
+    <section aria-busy={loading} aria-labelledby="settings-build-title">
+      <header className="settings-section-heading">
+        <div>
+          <span>04 · CONSOLE BUILD</span>
+          <h2 id="settings-build-title">Running build identity</h2>
+        </div>
+        <small>
+          {loading
+            ? 'RESOLVING BUILD IDENTITY'
+            : complete
+              ? 'RUNNING BUILD · DECLARED'
+              : mismatch
+                ? 'BUILD IDENTITY MISMATCH'
+                : 'BUILD IDENTITY UNAVAILABLE'}
+        </small>
+      </header>
+      {error ? <Notice tone="error">Build identity unavailable. {error}</Notice> : null}
+      <dl className="settings-build-facts">
+        <div>
+          <dt>VERIFIED RUNNING COMMIT</dt>
+          <dd>{verifiedCommit ? <code>{verifiedCommit}</code> : 'UNAVAILABLE'}</dd>
+        </div>
+        <div>
+          <dt>API BUILD TIMESTAMP</dt>
+          <dd>
+            {build?.buildTimestamp ? (
+              <time dateTime={build.buildTimestamp}>{build.buildTimestamp}</time>
+            ) : (
+              'UNAVAILABLE'
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>FRONTEND ASSET COMMIT</dt>
+          <dd>{frontendCommit ? <code>{frontendCommit}</code> : 'UNAVAILABLE'}</dd>
+        </div>
+        <div>
+          <dt>API BUILD COMMIT</dt>
+          <dd>{build?.commit ? <code>{build.commit}</code> : 'UNAVAILABLE'}</dd>
+        </div>
+        <div>
+          <dt>INTERPRETATION</dt>
+          <dd>
+            The running commit is verified only when the frontend asset declaration matches the
+            immutable API declaration returned by read-only <code>/v1/health</code>. Missing or
+            conflicting values remain unavailable; Paul OS does not infer them from the browser or
+            process clock.
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const session = useSession();
+  const health = useHealth();
   const protocols = usePlatformResources({ kind: 'Protocol', limit: 100 });
   const projects = usePlatformResources({ kind: 'Project', limit: 100 });
   const references = usePlatformResources({ kind: 'Reference', limit: 100 });
@@ -266,6 +349,33 @@ export function SettingsPage() {
             ))}
           </div>
         ) : null}
+      </section>
+
+      <SettingsBuildIdentity
+        build={health.data ?? null}
+        error={health.isError ? getErrorMessage(health.error) : null}
+        frontendCommit={consoleBuildCommit}
+        loading={health.isLoading}
+      />
+
+      <section aria-labelledby="settings-selftest-title">
+        <header className="settings-section-heading">
+          <div>
+            <span>05 · SELF-VERIFICATION</span>
+            <h2 id="settings-selftest-title">Measure the running console</h2>
+          </div>
+          <small>READ ONLY · LIVE DOM</small>
+        </header>
+        <Link className="settings-selftest-link" to="/selftest">
+          <span>
+            <strong>Open self-verification</strong>
+            <small>
+              Run the browser acceptance matrix at 390, 768, and 1440 CSS pixels. Assertions that
+              cannot run remain skipped, never passed.
+            </small>
+          </span>
+          <b aria-hidden="true">OPEN →</b>
+        </Link>
       </section>
     </main>
   );

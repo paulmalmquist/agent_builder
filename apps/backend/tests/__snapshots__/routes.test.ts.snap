@@ -7334,6 +7334,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                       "governance_not_declared",
                       "snapshot_not_found",
                       "snapshot_integrity_failed",
+                      "snapshot_semantic_mismatch",
                     ],
                     "type": "string",
                   },
@@ -8664,6 +8665,126 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
           "synthetic",
           "timeline",
           "forks",
+        ],
+        "type": "object",
+      },
+      "SelfTestReport": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "nullable": true,
+            "pattern": "^[a-f0-9]{7,64}$",
+            "type": "string",
+          },
+          "generatedAt": {
+            "format": "date-time",
+            "type": "string",
+          },
+          "results": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "actual": {
+                  "maxLength": 4000,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "description": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "expected": {
+                  "maxLength": 2000,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "id": {
+                  "maxLength": 120,
+                  "pattern": "^[a-z][a-z0-9]*(?:[._][a-z0-9]+)*$",
+                  "type": "string",
+                },
+                "route": {
+                  "maxLength": 1000,
+                  "type": "string",
+                },
+                "status": {
+                  "enum": [
+                    "PASS",
+                    "FAIL",
+                    "SKIPPED",
+                  ],
+                  "type": "string",
+                },
+                "width": {
+                  "exclusiveMinimum": true,
+                  "maximum": 10000,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+              },
+              "required": [
+                "id",
+                "width",
+                "status",
+                "description",
+                "expected",
+                "actual",
+                "route",
+              ],
+              "type": "object",
+            },
+            "maxItems": 1000,
+            "type": "array",
+          },
+          "schemaVersion": {
+            "enum": [
+              "paul-os.selftest/v1",
+            ],
+            "type": "string",
+          },
+          "summary": {
+            "additionalProperties": false,
+            "properties": {
+              "fail": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "pass": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "skipped": {
+                "minimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "pass",
+              "fail",
+              "skipped",
+            ],
+            "type": "object",
+          },
+          "widths": {
+            "items": {
+              "exclusiveMinimum": true,
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer",
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "schemaVersion",
+          "commit",
+          "generatedAt",
+          "widths",
+          "summary",
+          "results",
         ],
         "type": "object",
       },
@@ -20134,6 +20255,16 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               "application/json": {
                 "schema": {
                   "properties": {
+                    "buildTimestamp": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "commit": {
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{7,64}$",
+                      "type": "string",
+                    },
                     "database": {
                       "enum": [
                         "connected",
@@ -20155,6 +20286,8 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                     "status",
                     "database",
                     "timestamp",
+                    "commit",
+                    "buildTimestamp",
                   ],
                   "type": "object",
                 },
@@ -42726,6 +42859,101 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
         },
       },
     },
+    "/v1/health": {
+      "get": {
+        "operationId": "getVersionedHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "buildTimestamp": {
+                      "format": "date-time",
+                      "nullable": true,
+                      "type": "string",
+                    },
+                    "commit": {
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{7,64}$",
+                      "type": "string",
+                    },
+                    "database": {
+                      "enum": [
+                        "connected",
+                      ],
+                      "type": "string",
+                    },
+                    "status": {
+                      "enum": [
+                        "ok",
+                      ],
+                      "type": "string",
+                    },
+                    "timestamp": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "status",
+                    "database",
+                    "timestamp",
+                    "commit",
+                    "buildTimestamp",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Database-backed health check with immutable build identity",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+        "security": [],
+      },
+    },
     "/v1/improvement-candidates": {
       "get": {
         "parameters": [
@@ -50761,6 +50989,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                                 "governance_not_declared",
                                 "snapshot_not_found",
                                 "snapshot_integrity_failed",
+                                "snapshot_semantic_mismatch",
                               ],
                               "type": "string",
                             },
@@ -52244,6 +52473,266 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
               },
             },
             "description": "Backend-owned projection of exactly two governed Roadmap resources",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+        },
+      },
+    },
+    "/v1/selftest": {
+      "get": {
+        "operationId": "runSelfTest",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "commit": {
+                      "nullable": true,
+                      "pattern": "^[a-f0-9]{7,64}$",
+                      "type": "string",
+                    },
+                    "generatedAt": {
+                      "format": "date-time",
+                      "type": "string",
+                    },
+                    "results": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actual": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "description": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "expected": {
+                            "maxLength": 2000,
+                            "minLength": 1,
+                            "type": "string",
+                          },
+                          "id": {
+                            "maxLength": 120,
+                            "pattern": "^[a-z][a-z0-9]*(?:[._][a-z0-9]+)*$",
+                            "type": "string",
+                          },
+                          "route": {
+                            "maxLength": 1000,
+                            "type": "string",
+                          },
+                          "status": {
+                            "enum": [
+                              "PASS",
+                              "FAIL",
+                              "SKIPPED",
+                            ],
+                            "type": "string",
+                          },
+                          "width": {
+                            "exclusiveMinimum": true,
+                            "maximum": 10000,
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                        },
+                        "required": [
+                          "id",
+                          "width",
+                          "status",
+                          "description",
+                          "expected",
+                          "actual",
+                          "route",
+                        ],
+                        "type": "object",
+                      },
+                      "maxItems": 1000,
+                      "type": "array",
+                    },
+                    "schemaVersion": {
+                      "enum": [
+                        "paul-os.selftest/v1",
+                      ],
+                      "type": "string",
+                    },
+                    "summary": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "fail": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "pass": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                        "skipped": {
+                          "minimum": 0,
+                          "type": "integer",
+                        },
+                      },
+                      "required": [
+                        "pass",
+                        "fail",
+                        "skipped",
+                      ],
+                      "type": "object",
+                    },
+                    "widths": {
+                      "items": {
+                        "exclusiveMinimum": true,
+                        "maximum": 10000,
+                        "minimum": 0,
+                        "type": "integer",
+                      },
+                      "maxItems": 10,
+                      "minItems": 1,
+                      "type": "array",
+                    },
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "commit",
+                    "generatedAt",
+                    "widths",
+                    "summary",
+                    "results",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Read-only browser acceptance report from the deployed console",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "details": {
+                          "additionalProperties": true,
+                          "description": "Arbitrary JSON value.",
+                          "type": "object",
+                        },
+                        "message": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "requestId",
+                      ],
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              },
+            },
+            "description": "Typed API error",
           },
           "503": {
             "content": {

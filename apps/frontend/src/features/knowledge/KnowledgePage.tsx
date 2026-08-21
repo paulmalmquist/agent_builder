@@ -49,6 +49,10 @@ interface DefinitionRelationship {
   target: ResourceVersion;
 }
 
+type KnowledgeCount =
+  | { state: 'available'; value: number }
+  | { state: 'pending' | 'transfer' | 'unavailable' };
+
 function DefinitionEdge({ relationship }: { relationship: DefinitionRelationship }) {
   const { declaredBy, predicate, source, target } = relationship;
   return (
@@ -147,6 +151,12 @@ function displayKind(kind: ResourceVersion['kind']) {
   return kind.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
+function knowledgeCountLabel(count: KnowledgeCount): string {
+  if (count.state === 'available') return `${count.value} SHOWN`;
+  if (count.state === 'transfer') return 'TRANSFER';
+  return count.state === 'pending' ? '— · PENDING' : '— · UNAVAILABLE';
+}
+
 function resourcePinKey(value: Pick<ResourceVersion, 'familyId' | 'version'>): string {
   return `${value.familyId}@${value.version}`;
 }
@@ -213,6 +223,8 @@ export function KnowledgePage() {
       : null;
   const indexIsPartial =
     !resources.isError && resources.data !== undefined && resources.data.total > items.length;
+  const resourceIndexPending = !resources.isError && resources.data === undefined;
+  const observationIndexPending = !observations.isError && observations.data === undefined;
   const counts = useMemo(
     () =>
       Object.fromEntries(
@@ -220,16 +232,31 @@ export function KnowledgePage() {
           key,
           key === 'incidents'
             ? observations.isError
-              ? null
-              : (observations.data?.items.length ?? 0)
+              ? { state: 'unavailable' as const }
+              : observationIndexPending
+                ? { state: 'pending' as const }
+                : { state: 'available' as const, value: observations.data?.items.length ?? 0 }
             : definition.transferRequired
-              ? null
+              ? { state: 'transfer' as const }
               : resources.isError
-                ? null
-                : items.filter((resource) => definition.kinds.includes(resource.kind)).length,
+                ? { state: 'unavailable' as const }
+                : resourceIndexPending
+                  ? { state: 'pending' as const }
+                  : {
+                      state: 'available' as const,
+                      value: items.filter((resource) => definition.kinds.includes(resource.kind))
+                        .length,
+                    },
         ]),
-      ) as Record<KnowledgeType, number | null>,
-    [items, observations.data?.items.length, observations.isError, resources.isError],
+      ) as Record<KnowledgeType, KnowledgeCount>,
+    [
+      items,
+      observationIndexPending,
+      observations.data?.items.length,
+      observations.isError,
+      resourceIndexPending,
+      resources.isError,
+    ],
   );
 
   const relatedResources = useMemo<DefinitionRelationship[]>(() => {
@@ -351,6 +378,7 @@ export function KnowledgePage() {
       <section aria-label="Knowledge entity types" className="knowledge-type-grid">
         {typeEntries.map(([key, definition]) => (
           <button
+            aria-busy={counts[key].state === 'pending'}
             aria-pressed={selectedType === key}
             className="knowledge-type-card"
             key={key}
@@ -364,7 +392,7 @@ export function KnowledgePage() {
               <strong>{definition.label}</strong>
               <small>{definition.description}</small>
             </span>
-            <em>{counts[key] === null ? 'TRANSFER' : `${counts[key]} SHOWN`}</em>
+            <em>{knowledgeCountLabel(counts[key])}</em>
           </button>
         ))}
       </section>

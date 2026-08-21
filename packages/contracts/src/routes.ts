@@ -27,6 +27,8 @@ export const apiRoutes = {
 } as const;
 
 export const platformApiRoutes = {
+  health: '/v1/health',
+  selfTest: '/v1/selftest',
   attention: '/v1/attention',
   attentionItem: (itemId: string) => `/v1/attention-items/${encodeURIComponent(itemId)}`,
   resolveAttentionItem: (itemId: string) =>

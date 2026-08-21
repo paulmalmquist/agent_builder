@@ -14,6 +14,7 @@ import {
   evaluationResponseSchema,
   generationAcceptedSchema,
   generationJobSchema,
+  healthResponseSchema,
   interpretSpecResponseSchema,
   promotionResponseSchema,
   recoverAgentResponseSchema,
@@ -106,6 +107,7 @@ export type EvaluationResponse = ReturnType<typeof evaluationResponseSchema.pars
 export type PlatformResourceList = ReturnType<typeof resourceListResponseSchema.parse>;
 export type RoadmapProgramResponse = ReturnType<typeof roadmapProgramSchema.parse>;
 export type PlatformSession = ReturnType<typeof sessionResponseSchema.parse>;
+export type PlatformHealth = ReturnType<typeof healthResponseSchema.parse>;
 export type CatalogPublicationList = ReturnType<typeof catalogPublicationListResponseSchema.parse>;
 export type PlatformRunList = ReturnType<typeof executionRunListResponseSchema.parse>;
 export type AuthorityGrantList = ReturnType<typeof authorityGrantListResponseSchema.parse>;
@@ -696,6 +698,10 @@ export const builderApi = {
 };
 
 export const platformApi = {
+  getHealth() {
+    return request(platformApiRoutes.health, healthResponseSchema);
+  },
+
   getSession() {
     return request('/v1/session', sessionResponseSchema);
   },

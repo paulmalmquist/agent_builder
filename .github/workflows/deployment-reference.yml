@@ -96,8 +96,8 @@ jobs:
           wait: 120s
       - name: Build and load synthetic demo images
         run: |
-          docker build --tag paul-os/backend:kind --file apps/backend/Dockerfile .
-          docker build --tag paul-os/frontend:kind --file apps/frontend/Dockerfile .
+          docker build --build-arg REPOSITORY_SOURCE_COMMIT="${GITHUB_SHA}" --tag paul-os/backend:kind --file apps/backend/Dockerfile .
+          docker build --build-arg REPOSITORY_SOURCE_COMMIT="${GITHUB_SHA}" --tag paul-os/frontend:kind --file apps/frontend/Dockerfile .
           docker build --tag paul-os/worker:kind --file apps/worker/Dockerfile .
           kind load docker-image paul-os/backend:kind paul-os/frontend:kind paul-os/worker:kind --name paul-os-demo
       - name: Install fixture-only chart

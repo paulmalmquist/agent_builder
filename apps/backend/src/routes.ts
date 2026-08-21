@@ -40,6 +40,7 @@ import {
   similarityResponseSchema,
   readyResponseSchema,
   sessionResponseSchema,
+  selfTestReportSchema,
   sourceListResponseSchema,
   sourceRoleSchema,
   updateGuardrailsRequestSchema,
@@ -53,6 +54,7 @@ import type { ServiceBundle } from './services/types.js';
 import { registerPlatformRoutes } from './platform-routes.js';
 import { currentRequestPrincipal } from './request-context.js';
 import { requireMinimumRole, sessionForPrincipal } from './authorization.js';
+import { AppError } from './errors.js';
 
 const sourceQuerySchema = z.object({ role: sourceRoleSchema.optional() });
 let cachedOpenApiDocument: ReturnType<typeof createOpenApiDocument> | undefined;
@@ -108,18 +110,51 @@ export function registerRoutes(router: Router, services: ServiceBundle): void {
       });
     }),
   );
-  router.get(
-    '/health',
-    asyncRoute(async (_request, response) => {
-      send(response, 200, healthResponseSchema, await services.health.check());
-    }),
-  );
+  const healthHandler = asyncRoute(async (_request, response) => {
+    const health = await services.health.check();
+    send(response, 200, healthResponseSchema, {
+      ...health,
+      commit: health.commit ?? null,
+      buildTimestamp: health.buildTimestamp ?? null,
+    });
+  });
+  router.get('/health', healthHandler);
+  router.get('/v1/health', healthHandler);
   router.get('/openapi.json', (_request, response) => {
     response.status(200).json(openApiDocument());
   });
   router.get('/v1/session', (_request, response) => {
     send(response, 200, sessionResponseSchema, sessionForPrincipal(currentRequestPrincipal()));
   });
+  router.get(
+    '/v1/selftest',
+    requireMinimumRole('owner'),
+    asyncRoute(async (request, response) => {
+      if (services.selfTest === undefined) {
+        throw new AppError(
+          503,
+          'SELFTEST_UNAVAILABLE',
+          'The read-only self-test runner is not configured for this deployment.',
+        );
+      }
+      try {
+        send(
+          response,
+          200,
+          selfTestReportSchema,
+          await services.selfTest.run(request.get('authorization')),
+        );
+      } catch (error) {
+        const unavailable = new AppError(
+          503,
+          'SELFTEST_UNAVAILABLE',
+          'The read-only self-test runner could not complete.',
+        );
+        unavailable.cause = error;
+        throw unavailable;
+      }
+    }),
+  );
 
   if (services.platform !== undefined) registerPlatformRoutes(router, services.platform);
 

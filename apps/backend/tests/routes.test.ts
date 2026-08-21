@@ -23,6 +23,7 @@ import {
   retirementResponseSchema,
   shadowDeployResponseSchema,
   similarityResponseSchema,
+  selfTestReportSchema,
   sourceDescriptorSchema,
   type GuardrailsSection,
   type KnowledgeSection,
@@ -46,6 +47,26 @@ const jobId = '9ec5bb64-0014-4ed8-adf8-7988c7eca5f2';
 const runId = '98b08a8c-d58b-41ba-b92c-18af18f570b8';
 const caseId = '707020b1-955f-41c6-859d-b045cdaea54c';
 const now = '2026-07-31T04:00:00.000Z';
+const buildCommit = '0ae2bc333745ac739e21b8e8b7ae223671b5c53c';
+const buildTimestamp = '2026-08-21T14:30:00.000Z';
+const selfTestReport = selfTestReportSchema.parse({
+  schemaVersion: 'paul-os.selftest/v1',
+  commit: 'abcdef1',
+  generatedAt: now,
+  widths: [390],
+  summary: { pass: 1, fail: 0, skipped: 0 },
+  results: [
+    {
+      id: 'viewport.achieved',
+      width: 390,
+      status: 'PASS',
+      description: 'The exact iframe viewport was measured.',
+      expected: '390×844 CSS pixels',
+      actual: '390×844 CSS pixels',
+      route: '/selftest',
+    },
+  ],
+});
 
 const outcomes: OutcomesSection = {
   name: 'Supplier Build Impact',
@@ -462,8 +483,13 @@ function createFakeServices(): ServiceBundle {
           status: 'ok' as const,
           database: 'connected' as const,
           timestamp: now,
+          commit: buildCommit,
+          buildTimestamp,
         }),
       ),
+    },
+    selfTest: {
+      run: jest.fn(() => Promise.resolve(selfTestReport)),
     },
     dispatcher: {
       enqueue: jest.fn(),
@@ -517,12 +543,39 @@ describe('Agent Builder HTTP API', () => {
       status: 'ok',
       database: 'connected',
       timestamp: now,
+      commit: buildCommit,
+      buildTimestamp,
     });
+    await request(app).get('/v1/health').expect(200, {
+      status: 'ok',
+      database: 'connected',
+      timestamp: now,
+      commit: buildCommit,
+      buildTimestamp,
+    });
+    await request(app).get('/v1/selftest').expect(200, selfTestReport);
     const openapi = await request(app).get('/openapi.json').expect(200);
     expect(openapi.body.openapi).toBe('3.0.3');
     expect(openapi.body.paths['/agents']).toBeDefined();
+    expect(openapi.body.paths['/v1/health']).toBeDefined();
+    expect(openapi.body.paths['/v1/selftest']).toBeDefined();
     expect(openapi.body).toEqual(createOpenApiDocument());
     expect(openapi.body).toMatchSnapshot();
+  });
+
+  it('fails the machine self-test endpoint closed when its browser runner cannot complete', async () => {
+    const selfTest = services.selfTest;
+    if (selfTest === undefined) throw new Error('Self-test fixture is required.');
+    jest.spyOn(selfTest, 'run').mockRejectedValueOnce(new Error('Chromium unavailable'));
+
+    const response = await request(createApp(services, logger)).get('/v1/selftest').expect(503);
+    expect(response.body).toMatchObject({
+      error: {
+        code: 'SELFTEST_UNAVAILABLE',
+        message: 'The read-only self-test runner could not complete.',
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('Chromium unavailable');
   });
 
   it('serializes unexpected errors through the Pino err path and redacts response bodies', async () => {

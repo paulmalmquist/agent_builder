@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, useRef, type CSSProperties, type KeyboardEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { consoleCriticalCopy, type RoadmapFork } from '@agent-builder/contracts';
 import {
@@ -92,6 +92,7 @@ const costFormatter = new Intl.NumberFormat('en-US', {
 const integerFormatter = new Intl.NumberFormat('en-US');
 
 type DisplayedMetricSource = HomeMetricSource | 'pending';
+type HomePlanView = 'timeline' | 'list';
 
 const sourceLabels: Record<DisplayedMetricSource, string> = {
   live: 'LIVE',
@@ -114,6 +115,16 @@ const roadmapStatusLabels: Record<RoadmapFork['status'], string> = {
   at_risk: 'AT RISK',
   unavailable: 'UNAVAILABLE',
 };
+
+function isHomePlanView(value: string | null): value is HomePlanView {
+  return value === 'timeline' || value === 'list';
+}
+
+function verticalMetricIdFromRollup(metric: HomeMetric): string | null {
+  const ownerGroupId = metric.inspection.ownerGroupId;
+  if (ownerGroupId === null || metric.id !== `coverage:${ownerGroupId}`) return null;
+  return `vertical-coverage:${ownerGroupId}`;
+}
 
 function SourceBadge({ source }: { source: DisplayedMetricSource }) {
   return (
@@ -139,13 +150,27 @@ function SourcePending({ children }: { children: string }) {
   );
 }
 
-function MetricCard({ metric }: { metric: HomeMetric }) {
+function MetricCard({
+  metric,
+  selected,
+  onSelect,
+}: {
+  metric: HomeMetric;
+  selected: boolean;
+  onSelect: (metric: HomeMetric) => void;
+}) {
   const displayedSource: DisplayedMetricSource =
     metric.state === 'pending'
       ? 'pending'
       : metric.state === 'unavailable'
         ? 'unavailable'
         : metric.source;
+
+  function selectFromKeyboard(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    onSelect(metric);
+  }
 
   return (
     <article
@@ -172,9 +197,112 @@ function MetricCard({ metric }: { metric: HomeMetric }) {
       )}
       <footer>
         <p>{metric.detail}</p>
-        {metric.statusLabel ? <span>{metric.statusLabel}</span> : null}
+        <div className="today-metric-footer-meta">
+          {metric.statusLabel ? (
+            <span className="today-metric-status">{metric.statusLabel}</span>
+          ) : null}
+          <span aria-hidden="true" className="today-metric-inspect-label">
+            {selected ? 'DETAIL OPEN' : 'INSPECT'} →
+          </span>
+        </div>
       </footer>
+      <button
+        aria-controls="today-metric-detail"
+        aria-expanded={selected}
+        aria-label={`Inspect ${metric.label}: ${metric.value}, ${sourceLabels[displayedSource]}`}
+        aria-pressed={selected}
+        className="today-metric-select"
+        onClick={() => onSelect(metric)}
+        onKeyDown={selectFromKeyboard}
+        type="button"
+      />
     </article>
+  );
+}
+
+function MetricDetailPanel({
+  metric,
+  program,
+  onClose,
+}: {
+  metric: HomeMetric;
+  program: HomeProgramModel;
+  onClose: () => void;
+}) {
+  const ownerGroupId = metric.inspection.ownerGroupId;
+  const displayedSource: DisplayedMetricSource =
+    metric.state === 'pending'
+      ? 'pending'
+      : metric.state === 'unavailable'
+        ? 'unavailable'
+        : metric.source;
+  const relatedWorkstreams = ownerGroupId
+    ? program.workstreams.filter((item) => item.ownerGroupId === ownerGroupId)
+    : [];
+  const relatedActions = ownerGroupId
+    ? program.actions.filter((item) => item.groupIds.includes(ownerGroupId))
+    : [];
+  const availableActionCount = relatedActions.filter((item) => item.available).length;
+  const unavailableActionCount = relatedActions.length - availableActionCount;
+
+  return (
+    <section
+      aria-labelledby="today-metric-detail-title"
+      className="today-metric-detail"
+      data-source={displayedSource}
+      id="today-metric-detail"
+    >
+      <header>
+        <div>
+          <span>SELECTED METRIC · READ-ONLY TRACE</span>
+          <h3 id="today-metric-detail-title">{metric.label}</h3>
+          <p>
+            {metric.value} · {sourceLabels[displayedSource]}
+            {metric.statusLabel ? ` · ${metric.statusLabel}` : ''}
+          </p>
+        </div>
+        <button aria-label={`Close ${metric.label} detail`} onClick={onClose} type="button">
+          CLOSE ×
+        </button>
+      </header>
+      <div className="today-metric-detail-grid">
+        <section aria-labelledby="today-metric-driver-title">
+          <span>01 · WHAT DRIVES IT</span>
+          <h4 id="today-metric-driver-title">Declared inputs</h4>
+          <p>{metric.inspection.driver}</p>
+          {ownerGroupId ? (
+            <small>
+              {relatedWorkstreams.length} declared{' '}
+              {relatedWorkstreams.length === 1 ? 'workstream' : 'workstreams'} contribute program
+              context for {verticalLabel(ownerGroupId)}.
+            </small>
+          ) : (
+            <small>This global reading is not allocated to a program vertical.</small>
+          )}
+        </section>
+        <section aria-labelledby="today-metric-objective-title">
+          <span>02 · OBJECTIVE BINDING</span>
+          <h4 id="today-metric-objective-title">Not declared</h4>
+          <p>
+            No governed Objective resource or target is bound to this metric. Paul OS shows the
+            current reading without inferring OKR progress.
+          </p>
+          <small>OBJECTIVE MANIFEST · NOT DECLARED IN THE CURRENT MODEL</small>
+        </section>
+        <section aria-labelledby="today-metric-action-title">
+          <span>03 · WHAT TO INSPECT NEXT</span>
+          <h4 id="today-metric-action-title">Exact governed context</h4>
+          <p>
+            {ownerGroupId
+              ? `${availableActionCount} available and ${unavailableActionCount} unavailable Home-eligible ${relatedActions.length === 1 ? 'action is' : 'actions are'} declared for this vertical.`
+              : 'No vertical action is inferred from this global reading.'}
+          </p>
+          <Link to={metric.inspection.destinationHref}>
+            {metric.inspection.destinationLabel.toUpperCase()} →
+          </Link>
+        </section>
+      </div>
+    </section>
   );
 }
 
@@ -190,7 +318,7 @@ function RoadmapForkStrip({ roadmaps }: { roadmaps: ReturnType<typeof useRoadmap
     >
       <header>
         <div>
-          <span>STATE NOW · GOVERNED ROADMAP</span>
+          <span>PROGRAM-WIDE STATE · NOT VERTICAL-SCOPED</span>
           <strong id="today-roadmap-forks-title">Roadmap forks</strong>
         </div>
         <Link to="/roadmaps">COMPARE BOTH →</Link>
@@ -495,6 +623,76 @@ function Gantt({
   );
 }
 
+function WorkstreamList({
+  workstreams,
+  selectedVertical,
+}: {
+  workstreams: readonly HomeWorkstream[];
+  selectedVertical: HomeVerticalId;
+}) {
+  if (workstreams.length === 0) {
+    return (
+      <p className="today-empty">
+        No declared workstreams match {verticalLabel(selectedVertical)}.
+      </p>
+    );
+  }
+
+  return (
+    <ol
+      aria-label={`${verticalLabel(selectedVertical)} manufacturing workstreams as a dated list`}
+      className="today-workstream-list"
+      data-testid="home-workstream-list"
+    >
+      {workstreams.map((workstream) => {
+        const stateLabel = workstream.state
+          ? workstreamStateLabels[workstream.state]
+          : 'SOURCE UNAVAILABLE';
+        const destinationLabel =
+          workstream.affectedPartIds.length > 1 ? 'RELATED AIM PART' : 'AIM PART';
+        const content = (
+          <>
+            <span>
+              {workstream.ownerGroupLabel} · {workstream.source.toUpperCase()}
+            </span>
+            <strong>{workstream.label}</strong>
+            <p>
+              {formatPlanDate(workstream.startAt)} – {formatPlanDate(workstream.endAt)} ·{' '}
+              {stateLabel}
+            </p>
+            <small>
+              {workstream.available
+                ? `OPEN ${destinationLabel} →`
+                : workstream.sourceDetail.toUpperCase()}
+            </small>
+          </>
+        );
+        return (
+          <li data-state={workstream.state ?? 'unavailable'} key={workstream.id}>
+            {workstream.available && workstream.state ? (
+              <Link
+                aria-label={`Open ${workstream.label}, ${workstream.ownerGroupLabel}, ${formatPlanDate(workstream.startAt)} through ${formatPlanDate(workstream.endAt)}, ${stateLabel}, ${workstream.source} plan.`}
+                data-testid={`home-workstream-${workstream.id}`}
+                to={workstreamHref(workstream)}
+              >
+                {content}
+              </Link>
+            ) : (
+              <div
+                aria-label={`${workstream.label} source unavailable. ${workstream.sourceDetail}`}
+                data-testid={`home-workstream-${workstream.id}`}
+                role="status"
+              >
+                {content}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function createDigestMetrics(attention: ReturnType<typeof useAttention>): readonly HomeMetric[] {
   const state = attention.isError ? 'unavailable' : attention.data ? 'neutral' : 'pending';
   const stateLabel = attention.isError ? 'UNAVAILABLE' : attention.data ? undefined : 'READING';
@@ -514,6 +712,15 @@ function createDigestMetrics(attention: ReturnType<typeof useAttention>): readon
       state,
       ...(stateLabel ? { statusLabel: stateLabel } : {}),
       scopeLabel: 'ALL VERTICALS',
+      inspection: {
+        driver:
+          runCount === undefined
+            ? 'The current briefing ledger window is not available, so no run count is inferred.'
+            : `${integerFormatter.format(runCount)} governed runs are recorded in the current briefing ledger window. The reading changes only when that ledger records another run.`,
+        destinationLabel: 'Inspect governed runs',
+        destinationHref: '/operate',
+        ownerGroupId: null,
+      },
     },
     {
       id: 'digest-cost',
@@ -527,15 +734,101 @@ function createDigestMetrics(attention: ReturnType<typeof useAttention>): readon
       state,
       ...(stateLabel ? { statusLabel: stateLabel } : {}),
       scopeLabel: 'ALL VERTICALS',
+      inspection: {
+        driver:
+          totalCostUsd === undefined
+            ? 'The current briefing ledger window is not available, so no recorded cost is inferred.'
+            : `${costFormatter.format(totalCostUsd)} is recorded by governed runs in the current briefing ledger window. Unrecorded or external spend does not contribute.`,
+        destinationLabel: 'Inspect run cost records',
+        destinationHref: '/operate',
+        ownerGroupId: null,
+      },
     },
   ];
+}
+
+function buildScheduledMoves(
+  schedules: ReturnType<typeof useAutomationSchedules>['data'],
+  now: Date,
+): NextMove[] {
+  const moves: NextMove[] = [];
+  const seenScheduleIds = new Set<string>();
+  for (const schedule of [...(schedules?.items ?? [])]
+    .filter((item) => item.state === 'active')
+    .sort((left, right) => Date.parse(left.nextRunAt) - Date.parse(right.nextRunAt))) {
+    if (seenScheduleIds.has(schedule.id)) continue;
+    seenScheduleIds.add(schedule.id);
+    const timing = scheduleTiming(schedule.nextRunAt, now, schedule.timezone);
+    if (!timing) continue;
+    const subject = schedule.entrySubject;
+    moves.push({
+      id: `global:schedule:${schedule.id}`,
+      label: subject ? `${subject.name} is scheduled today` : 'Automation subject unavailable',
+      reason: subject
+        ? `${subject.kind.replaceAll('_', ' ')} version ${subject.version} is scheduled for ${timing.timeLabel}.`
+        : `The exact schedule subject is unavailable. Its next run is recorded for ${timing.timeLabel}.`,
+      eligibility: 'SCHEDULE DUE TODAY',
+      source: 'live',
+      global: true,
+      to: '/operate#operate-schedules',
+      destinationLabel: 'OPEN SCHEDULES',
+      dueAt: schedule.nextRunAt,
+      dueLabel: timing.dueLabel,
+    });
+  }
+  return moves;
+}
+
+function ScheduleTodayStatus({
+  scheduledMoves,
+  coverageIncomplete,
+  pausedScheduleCount,
+  pausedCoverageIncomplete,
+}: {
+  scheduledMoves: readonly NextMove[];
+  coverageIncomplete: boolean;
+  pausedScheduleCount: number;
+  pausedCoverageIncomplete: boolean;
+}) {
+  const pausedCopy =
+    pausedScheduleCount === 0
+      ? pausedCoverageIncomplete
+        ? ' Additional paused schedules may remain in Operate.'
+        : ''
+      : ` ${pausedCoverageIncomplete ? 'At least ' : ''}${pausedScheduleCount} returned paused ${pausedScheduleCount === 1 ? 'schedule remains' : 'schedules remain'} in Operate.`;
+  if (scheduledMoves.length === 0) {
+    return (
+      <p className="today-schedule-status" data-state={coverageIncomplete ? 'incomplete' : 'quiet'}>
+        <strong>
+          {coverageIncomplete
+            ? 'No returned automation is scheduled today.'
+            : 'No active automation is scheduled today.'}
+        </strong>{' '}
+        {coverageIncomplete
+          ? 'The returned schedule set is bounded, so absence cannot be confirmed.'
+          : 'The complete active-schedule count contains no work due today.'}
+        {pausedCopy}
+      </p>
+    );
+  }
+
+  return (
+    <p className="today-schedule-status" data-state="scheduled">
+      <strong>
+        {coverageIncomplete ? 'At least ' : ''}
+        {scheduledMoves.length} scheduled{' '}
+        {scheduledMoves.length === 1 ? 'automation is' : 'automations are'} due today.
+      </strong>{' '}
+      Each matching schedule is counted once in the eligible work below.
+      {pausedCopy}
+    </p>
+  );
 }
 
 function buildGlobalMoves(
   grants: ReturnType<typeof useAuthorityGrants>['data'],
   plugins: ReturnType<typeof usePlugins>['data'],
   runs: ReturnType<typeof useExecutionRuns>['data'],
-  schedules: ReturnType<typeof useAutomationSchedules>['data'],
   coverage: GlobalCoverage,
   now: Date,
 ): NextMove[] {
@@ -618,34 +911,16 @@ function buildGlobalMoves(
       dueLabel: null,
     });
   }
-  for (const schedule of [...(schedules?.items ?? [])]
-    .filter((item) => item.state === 'active')
-    .sort((left, right) => Date.parse(left.nextRunAt) - Date.parse(right.nextRunAt))) {
-    const timing = scheduleTiming(schedule.nextRunAt, now, schedule.timezone);
-    if (!timing) continue;
-    const subject = schedule.entrySubject;
-    moves.push({
-      id: `global:schedule:${schedule.id}`,
-      label: subject ? `${subject.name} is scheduled today` : 'Automation subject unavailable',
-      reason: subject
-        ? `${subject.kind.replaceAll('_', ' ')} version ${subject.version} is scheduled for ${timing.timeLabel}.`
-        : `The exact schedule subject is unavailable. Its next run is recorded for ${timing.timeLabel}.`,
-      eligibility: 'SCHEDULE DUE TODAY',
-      source: 'live',
-      global: true,
-      to: '/operate#operate-schedules',
-      destinationLabel: 'OPEN SCHEDULES',
-      dueAt: schedule.nextRunAt,
-      dueLabel: timing.dueLabel,
-    });
-  }
   return moves;
 }
 
 export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const verticalButtonRefs = useRef<Partial<Record<HomeVerticalId, HTMLButtonElement | null>>>({});
   const rawVertical = searchParams.get('vertical');
   const selectedVertical: HomeVerticalId = isHomeVerticalId(rawVertical) ? rawVertical : 'all';
+  const rawPlanView = searchParams.get('plan');
+  const planView: HomePlanView = isHomePlanView(rawPlanView) ? rawPlanView : 'timeline';
   const attention = useAttention();
   const runs = useExecutionRuns();
   const grants = useAuthorityGrants({ limit: 100 });
@@ -669,6 +944,12 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
   const returnedActiveScheduleCount = (scheduleData?.items ?? []).filter(
     ({ state }) => state === 'active',
   ).length;
+  const returnedPausedScheduleCount = (scheduleData?.items ?? []).filter(
+    ({ state }) => state === 'paused',
+  ).length;
+  const pausedScheduleCoverageIncomplete =
+    scheduleData !== undefined &&
+    scheduleData.total - scheduleData.activeTotal > returnedPausedScheduleCount;
   const globalCoverage: GlobalCoverage = {
     authorityIncomplete:
       grantData !== undefined && grantData.activeTotal > returnedActiveGrantCount,
@@ -693,6 +974,7 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
     selectedVertical === 'all'
       ? [...programMetrics, ...createDigestMetrics(attention)]
       : programMetrics;
+  const selectedMetric = metrics.find(({ id }) => id === searchParams.get('metric'));
   const workstreams = program.ok ? workstreamsForVertical(program.model, selectedVertical) : [];
   const selectedProgramActions = program.ok
     ? programActionsForVertical(program.model, selectedVertical)
@@ -721,15 +1003,9 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
       dueAt: action.dueAt,
       dueLabel: null,
     }));
-  const globalMoves = buildGlobalMoves(
-    grantData,
-    pluginData,
-    runData,
-    scheduleData,
-    globalCoverage,
-    now,
-  );
-  const eligibleMoves = [...globalMoves, ...programMoves];
+  const globalMoves = buildGlobalMoves(grantData, pluginData, runData, globalCoverage, now);
+  const scheduledMoves = buildScheduledMoves(scheduleData, now);
+  const eligibleMoves = [...globalMoves, ...scheduledMoves, ...programMoves];
   const visibleMoves = eligibleMoves.slice(0, 5);
   const reviewItems = [...(attentionData?.decide ?? []), ...(attentionData?.degraded ?? [])].slice(
     0,
@@ -757,6 +1033,33 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
   function selectVertical(verticalId: HomeVerticalId) {
     const next = new URLSearchParams(searchParams);
     next.set('vertical', verticalId);
+    next.delete('metric');
+    setSearchParams(next);
+  }
+
+  function selectMetric(metric: HomeMetric) {
+    const next = new URLSearchParams(searchParams);
+    const verticalMetricId = selectedVertical === 'all' ? verticalMetricIdFromRollup(metric) : null;
+    const ownerGroupId = metric.inspection.ownerGroupId;
+    if (verticalMetricId !== null && ownerGroupId !== null) {
+      verticalButtonRefs.current[ownerGroupId]?.focus();
+      next.set('vertical', ownerGroupId);
+      next.set('metric', verticalMetricId);
+    } else if (selectedMetric?.id === metric.id) {
+      next.delete('metric');
+    } else {
+      next.set('metric', metric.id);
+    }
+    setSearchParams(next);
+  }
+
+  function selectPlanView(nextView: HomePlanView) {
+    const next = new URLSearchParams(searchParams);
+    if (nextView === 'timeline') {
+      next.delete('plan');
+    } else {
+      next.set('plan', nextView);
+    }
     setSearchParams(next);
   }
 
@@ -780,6 +1083,9 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
                 aria-pressed={selectedVertical === vertical.id}
                 data-testid={`home-vertical-${vertical.id}`}
                 onClick={() => selectVertical(vertical.id)}
+                ref={(element) => {
+                  verticalButtonRefs.current[vertical.id] = element;
+                }}
                 type="button"
               >
                 {vertical.label}
@@ -812,9 +1118,21 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
         <RoadmapForkStrip roadmaps={roadmaps} />
         <div aria-label={`${selectedLabel} health metrics`} className="today-metric-grid">
           {metrics.map((metric) => (
-            <MetricCard key={metric.id} metric={metric} />
+            <MetricCard
+              key={metric.id}
+              metric={metric}
+              onSelect={selectMetric}
+              selected={selectedMetric?.id === metric.id}
+            />
           ))}
         </div>
+        {program.ok && selectedMetric ? (
+          <MetricDetailPanel
+            metric={selectedMetric}
+            onClose={() => selectMetric(selectedMetric)}
+            program={program.model}
+          />
+        ) : null}
       </section>
 
       <section
@@ -830,10 +1148,29 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
           trailing={planLabel}
         />
         <div className="today-plan-tools">
-          {featureFlags.visualSurfacesEnabled ? (
-            <Link to="/history">SIX MONTHS AS TERRAIN ↗</Link>
-          ) : null}
-          <Link to="/roadmaps">COMPARE ROADMAP FORKS ↗</Link>
+          <div aria-label="Manufacturing plan view" className="today-plan-view" role="group">
+            <span>VIEW</span>
+            <button
+              aria-pressed={planView === 'timeline'}
+              onClick={() => selectPlanView('timeline')}
+              type="button"
+            >
+              TIMELINE
+            </button>
+            <button
+              aria-pressed={planView === 'list'}
+              onClick={() => selectPlanView('list')}
+              type="button"
+            >
+              DATED LIST
+            </button>
+          </div>
+          <div className="today-plan-links">
+            {featureFlags.visualSurfacesEnabled ? (
+              <Link to="/history">SIX MONTHS AS TERRAIN ↗</Link>
+            ) : null}
+            <Link to="/roadmaps">COMPARE ROADMAP FORKS ↗</Link>
+          </div>
         </div>
         {program.ok ? (
           <>
@@ -842,12 +1179,16 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
                 {`${unavailableWorkstreamCount} visible ${unavailableWorkstreamCount === 1 ? 'workstream has' : 'workstreams have'} an unavailable plan source.`}
               </SourceUnavailable>
             ) : null}
-            <Gantt
-              now={now}
-              program={program.model}
-              selectedVertical={selectedVertical}
-              workstreams={workstreams}
-            />
+            {planView === 'timeline' ? (
+              <Gantt
+                now={now}
+                program={program.model}
+                selectedVertical={selectedVertical}
+                workstreams={workstreams}
+              />
+            ) : (
+              <WorkstreamList selectedVertical={selectedVertical} workstreams={workstreams} />
+            )}
           </>
         ) : (
           <SourceUnavailable>{program.message}</SourceUnavailable>
@@ -908,6 +1249,14 @@ export function HomePage({ now = new Date(), manifestText }: HomePageProps) {
             ) : null}
             {schedules.isError ? (
               <SourceUnavailable>Schedule status unavailable.</SourceUnavailable>
+            ) : null}
+            {!schedules.isPending && !schedules.isError ? (
+              <ScheduleTodayStatus
+                coverageIncomplete={globalCoverage.schedulesIncomplete}
+                pausedCoverageIncomplete={pausedScheduleCoverageIncomplete}
+                pausedScheduleCount={returnedPausedScheduleCount}
+                scheduledMoves={scheduledMoves}
+              />
             ) : null}
             {globalCoverage.schedulesIncomplete ? (
               <SourceUnavailable>

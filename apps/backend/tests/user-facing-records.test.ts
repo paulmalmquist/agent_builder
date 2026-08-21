@@ -10,6 +10,7 @@ import {
   userFacingAgentFamilyWhere,
   userFacingResourceVersionWhere,
 } from '../src/services/user-facing-records.js';
+import { isQuarantinedLegacyFixture } from '@agent-builder/contracts';
 
 describe('user-facing record quarantine', () => {
   it('excludes explicit fixture provenance from the legacy agent catalog query', async () => {
@@ -83,7 +84,7 @@ describe('user-facing record quarantine', () => {
     );
   });
 
-  it('uses explicit provenance identities and reserved actor prefixes without name heuristics', () => {
+  it('uses explicit provenance identities and bounded legacy fixture fingerprints', () => {
     expect(isQuarantinedTestIdentity('plugin-worker-test')).toBe(true);
     expect(isQuarantinedTestIdentity('plugin-store-integration')).toBe(true);
     expect(isQuarantinedTestIdentity('human:reuse-41414141-4141-4141-8141-414141414141')).toBe(
@@ -92,6 +93,21 @@ describe('user-facing record quarantine', () => {
     expect(isQuarantinedTestIdentity('human:plugin-service-audit')).toBe(true);
     expect(isQuarantinedTestIdentity('human:quality-engineer')).toBe(false);
     expect(isQuarantinedTestIdentity('Test Readiness Agent')).toBe(false);
+    expect(
+      isQuarantinedLegacyFixture({
+        name: 'Integration Queued Resume Probe',
+        owner: 'Supply Chain Agent Owner',
+        purpose:
+          'Produces an evidence-backed supplier risk briefing for production planners and escalation owners.',
+      }),
+    ).toBe(true);
+    expect(
+      isQuarantinedLegacyFixture({
+        name: 'Integration Queued Resume Probe',
+        owner: 'Real Integration Team',
+        purpose: 'Review real integration readiness.',
+      }),
+    ).toBe(false);
     expect(
       isQuarantinedTestProvenance({
         createdBy: 'system:background',

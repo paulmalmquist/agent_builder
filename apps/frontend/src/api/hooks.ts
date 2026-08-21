@@ -75,6 +75,7 @@ export const queryKeys = {
   pluginUsedBy: (installationId: string | null) => ['plugin-used-by', installationId] as const,
   builderChoices: (intakeId: string | null) => ['builder-referred-choices', intakeId] as const,
   session: ['session'] as const,
+  health: ['health'] as const,
   catalogPublications: ['catalog-publications'] as const,
 };
 
@@ -176,6 +177,14 @@ export function useSession() {
   return useQuery({
     queryKey: queryKeys.session,
     queryFn: () => platformApi.getSession(),
+  });
+}
+
+export function useHealth() {
+  return useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => platformApi.getHealth(),
+    retry: false,
   });
 }
 

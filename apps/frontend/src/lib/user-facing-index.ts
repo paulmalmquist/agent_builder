@@ -1,4 +1,5 @@
 import {
+  isQuarantinedLegacyFixture,
   isQuarantinedTestIdentity,
   isQuarantinedTestProvenance,
   type ResourceVersion,
@@ -47,7 +48,7 @@ export function isQuarantinedResource(resource: ResourceVersion): boolean {
 export function isQuarantinedLegacyAgent(agent: AgentSearchItem): boolean {
   // Legacy search does not expose createdBy. The server filters it; this exact owner check is a
   // defense for stale/cached payloads without guessing from an agent's display name.
-  return isQuarantinedTestIdentity(agent.owner);
+  return isQuarantinedTestIdentity(agent.owner) || isQuarantinedLegacyFixture(agent);
 }
 
 export function distinctResourceVersions(resources: readonly ResourceVersion[]): ResourceVersion[] {

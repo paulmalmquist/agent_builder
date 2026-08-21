@@ -187,6 +187,8 @@ describeDatabase('real PostgreSQL and generator CLI flow', () => {
     execution: { concurrency: 2, leaseMs: 60_000, dispatchMode: 'in_process' },
     repositorySourceCommit: 'a'.repeat(40),
     repositorySourceVerified: true,
+    buildIdentity: { commit: 'a'.repeat(40), buildTimestamp: '2026-08-21T00:00:00.000Z' },
+    selfTest: { frontendUrl: 'http://127.0.0.1:5173/selftest', timeoutMs: 240_000 },
     bigQuery: {
       enabled: false,
       projectId: null,

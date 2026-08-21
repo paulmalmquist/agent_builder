@@ -1012,6 +1012,15 @@ function requireSpec() {
 }
 
 export const handlers = [
+  http.get('http://localhost/v1/health', () =>
+    HttpResponse.json({
+      status: 'ok',
+      database: 'connected',
+      timestamp: now,
+      commit: '0ae2bc333745ac739e21b8e8b7ae223671b5c53c',
+      buildTimestamp: '2026-08-21T14:30:00.000Z',
+    }),
+  ),
   http.get('http://localhost/v1/attention', () => {
     const decide = platformRunState === 'awaiting_approval' ? [attentionItem()] : [];
     return HttpResponse.json({

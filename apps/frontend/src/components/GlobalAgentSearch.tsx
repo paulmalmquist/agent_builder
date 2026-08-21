@@ -59,6 +59,11 @@ function displayKind(kind: ResourceVersion['kind']) {
   return kind.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
+function resourceSubtitle(resource: ResourceVersion) {
+  const kind = resource.kind === 'Agent' ? 'Agent definition' : displayKind(resource.kind);
+  return `${kind} V${resource.version} · ${resource.owner}`;
+}
+
 function resourceRoute(resource: ResourceVersion) {
   if (resource.kind === 'Agent') {
     return `/catalog?${new URLSearchParams({ resource: resource.id }).toString()}`;
@@ -284,7 +289,7 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                       >
                         <span>
                           <strong>{highlightedText(resource.name, debouncedQuery)}</strong>
-                          <small>
+                          <small title={resourceSubtitle(resource)}>
                             Agent definition V{resource.version} · {resource.owner}
                           </small>
                         </span>
@@ -316,7 +321,9 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                         >
                           <span>
                             <strong>{highlightedText(agent.name, debouncedQuery)}</strong>
-                            <small>{highlightedText(agent.department, debouncedQuery)}</small>
+                            <small title={agent.department}>
+                              {highlightedText(agent.department, debouncedQuery)}
+                            </small>
                           </span>
                           <span className={`status-chip ${agent.status}`}>
                             legacy {agent.status}
@@ -347,7 +354,7 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                         >
                           <span>
                             <strong>{highlightedText(resource.name, debouncedQuery)}</strong>
-                            <small>
+                            <small title={resourceSubtitle(resource)}>
                               {displayKind(resource.kind)} V{resource.version} · {resource.owner}
                             </small>
                           </span>

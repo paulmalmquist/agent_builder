@@ -227,6 +227,33 @@ describe('global entity search', () => {
     expect(screen.getByLabelText('Current route')).toHaveTextContent('/roadmaps?fork=fork_primary');
   });
 
+  it('keeps a long result subtitle intact while the visual treatment wraps it', async () => {
+    const owner = 'Operations Analytics Coordination Directorate';
+    installRoadmapSearchResult({
+      ...roadmapResource,
+      owner,
+      definition: {
+        ...roadmapResource.definition,
+        metadata: { ...roadmapResource.definition.metadata, owner },
+      },
+    });
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole('button', { name: 'Search governed entities' }));
+    await user.type(screen.getByRole('combobox'), 'roadmap');
+    const result = await screen.findByRole('option', { name: /Roadmap fork 01/i });
+    const subtitle = result.querySelector('small');
+
+    expect(subtitle).toHaveTextContent(
+      'Roadmap V1.0.0 · Operations Analytics Coordination Directorate',
+    );
+    expect(subtitle).toHaveAttribute(
+      'title',
+      'Roadmap V1.0.0 · Operations Analytics Coordination Directorate',
+    );
+  });
+
   it('opens a typed Roadmap fork with the active keyboard selection', async () => {
     installRoadmapSearchResult();
     const user = userEvent.setup();
@@ -461,6 +488,19 @@ describe('global entity search', () => {
               matchedCapabilities: ['test readiness'],
               gaps: [],
             },
+            {
+              ...catalogAgent,
+              id: '35353535-3535-4535-8535-353535353535',
+              familyId: '36363636-3636-4636-8636-363636363636',
+              name: 'Integration Queued Resume Probe',
+              owner: 'Supply Chain Agent Owner',
+              purpose:
+                'Produces an evidence-backed supplier risk briefing for production planners and escalation owners.',
+              score: 87,
+              reuseRecommended: true,
+              matchedCapabilities: [],
+              gaps: [],
+            },
           ],
         });
       }),
@@ -489,6 +529,7 @@ describe('global entity search', () => {
       await screen.findByRole('option', { name: /Test Readiness Agent/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText('Compatibility test agent')).not.toBeInTheDocument();
+    expect(screen.queryByText('Integration Queued Resume Probe')).not.toBeInTheDocument();
     expect(screen.getByText(/LEGACY AGENTS NOT YET IMPORTED · 1/i)).toBeInTheDocument();
   });
 

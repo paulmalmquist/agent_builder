@@ -37,3 +37,13 @@
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
+
+.global-search-results .global-search-option small {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: normal;
+  text-overflow: clip;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

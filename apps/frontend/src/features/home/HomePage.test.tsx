@@ -411,6 +411,217 @@ describe('HomePage', () => {
       '/roadmaps',
     );
     expect(document.querySelector('.today-home svg')).not.toBeInTheDocument();
+    expect(screen.getByText(/No active automation is scheduled today/i)).toBeVisible();
+  });
+
+  it('gives every rollup metric an inspector and keeps global metrics in All', async () => {
+    const user = userEvent.setup();
+    useHomeResponses({
+      attention: {
+        ...emptyAttention,
+        digest: { ...emptyAttention.digest, runCount: 7, totalCostUsd: 12.34 },
+      },
+    });
+    renderHome();
+
+    const metrics = screen.getByLabelText('All health metrics');
+    const inspectors = await within(metrics).findAllByRole('button', { name: /^Inspect /i });
+    expect(inspectors).toHaveLength(8);
+    for (const inspector of inspectors) {
+      expect(inspector).toHaveAttribute('aria-pressed', 'false');
+    }
+
+    const runsInspector = await within(metrics).findByRole('button', {
+      name: /Inspect Runs since briefing: 7, LIVE/i,
+    });
+    runsInspector.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/?metric=digest-runs');
+    expect(screen.getByTestId('home-vertical-all')).toHaveAttribute('aria-pressed', 'true');
+    expect(runsInspector).toHaveAttribute('aria-expanded', 'true');
+    expect(runsInspector).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      inspectors.filter((inspector) => inspector.getAttribute('aria-pressed') === 'true'),
+    ).toHaveLength(1);
+    const detail = screen.getByRole('region', { name: 'Runs since briefing' });
+    expect(detail).toHaveTextContent(/WHAT DRIVES IT.*7 governed runs/i);
+    expect(detail).toHaveTextContent(/OBJECTIVE BINDING.*Not declared/i);
+    expect(detail).toHaveTextContent(/without inferring OKR progress/i);
+    expect(within(detail).getByRole('link', { name: /Inspect governed runs/i })).toHaveAttribute(
+      'href',
+      '/operate',
+    );
+
+    await user.click(
+      within(detail).getByRole('button', { name: /Close Runs since briefing detail/i }),
+    );
+    expect(screen.queryByRole('region', { name: 'Runs since briefing' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/');
+    for (const inspector of inspectors) {
+      expect(inspector).toHaveAttribute('aria-pressed', 'false');
+    }
+  });
+
+  it('scopes all three bands and opens the canonical vertical trace in one pointer gesture', async () => {
+    const user = userEvent.setup();
+    useHomeResponses();
+    renderHome('/?plan=list');
+
+    await user.click(
+      within(screen.getByLabelText('All health metrics')).getByRole('button', {
+        name: /Inspect Factory operations: 100%, SYNTHETIC/i,
+      }),
+    );
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      '/?plan=list&vertical=group_factory&metric=vertical-coverage%3Agroup_factory',
+    );
+    const factoryFilter = screen.getByTestId('home-vertical-group_factory');
+    expect(factoryFilter).toHaveFocus();
+    expect(factoryFilter).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('home-scope-summary')).toHaveTextContent(
+      'Factory operations · 4 metrics · 2 workstreams · 1 next move',
+    );
+    const scopedMetrics = screen.getByLabelText('Factory operations health metrics');
+    expect(within(scopedMetrics).getAllByRole('article')).toHaveLength(4);
+    expect(
+      within(scopedMetrics).getByRole('button', {
+        name: /Inspect Agent coverage: 100%, SYNTHETIC/i,
+      }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      within(scopedMetrics).getByRole('button', {
+        name: /Inspect Agent coverage: 100%, SYNTHETIC/i,
+      }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      within(scopedMetrics)
+        .getAllByRole('button')
+        .filter((button) => button.getAttribute('aria-pressed') === 'true'),
+    ).toHaveLength(1);
+    expect(screen.getByTestId('home-roadmap-strip')).toHaveTextContent(
+      'PROGRAM-WIDE STATE · NOT VERTICAL-SCOPED',
+    );
+    expect(screen.getByRole('region', { name: 'Agent coverage' })).toHaveTextContent(
+      /OBJECTIVE BINDING.*Not declared/i,
+    );
+    expect(
+      within(screen.getByTestId('home-workstream-list')).getAllByRole('listitem'),
+    ).toHaveLength(2);
+    expect(within(screen.getByTestId('home-task-list')).getAllByRole('listitem')).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Test browser back' }));
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/?plan=list');
+    expect(screen.getByTestId('home-vertical-all')).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      within(screen.getByLabelText('All health metrics')).getAllByRole('article'),
+    ).toHaveLength(8);
+    expect(
+      within(screen.getByTestId('home-workstream-list')).getAllByRole('listitem'),
+    ).toHaveLength(10);
+    expect(screen.queryByRole('region', { name: 'Agent coverage' })).not.toBeInTheDocument();
+  });
+
+  it('applies the same one-gesture scope transition to an unavailable rollup by keyboard', async () => {
+    const user = userEvent.setup();
+    const manifest = mutableManifest();
+    const coverageEvidence = manifest.evidence.find(({ id }) => id === 'ev_seed_contract');
+    expect(coverageEvidence).toBeDefined();
+    if (!coverageEvidence) return;
+    coverageEvidence.freshnessSlaHours = 1;
+    useHomeResponses();
+    renderHome('/', JSON.stringify(manifest));
+
+    const unavailableFactory = within(screen.getByLabelText('All health metrics')).getByRole(
+      'button',
+      { name: /Inspect Factory operations: —, UNAVAILABLE/i },
+    );
+    unavailableFactory.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      '/?vertical=group_factory&metric=vertical-coverage%3Agroup_factory',
+    );
+    const factoryFilter = screen.getByTestId('home-vertical-group_factory');
+    expect(factoryFilter).toHaveFocus();
+    expect(factoryFilter).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('home-scope-summary')).toHaveTextContent(
+      /Factory operations · 4 metrics · 2 workstreams/i,
+    );
+    const detail = screen.getByRole('region', { name: 'Agent coverage' });
+    expect(detail).toHaveTextContent(/— · UNAVAILABLE/i);
+    expect(detail).toHaveTextContent(/OBJECTIVE BINDING.*Not declared/i);
+  });
+
+  it('restores a shared metric inspection from the URL and toggles it without changing vertical', async () => {
+    const user = userEvent.setup();
+    useHomeResponses();
+    renderHome('/?vertical=group_factory&metric=outcome%3Agroup_factory');
+
+    const detail = screen.getByRole('region', { name: 'Print first-pass yield' });
+    expect(detail).toHaveTextContent(/— · AWAITING TRANSFER · NOT MEASURED/i);
+    expect(detail).toHaveTextContent(/no current samples/i);
+    expect(detail).toHaveTextContent(/No governed Objective resource or target is bound/i);
+    expect(
+      within(detail).getByRole('link', { name: /Inspect connection boundaries/i }),
+    ).toHaveAttribute('href', '/connections');
+
+    await user.click(screen.getByRole('button', { name: /Inspect Print first-pass yield: —/i }));
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/?vertical=group_factory');
+    expect(screen.getByTestId('home-vertical-group_factory')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(
+      screen.queryByRole('region', { name: 'Print first-pass yield' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('clears an incompatible metric when a different vertical chip is selected', async () => {
+    const user = userEvent.setup();
+    useHomeResponses();
+    renderHome('/?plan=list&vertical=group_factory&metric=outcome%3Agroup_factory');
+
+    expect(screen.getByRole('region', { name: 'Print first-pass yield' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Structures' }));
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      '/?plan=list&vertical=group_structures',
+    );
+    expect(screen.getByTestId('home-vertical-group_structures')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(
+      screen.queryByRole('region', { name: 'Print first-pass yield' }),
+    ).not.toBeInTheDocument();
+    for (const inspector of within(screen.getByLabelText('Structures health metrics')).getAllByRole(
+      'button',
+    )) {
+      expect(inspector).toHaveAttribute('aria-pressed', 'false');
+    }
+  });
+
+  it('offers a URL-backed dated-list view over the same filtered workstreams', async () => {
+    const user = userEvent.setup();
+    useHomeResponses();
+    renderHome('/?vertical=group_factory');
+
+    await user.click(screen.getByRole('button', { name: 'DATED LIST' }));
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      '/?vertical=group_factory&plan=list',
+    );
+    expect(screen.queryByTestId('home-gantt-viewport')).not.toBeInTheDocument();
+    const list = screen.getByTestId('home-workstream-list');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(
+      within(list).getByTestId('home-workstream-workstream_print_cell_qualification'),
+    ).toHaveAttribute('href', '/aim?group=group_factory&part=stargate');
+
+    await user.click(screen.getByRole('button', { name: 'TIMELINE' }));
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/?vertical=group_factory');
+    expect(screen.getByTestId('home-gantt-viewport')).toBeVisible();
   });
 
   it('shows both governed roadmap forks with exact status, source, and deep links', async () => {
@@ -428,6 +639,7 @@ describe('HomePage', () => {
     expect(alternate).toHaveAttribute('href', '/roadmaps?fork=fork_alternate');
     expect(primary).toHaveTextContent(/Primary flight path.*WATCH.*SYNTHETIC/);
     expect(alternate).toHaveTextContent(/Alternate flight path.*AT RISK.*SYNTHETIC/);
+    expect(strip).toHaveTextContent('PROGRAM-WIDE STATE · NOT VERTICAL-SCOPED');
     expect(within(strip).getByRole('link', { name: 'COMPARE BOTH →' })).toHaveAttribute(
       'href',
       '/roadmaps',
@@ -850,6 +1062,35 @@ describe('HomePage', () => {
       'href',
       '/operate#operate-schedules',
     );
+    expect(screen.getByText(/1 scheduled automation is due today/i)).toBeVisible();
+  });
+
+  it('counts a returned schedule identity once in Today eligible work', async () => {
+    const schedule = automationSchedule('2026-08-18T17:00:00.000Z');
+    useHomeResponses({
+      schedules: { items: [schedule, { ...schedule }], total: 1, activeTotal: 1 },
+    });
+    renderHome('/?vertical=group_factory');
+
+    expect(await screen.findAllByText('Daily Brief is scheduled today')).toHaveLength(1);
+    expect(screen.getByText(/1 scheduled automation is due today/i)).toBeVisible();
+    expect(screen.getByText(/counted once in the eligible work/i)).toBeVisible();
+  });
+
+  it('reconciles an empty active day with paused schedules in Operate', async () => {
+    const pausedSchedules = Array.from({ length: 3 }, (_, index) => ({
+      ...automationSchedule('2026-08-18T17:00:00.000Z'),
+      id: `19191919-1919-4191-8191-${String(index + 1).padStart(12, '0')}`,
+      state: 'paused',
+    }));
+    useHomeResponses({
+      schedules: { items: pausedSchedules, total: 3, activeTotal: 0 },
+    });
+    renderHome('/?vertical=group_factory');
+
+    expect(await screen.findByText(/No active automation is scheduled today/i)).toBeVisible();
+    expect(screen.getByText(/3 returned paused schedules remain in Operate/i)).toBeVisible();
+    expect(screen.queryByText('Daily Brief is scheduled today')).not.toBeInTheDocument();
   });
 
   it('uses the schedule timezone for eligibility, clock time, and due date near midnight', async () => {

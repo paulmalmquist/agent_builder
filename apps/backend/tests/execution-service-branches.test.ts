@@ -274,6 +274,7 @@ function database() {
     findUnique: grantFind,
     findFirst: grantFind,
     findMany: asyncMock([] as DatabaseAuthorityGrant[]),
+    count: asyncMock(0),
     groupBy: asyncMock([] as Array<{ state: AuthorityGrantState; _count: { _all: number } }>),
     create: asyncMock(grantRecord()),
     update: asyncMock(grantRecord()),
@@ -722,11 +723,14 @@ describe('ExecutionService idempotency and run admission', () => {
 });
 
 describe('ExecutionService authority and read operations', () => {
-  it('lists grants with and without a state filter and expires stale active grants first', async () => {
+  it('projects stale active grants as expired without writing during a list read', async () => {
     const db = database();
     db.authorityGrant.findMany.mockResolvedValue([
       {
-        ...grantRecord({ state: AuthorityGrantState.REVOKED, revokedAt: NOW }),
+        ...grantRecord({
+          state: AuthorityGrantState.ACTIVE,
+          validUntil: new Date('2026-08-15T12:00:00.000Z'),
+        }),
         entryResourceVersion: {
           version: '1.0.0',
           family: {
@@ -737,34 +741,63 @@ describe('ExecutionService authority and read operations', () => {
         },
       },
     ]);
+    db.authorityGrant.count.mockResolvedValue(2);
     db.authorityGrant.groupBy.mockResolvedValue([
       { state: AuthorityGrantState.ACTIVE, _count: { _all: 7 } },
       { state: AuthorityGrantState.REVOKED, _count: { _all: 3 } },
     ]);
     const service = new ExecutionService(db.prisma, config(), modelProvider());
     const unfiltered = await service.listGrants({ limit: 10 });
-    expect(unfiltered.items[0]?.revokedAt).toBe(NOW.toISOString());
+    expect(unfiltered.items[0]?.state).toBe('expired');
     expect(unfiltered.items[0]?.entrySubject).toEqual({
       name: 'Daily Brief',
       kind: 'skill',
       version: '1.0.0',
     });
-    expect(unfiltered).toMatchObject({ total: 10, activeTotal: 7 });
+    expect(unfiltered).toMatchObject({ total: 10, activeTotal: 5 });
     await service.listGrants({ state: 'revoked', limit: 2 });
+    await service.listGrants({ state: 'active', limit: 2 });
+    await service.listGrants({ state: 'expired', limit: 2 });
     expect(callArgument(db.authorityGrant.findMany)['where']).toEqual(USER_FACING_GRANT_INDEX);
     expect(callArgument(db.authorityGrant.findMany, 1)['where']).toEqual({
       ...USER_FACING_GRANT_INDEX,
       state: AuthorityGrantState.REVOKED,
+    });
+    expect(callArgument(db.authorityGrant.findMany, 2)['where']).toMatchObject({
+      ...USER_FACING_GRANT_INDEX,
+      state: AuthorityGrantState.ACTIVE,
+      validUntil: { gt: expect.any(Date) },
+    });
+    expect(callArgument(db.authorityGrant.findMany, 3)['where']).toMatchObject({
+      ...USER_FACING_GRANT_INDEX,
+      AND: [
+        {
+          OR: [
+            { state: AuthorityGrantState.EXPIRED },
+            {
+              state: AuthorityGrantState.ACTIVE,
+              validUntil: { lte: expect.any(Date) },
+            },
+          ],
+        },
+      ],
     });
     expect(callArgument(db.authorityGrant.groupBy)).toEqual({
       by: ['state'],
       where: USER_FACING_GRANT_INDEX,
       _count: { _all: true },
     });
+    expect(callArgument(db.authorityGrant.count)).toMatchObject({
+      where: {
+        ...USER_FACING_GRANT_INDEX,
+        state: AuthorityGrantState.ACTIVE,
+        validUntil: { lte: expect.any(Date) },
+      },
+    });
     expect(callArgument(db.authorityGrant.findMany)['include']).toEqual({
       entryResourceVersion: { include: { family: true } },
     });
-    expect(db.authorityGrant.updateMany).toHaveBeenCalledTimes(2);
+    expect(db.authorityGrant.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a grant for the wrong project and an already-expired grant', async () => {

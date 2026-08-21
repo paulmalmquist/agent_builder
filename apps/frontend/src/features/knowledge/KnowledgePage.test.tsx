@@ -88,6 +88,48 @@ function useResourceResponses(items: ResourceVersion[]) {
 }
 
 describe('KnowledgePage', () => {
+  it('keeps unresolved indexes pending instead of briefly reporting zero', async () => {
+    let releaseResources: () => void = () => undefined;
+    let releaseObservations: () => void = () => undefined;
+    const resourcesReady = new Promise<void>((resolve) => {
+      releaseResources = resolve;
+    });
+    const observationsReady = new Promise<void>((resolve) => {
+      releaseObservations = resolve;
+    });
+    server.use(
+      http.get('http://localhost/v1/resources', async () => {
+        await resourcesReady;
+        return HttpResponse.json(resourceResponse([]));
+      }),
+      http.get('http://localhost/v1/observations', async () => {
+        await observationsReady;
+        return HttpResponse.json({ items: [] });
+      }),
+    );
+
+    renderWithClient(<KnowledgePage />, ['/knowledge']);
+
+    const entityTypes = screen.getByRole('region', { name: 'Knowledge entity types' });
+    expect(within(entityTypes).getByRole('button', { name: /Systems.*PENDING/i })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    expect(
+      within(entityTypes).getByRole('button', { name: /Incidents.*PENDING/i }),
+    ).toHaveAttribute('aria-busy', 'true');
+    expect(within(entityTypes).queryByText(/0 SHOWN/i)).not.toBeInTheDocument();
+
+    releaseResources();
+    releaseObservations();
+    expect(
+      await within(entityTypes).findByRole('button', { name: /Systems.*0 SHOWN/i }),
+    ).toHaveAttribute('aria-busy', 'false');
+    expect(
+      await within(entityTypes).findByRole('button', { name: /Incidents.*0 SHOWN/i }),
+    ).toHaveAttribute('aria-busy', 'false');
+  });
+
   it('exposes the definition-graph boundary without inventing semantic knowledge', async () => {
     const user = userEvent.setup();
     renderWithClient(<KnowledgePage />, ['/knowledge']);
@@ -407,6 +449,18 @@ describe('KnowledgePage', () => {
           { status: 503 },
         ),
       ),
+      http.get('http://localhost/v1/observations', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'DEPENDENCY_UNAVAILABLE',
+              message: 'The observation index is unavailable.',
+              requestId: 'knowledge-test',
+            },
+          },
+          { status: 503 },
+        ),
+      ),
     );
     const user = userEvent.setup();
     renderWithClient(<KnowledgePage />, ['/knowledge']);
@@ -414,6 +468,14 @@ describe('KnowledgePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Knowledge definitions unavailable. The definition index is unavailable.',
     );
+    const entityTypes = screen.getByRole('region', { name: 'Knowledge entity types' });
+    expect(
+      within(entityTypes).getByRole('button', { name: /Agents & Skills.*UNAVAILABLE/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(entityTypes).getByRole('button', { name: /Incidents.*UNAVAILABLE/i }),
+    ).toBeInTheDocument();
+    expect(within(entityTypes).queryByText(/0 SHOWN/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Agents & Skills/i }));
     expect(screen.queryByText(/No agents & skills are imported/i)).not.toBeInTheDocument();
   });

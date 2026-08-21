@@ -73,6 +73,8 @@ const liveConfig = {
   execution: { concurrency: 2, leaseMs: 60_000, dispatchMode: 'in_process' },
   repositorySourceCommit: 'connector-test',
   repositorySourceVerified: false,
+  buildIdentity: { commit: null, buildTimestamp: null },
+  selfTest: { frontendUrl: 'http://127.0.0.1:5173/selftest', timeoutMs: 240_000 },
   bigQuery: {
     enabled: true,
     projectId: 'project',

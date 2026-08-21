@@ -54,6 +54,10 @@ function subjectDescriptor(subject: ExecutionRun['entrySubject']) {
     : `${subject.name} · ${subject.kind.replaceAll('_', ' ')} · version ${subject.version}`;
 }
 
+function siblingTitle(base: string, index: number, total: number): string {
+  return total > 1 ? `${base} · ${index + 1} of ${total}` : base;
+}
+
 function ExactReleaseBinding({
   authoredName = null,
   entryResourceVersionId,
@@ -473,12 +477,18 @@ export function RunsPage() {
                 <span>The first production-shaped run must receive a human decision.</span>
               </div>
             ) : null}
-            {grantItems.map((grant) => (
+            {grantItems.map((grant, index) => (
               <article className="approval-card" key={grant.id}>
                 <header>
                   <div>
                     <h2 className="record-heading">
-                      <span>{subjectName(grant.entrySubject)} authority</span>
+                      <span>
+                        {siblingTitle(
+                          `${subjectName(grant.entrySubject)} authority`,
+                          index,
+                          grantItems.length,
+                        )}
+                      </span>
                       <small>
                         GRANT · {grant.state.replaceAll('_', ' ')} · CREATED {time(grant.createdAt)}
                       </small>
@@ -559,11 +569,22 @@ export function RunsPage() {
               <span>Published automation definitions can create bounded recurring execution.</span>
             </div>
           ) : null}
-          {scheduleItems.map((schedule) => (
+          {scheduleItems.map((schedule, index) => (
             <article className="resource-card" key={schedule.id}>
               <header>
                 <div>
-                  <h2>{schedule.entrySubject?.name ?? 'Automation'} schedule</h2>
+                  <h2 className="record-heading">
+                    <span>
+                      {siblingTitle(
+                        `${schedule.entrySubject?.name ?? 'Automation'} schedule`,
+                        index,
+                        scheduleItems.length,
+                      )}
+                    </span>
+                    <small>
+                      SCHEDULE · {schedule.state} · NEXT {time(schedule.nextRunAt)}
+                    </small>
+                  </h2>
                   <p>Channel · {schedule.channelKey}</p>
                 </div>
                 <span className="os-status-chip" data-state={schedule.state}>

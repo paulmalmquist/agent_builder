@@ -17,6 +17,7 @@ export * from './release-governance-schemas.js';
 export * from './roadmap-schemas.js';
 export * from './routes.js';
 export * from './schemas.js';
+export * from './selftest-schemas.js';
 export * from './state-machines.js';
 export * from './workstation-broker-schemas.js';
 export * from './user-facing-provenance.js';

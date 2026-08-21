@@ -17,6 +17,7 @@ import { DeploymentService } from './deployment-service.js';
 import { GateConfigService } from './gate-config-service.js';
 import { GenerationService } from './generation-service.js';
 import { HealthService } from './health-service.js';
+import { BrowserSelfTestService } from './selftest-service.js';
 import { SourceService } from './source-service.js';
 import { SpecService } from './spec-service.js';
 import { InterpretationService } from './interpretation-service.js';
@@ -172,7 +173,8 @@ export function createServices(
     promotion: new PromotionService(prisma),
     corpus: new CorpusService(prisma),
     gateConfigs: new GateConfigService(prisma),
-    health: new HealthService(prisma),
+    health: new HealthService(prisma, config.buildIdentity),
+    selfTest: new BrowserSelfTestService(config.selfTest),
     dispatcher,
     certificationDispatcher,
     maintenance,

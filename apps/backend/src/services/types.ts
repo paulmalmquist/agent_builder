@@ -59,6 +59,7 @@ import type { PluginHealthSchedulerApi } from '../plugins/health-scheduler.js';
 import type { CatalogIndexSchedulerApi } from '../catalog/index-scheduler.js';
 import type { ReuseService } from './reuse-service.js';
 import type { IdentityDirectory } from '../identity-auth.js';
+import type { SelfTestApi } from './selftest-service.js';
 
 export interface CatalogApi {
   list(query: AgentCatalogQuery): Promise<AgentCatalogResponse>;
@@ -147,7 +148,13 @@ export interface GateConfigApi {
 }
 
 export interface HealthApi {
-  check(): Promise<{ status: 'ok'; database: 'connected'; timestamp: string }>;
+  check(): Promise<{
+    status: 'ok';
+    database: 'connected';
+    timestamp: string;
+    commit?: string | null;
+    buildTimestamp?: string | null;
+  }>;
 }
 
 export interface DispatcherApi {
@@ -167,6 +174,7 @@ export interface ServiceBundle {
   corpus: CorpusApi;
   gateConfigs: GateConfigApi;
   health: HealthApi;
+  selfTest?: SelfTestApi;
   dispatcher: DispatcherApi;
   certificationDispatcher: CertificationDispatcherApi;
   maintenance: MaintenanceSchedulerApi;
@@ -191,5 +199,6 @@ export interface PlatformServices {
 }
 
 export interface CompleteServiceBundle extends ServiceBundle {
+  selfTest: SelfTestApi;
   platform: PlatformServices;
 }

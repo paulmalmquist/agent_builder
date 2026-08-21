@@ -7,6 +7,7 @@ import {
   type PlatformRoleValue,
   type ProductionOidcConfig,
 } from '@agent-builder/contracts';
+import { resolveBuildIdentity, type BuildIdentity } from './build-identity.js';
 
 const booleanEnvironmentValue = z.preprocess((value) => {
   if (typeof value !== 'string') return value;
@@ -102,6 +103,15 @@ const environmentSchema = z
     GOOGLE_CLOUD_PROJECT: optionalEnvironmentString(),
     BIGQUERY_MAXIMUM_BYTES_BILLED: z.coerce.number().int().positive().default(100_000_000),
     BIGQUERY_PREVIEW_ROW_LIMIT: z.coerce.number().int().min(1).max(1000).default(25),
+    SELFTEST_FRONTEND_URL: z
+      .string()
+      .url()
+      .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol), {
+        message: 'SELFTEST_FRONTEND_URL must use HTTP or HTTPS',
+      })
+      .default('http://127.0.0.1:5173/selftest?machine=1'),
+    SELFTEST_BROWSER_EXECUTABLE: optionalEnvironmentString(),
+    SELFTEST_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(600_000).default(240_000),
   })
   .superRefine((environment, context) => {
     const authMode =
@@ -292,6 +302,12 @@ export type AppConfig = {
   repositoryRoot: string;
   repositorySourceCommit: string;
   repositorySourceVerified: boolean;
+  buildIdentity: BuildIdentity;
+  selfTest: {
+    frontendUrl: string;
+    timeoutMs: number;
+    executablePath?: string;
+  };
   bigQuery: {
     enabled: boolean;
     projectId: string | null;
@@ -302,6 +318,7 @@ export type AppConfig = {
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = environmentSchema.parse(environment);
+  const buildIdentity = resolveBuildIdentity(environment);
   const authMode =
     parsed.AUTH_MODE ?? (parsed.AUTH_BEARER_TOKEN === undefined ? 'local' : 'static_bearer');
   const runningFromBackendWorkspace = process.cwd().endsWith(path.join('apps', 'backend'));
@@ -398,6 +415,14 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       ? 'local-unverified'
       : (parsed.REPOSITORY_SOURCE_COMMIT as string),
     repositorySourceVerified: !parsed.ALLOW_UNVERIFIED_REPOSITORY_IMPORTS,
+    buildIdentity,
+    selfTest: {
+      frontendUrl: parsed.SELFTEST_FRONTEND_URL,
+      timeoutMs: parsed.SELFTEST_TIMEOUT_MS,
+      ...(parsed.SELFTEST_BROWSER_EXECUTABLE === undefined
+        ? {}
+        : { executablePath: parsed.SELFTEST_BROWSER_EXECUTABLE }),
+    },
     bigQuery: {
       enabled: parsed.BIGQUERY_ENABLED,
       projectId: parsed.GOOGLE_CLOUD_PROJECT ?? null,

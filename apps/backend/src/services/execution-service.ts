@@ -224,6 +224,7 @@ function toGrant(
   record: DatabaseAuthorityGrant & {
     entryResourceVersion?: SubjectBearingAuthorityGrant['entryResourceVersion'];
   },
+  effectiveState: AuthorityGrantState = record.state,
 ): AuthorityGrant {
   return authorityGrantSchema.parse({
     id: record.id,
@@ -252,7 +253,7 @@ function toGrant(
     totalCostBudgetUsd: Number(record.totalCostBudgetUsd),
     spentCostUsd: Number(record.spentCostUsd),
     reservedCostUsd: Number(record.reservedCostUsd),
-    state: grantStateWire[record.state],
+    state: grantStateWire[effectiveState],
     actorId: record.actorId,
     rationale: record.rationale,
     revokedAt: record.revokedAt?.toISOString() ?? null,
@@ -1104,14 +1105,9 @@ export class ExecutionService implements ExecutionWorkerApi {
     state?: 'active' | 'revoked' | 'exhausted' | 'expired' | undefined;
     limit: number;
   }): Promise<z.infer<typeof authorityGrantListResponseSchema>> {
-    await this.prisma.authorityGrant.updateMany({
-      where: {
-        state: AuthorityGrantState.ACTIVE,
-        validUntil: { lte: new Date() },
-        ...aggregateScopeWhere(),
-      },
-      data: { state: AuthorityGrantState.EXPIRED },
-    });
+    // Today and the in-app self-test consume this read path. Keep it side-effect-free while
+    // projecting elapsed ACTIVE records exactly as the persisted EXPIRED state would appear.
+    const now = new Date();
     const state =
       query.state === undefined
         ? undefined
@@ -1123,9 +1119,31 @@ export class ExecutionService implements ExecutionWorkerApi {
       ...scopeWhere,
       entryResourceVersion: userFacingResourceVersionWhere,
     } satisfies Prisma.AuthorityGrantWhereInput;
-    const [records, stateTotals] = await Promise.all([
+    const effectiveStateWhere =
+      state === AuthorityGrantState.ACTIVE
+        ? { state, validUntil: { gt: now } }
+        : state === AuthorityGrantState.EXPIRED
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { state: AuthorityGrantState.EXPIRED },
+                    { state: AuthorityGrantState.ACTIVE, validUntil: { lte: now } },
+                  ],
+                },
+              ],
+            }
+          : state === undefined
+            ? {}
+            : { state };
+    const staleActiveWhere = {
+      ...indexWhere,
+      state: AuthorityGrantState.ACTIVE,
+      validUntil: { lte: now },
+    } satisfies Prisma.AuthorityGrantWhereInput;
+    const [records, stateTotals, staleActiveTotal] = await Promise.all([
       this.prisma.authorityGrant.findMany({
-        where: { ...indexWhere, ...(state === undefined ? {} : { state }) },
+        where: { ...indexWhere, ...effectiveStateWhere },
         include: authorityGrantSubjectInclude,
         orderBy: { createdAt: 'desc' },
         take: query.limit,
@@ -1135,12 +1153,21 @@ export class ExecutionService implements ExecutionWorkerApi {
         where: indexWhere,
         _count: { _all: true },
       }),
+      this.prisma.authorityGrant.count({ where: staleActiveWhere }),
     ]);
     const total = stateTotals.reduce((sum, group) => sum + group._count._all, 0);
-    const activeTotal =
+    const persistedActiveTotal =
       stateTotals.find((group) => group.state === AuthorityGrantState.ACTIVE)?._count._all ?? 0;
+    const activeTotal = Math.max(0, persistedActiveTotal - staleActiveTotal);
     return authorityGrantListResponseSchema.parse({
-      items: records.map(toGrant),
+      items: records.map((record) =>
+        toGrant(
+          record,
+          record.state === AuthorityGrantState.ACTIVE && record.validUntil <= now
+            ? AuthorityGrantState.EXPIRED
+            : record.state,
+        ),
+      ),
       total,
       activeTotal,
     });

@@ -41,6 +41,8 @@ const governanceUnavailableCopy: Record<
     'The safeguards snapshot linked to this exact Agent version is unavailable. Prohibitions, approvals, stop conditions, and response requirements remain unknown.',
   snapshot_integrity_failed:
     'The linked safeguards snapshot did not match the digest and revision pinned by this exact Agent version. Every detailed safeguard remains unavailable.',
+  snapshot_semantic_mismatch:
+    'The digest-matched safeguards snapshot conflicts with this exact Agent version’s declared purpose. The frozen record remains available for audit, but its detailed safeguards are quarantined; use a corrected forward version.',
 };
 
 const unavailableGovernanceFields = [

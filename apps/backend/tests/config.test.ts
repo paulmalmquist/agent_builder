@@ -57,6 +57,31 @@ describe('backend configuration safety', () => {
     expect(config.profilePath).toMatch(/[\\/]private[\\/]profile\.yaml$/);
   });
 
+  it('bounds the same-origin browser self-test runner configuration', () => {
+    const defaults = loadTestConfig({ NODE_ENV: 'test' });
+    expect(defaults.selfTest).toEqual({
+      frontendUrl: 'http://127.0.0.1:5173/selftest?machine=1',
+      timeoutMs: 240_000,
+    });
+    expect(() =>
+      loadTestConfig({ NODE_ENV: 'test', SELFTEST_FRONTEND_URL: 'file:///private/path' }),
+    ).toThrow();
+    expect(() => loadTestConfig({ NODE_ENV: 'test', SELFTEST_TIMEOUT_MS: '9999' })).toThrow();
+
+    expect(
+      loadTestConfig({
+        NODE_ENV: 'test',
+        SELFTEST_FRONTEND_URL: 'http://frontend:8080/selftest?machine=1',
+        SELFTEST_BROWSER_EXECUTABLE: '/usr/bin/chromium',
+        SELFTEST_TIMEOUT_MS: '300000',
+      }).selfTest,
+    ).toEqual({
+      frontendUrl: 'http://frontend:8080/selftest?machine=1',
+      executablePath: '/usr/bin/chromium',
+      timeoutMs: 300_000,
+    });
+  });
+
   it('requires both an explicit project and bearer token before BigQuery can be enabled', () => {
     expect(() => loadTestConfig({ NODE_ENV: 'test', BIGQUERY_ENABLED: 'true' })).toThrow(
       /GOOGLE_CLOUD_PROJECT is required/,

@@ -54,6 +54,42 @@ describeDatabase('legacy registry compatibility synchronization', () => {
       },
     });
     expect(JSON.stringify(result.items[0])).not.toMatch(/supplier|supply chain/iu);
+    await expect(
+      new RegistryService(prisma, 'a'.repeat(40)).getResource(inventoryAgentId),
+    ).resolves.toMatchObject({
+      id: inventoryAgentId,
+      agentGovernance: { state: 'unavailable', reason: 'snapshot_semantic_mismatch' },
+    });
+  });
+
+  it('projects the corrected inventory workflow as a forward version', async () => {
+    const result = await new RegistryService(prisma, 'a'.repeat(40)).listResources({
+      kind: 'Agent',
+      query: 'inventory-risk-analyst-v2',
+      limit: 100,
+    });
+
+    expect(result.items).toHaveLength(1);
+    const corrected = result.items[0];
+    expect(corrected).toMatchObject({
+      familyId: inventoryAgentId,
+      name: 'Inventory Risk Analyst',
+      version: '2.0.0',
+      lifecycle: 'experimental',
+    });
+    expect(JSON.stringify(corrected)).toMatch(/inventory|material shortage/iu);
+    expect(JSON.stringify(corrected)).not.toMatch(/supplier delay|contact suppliers/iu);
+    await expect(
+      new RegistryService(prisma, 'a'.repeat(40)).getResource(corrected!.id),
+    ).resolves.toMatchObject({
+      agentGovernance: {
+        state: 'available',
+        source: 'legacy_spec_snapshot',
+        guardrails: {
+          prohibitedActions: expect.arrayContaining(['Modify inventory allocations']),
+        },
+      },
+    });
   });
 
   it('mirrors new legacy agents/spec edits and links them with unverified provenance', async () => {

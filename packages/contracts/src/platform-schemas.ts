@@ -423,6 +423,7 @@ export const agentGovernanceDetailSchema = z.discriminatedUnion('state', [
         'governance_not_declared',
         'snapshot_not_found',
         'snapshot_integrity_failed',
+        'snapshot_semantic_mismatch',
       ]),
     })
     .strict(),

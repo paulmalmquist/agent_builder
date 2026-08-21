@@ -2,7 +2,7 @@ import type { ResourceVersion } from '@agent-builder/contracts';
 import { http, HttpResponse } from 'msw';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { SettingsPage } from './SettingsPage';
+import { SettingsBuildIdentity, SettingsPage } from './SettingsPage';
 import { renderWithClient } from '../../test/render';
 import { server } from '../../test/server';
 
@@ -81,6 +81,61 @@ function installRuleHandler() {
 }
 
 describe('Settings', () => {
+  it('renders the exact declared commit without shortening it', () => {
+    const expectedCommit = '0ae2bc333745ac739e21b8e8b7ae223671b5c53c';
+    const expectedTimestamp = '2026-08-21T14:30:00.000Z';
+
+    renderWithClient(
+      <SettingsBuildIdentity
+        build={{ commit: expectedCommit, buildTimestamp: expectedTimestamp }}
+        frontendCommit={expectedCommit}
+      />,
+      ['/settings'],
+    );
+
+    expect(screen.getByText('RUNNING BUILD · DECLARED')).toBeInTheDocument();
+    expect(screen.getAllByText(expectedCommit)).toHaveLength(3);
+    expect(screen.getByText(expectedTimestamp)).toBeVisible();
+    expect(screen.getByText('/v1/health')).toBeInTheDocument();
+  });
+
+  it('states that build identity is unavailable instead of inferring a revision', () => {
+    renderWithClient(
+      <SettingsBuildIdentity
+        build={{ commit: null, buildTimestamp: null }}
+        frontendCommit={null}
+      />,
+      ['/settings'],
+    );
+
+    expect(screen.getByText('BUILD IDENTITY UNAVAILABLE')).toBeInTheDocument();
+    expect(screen.getByText('VERIFIED RUNNING COMMIT').parentElement).toHaveTextContent(
+      'UNAVAILABLE',
+    );
+    expect(screen.getByText('API BUILD TIMESTAMP').parentElement).toHaveTextContent('UNAVAILABLE');
+    expect(screen.getByText(/does not infer them/i)).toBeInTheDocument();
+  });
+
+  it('does not present a single running commit when the frontend and API builds differ', () => {
+    renderWithClient(
+      <SettingsBuildIdentity
+        build={{
+          commit: '1111111111111111111111111111111111111111',
+          buildTimestamp: '2026-08-21T14:30:00.000Z',
+        }}
+        frontendCommit="2222222222222222222222222222222222222222"
+      />,
+      ['/settings'],
+    );
+
+    expect(screen.getByText('BUILD IDENTITY MISMATCH')).toBeInTheDocument();
+    expect(screen.getByText('VERIFIED RUNNING COMMIT').parentElement).toHaveTextContent(
+      'UNAVAILABLE',
+    );
+    expect(screen.getByText('FRONTEND ASSET COMMIT').parentElement).toHaveTextContent('22222222');
+    expect(screen.getByText('API BUILD COMMIT').parentElement).toHaveTextContent('11111111');
+  });
+
   it('shows server-resolved scope and honest control-plane boundaries', async () => {
     const user = userEvent.setup();
     installRuleHandler();
@@ -111,6 +166,11 @@ describe('Settings', () => {
     expect(screen.getByText('test-operator')).toBeVisible();
     expect(screen.getByText('42424242-4242-4242-8242-424242424242')).toBeVisible();
     expect(screen.getByText('43434343-4343-4343-8343-434343434343')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Running build identity' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open self-verification/i })).toHaveAttribute(
+      'href',
+      '/selftest',
+    );
   });
 
   it('fails closed when the current session cannot be resolved', async () => {

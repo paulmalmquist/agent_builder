@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import {
+  QUARANTINED_LEGACY_FIXTURE_FINGERPRINTS,
   QUARANTINED_TEST_ACTOR_PREFIXES,
   QUARANTINED_TEST_IDENTITIES,
   isQuarantinedTestIdentity,
@@ -38,6 +39,7 @@ export const userFacingResourceVersionWhere = {
 
 export const userFacingAgentWhere = {
   NOT: [
+    ...QUARANTINED_LEGACY_FIXTURE_FINGERPRINTS.map((fingerprint) => ({ ...fingerprint })),
     ...quarantinedActorPredicates('createdBy'),
     ...quarantinedActorPredicates('updatedBy'),
     ...quarantinedActorPredicates('createdBy').map((predicate) => ({ family: predicate })),
@@ -46,7 +48,11 @@ export const userFacingAgentWhere = {
 } satisfies Prisma.AgentWhereInput;
 
 export const userFacingAgentFamilyWhere = {
-  NOT: [...quarantinedActorPredicates('createdBy'), ...quarantinedActorPredicates('updatedBy')],
+  NOT: [
+    ...QUARANTINED_LEGACY_FIXTURE_FINGERPRINTS.map(({ name, owner }) => ({ name, owner })),
+    ...quarantinedActorPredicates('createdBy'),
+    ...quarantinedActorPredicates('updatedBy'),
+  ],
 } satisfies Prisma.AgentFamilyWhereInput;
 
 /**

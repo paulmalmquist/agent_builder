@@ -223,15 +223,90 @@
   line-height: 1.4;
 }
 
+.settings-build-facts {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  gap: 1px;
+  margin: 0;
+  background: rgba(188, 195, 208, 0.1);
+}
+
+.settings-build-facts > div {
+  min-width: 0;
+  padding: 17px 18px;
+  background: #080b10;
+}
+
+.settings-build-facts dt {
+  color: #747c89;
+  font: 8px var(--font-mono);
+  letter-spacing: 0.13em;
+}
+
+.settings-build-facts dd {
+  margin: 7px 0 0;
+  color: #a7aeb9;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-build-facts code {
+  overflow-wrap: anywhere;
+  color: #d9dde4;
+  font: 10px var(--font-mono);
+}
+
 .settings-loading {
   padding: 22px 18px;
   color: #8b929e;
   font-size: 11px;
 }
 
+.settings-selftest-link {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 18px;
+  border: 1px solid rgba(188, 195, 208, 0.16);
+  background: #080b10;
+  color: #d9dde4;
+  text-decoration: none;
+}
+
+.settings-selftest-link > span {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-selftest-link strong {
+  font: 500 14px var(--font-display);
+}
+
+.settings-selftest-link small {
+  max-width: 720px;
+  color: #8b929e;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.settings-selftest-link b {
+  color: #a991ff;
+  font: 8px var(--font-mono);
+  white-space: nowrap;
+}
+
+.settings-selftest-link:hover,
+.settings-selftest-link:focus-visible {
+  border-color: rgba(169, 145, 255, 0.62);
+  background: #0b0d13;
+}
+
 @media (max-width: 920px) {
   .settings-principal-layout,
   .settings-boundary-grid,
+  .settings-build-facts,
   .settings-rule-list {
     grid-template-columns: 1fr;
   }

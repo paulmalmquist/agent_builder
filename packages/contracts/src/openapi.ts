@@ -163,6 +163,7 @@ import {
 } from './reuse-schemas.js';
 import { REUSE_OPENAPI_OPERATION_IDS } from './reuse-routes.js';
 import { roadmapProgramSchema } from './roadmap-schemas.js';
+import { selfTestReportSchema } from './selftest-schemas.js';
 
 extendZodWithOpenApi(z);
 
@@ -195,6 +196,7 @@ registry.register('EvalCase', evalCaseSchema);
 registry.register('ResourceVersion', resourceVersionSchema);
 registry.register('ResourceVersionDetail', resourceVersionDetailSchema);
 registry.register('RoadmapProgram', roadmapProgramSchema);
+registry.register('SelfTestReport', selfTestReportSchema);
 registry.register('ReleaseBundle', releaseBundleSchema);
 registry.register('AuthorityGrant', authorityGrantSchema);
 registry.register('ExecutionRun', executionRunSchema);
@@ -1434,6 +1436,33 @@ registry.registerPath({
   security: [],
   responses: {
     200: { description: 'Database-backed health check', content: json(healthResponseSchema) },
+    503: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/health',
+  operationId: 'getVersionedHealth',
+  security: [],
+  responses: {
+    200: {
+      description: 'Database-backed health check with immutable build identity',
+      content: json(healthResponseSchema),
+    },
+    503: errorResponse,
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/v1/selftest',
+  operationId: 'runSelfTest',
+  responses: {
+    200: {
+      description: 'Read-only browser acceptance report from the deployed console',
+      content: json(selfTestReportSchema),
+    },
+    401: errorResponse,
+    403: errorResponse,
     503: errorResponse,
   },
 });

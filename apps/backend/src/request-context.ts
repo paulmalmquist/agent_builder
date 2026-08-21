@@ -53,7 +53,9 @@ export function requestContextMiddleware(
 ): RequestHandler {
   const adapter = createAuthenticationAdapter(auth, options);
   return (request, response, next) => {
-    const isPublicRoute = ['/health', '/live', '/ready', '/openapi.json'].includes(request.path);
+    const isPublicRoute = ['/health', '/v1/health', '/live', '/ready', '/openapi.json'].includes(
+      request.path,
+    );
     const requestId =
       typeof (request as Request & { id?: unknown }).id === 'string'
         ? ((request as Request & { id: string }).id ?? null)

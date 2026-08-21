@@ -109,6 +109,12 @@ spec:
               value: {{ .Values.global.repositorySourceCommit | quote }}
             - name: ALLOW_UNVERIFIED_REPOSITORY_IMPORTS
               value: {{ .Values.global.allowUnverifiedRepositoryImports | quote }}
+            - name: SELFTEST_FRONTEND_URL
+              value: {{ printf "http://%s-frontend:%v/selftest?machine=1" (include "paul-os.fullname" .) .Values.frontend.service.port | quote }}
+            - name: SELFTEST_BROWSER_EXECUTABLE
+              value: /usr/bin/chromium
+            - name: SELFTEST_TIMEOUT_MS
+              value: {{ .Values.backend.selfTestTimeoutMs | quote }}
           startupProbe:
             httpGet:
               path: /live

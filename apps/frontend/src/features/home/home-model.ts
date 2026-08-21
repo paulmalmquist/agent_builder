@@ -38,6 +38,12 @@ export interface HomeMetric {
   readonly statusLabel?: string;
   readonly progressPercent?: number;
   readonly scopeLabel?: string;
+  readonly inspection: {
+    readonly driver: string;
+    readonly destinationLabel: string;
+    readonly destinationHref: string;
+    readonly ownerGroupId: Exclude<HomeVerticalId, 'all'> | null;
+  };
 }
 
 export interface HomeWorkstream {
@@ -524,7 +530,16 @@ export function loadHomeProgram(manifestText: string): HomeProgramLoadResult {
   }
 }
 
-function unavailableMetric(id: string, label: string, detail: string): HomeMetric {
+function aimGroupHref(groupId: Exclude<HomeVerticalId, 'all'>): string {
+  return `/aim?${new URLSearchParams({ group: groupId }).toString()}`;
+}
+
+function unavailableMetric(
+  id: string,
+  label: string,
+  detail: string,
+  group: HomeGroup,
+): HomeMetric {
   return {
     id,
     label,
@@ -533,13 +548,19 @@ function unavailableMetric(id: string, label: string, detail: string): HomeMetri
     source: 'unavailable',
     state: 'unavailable',
     statusLabel: 'UNAVAILABLE',
+    inspection: {
+      driver: `${detail} Paul OS cannot compute this reading until every declared contribution is available and current.`,
+      destinationLabel: `Inspect ${group.label} in AIM`,
+      destinationHref: aimGroupHref(group.id),
+      ownerGroupId: group.id,
+    },
   };
 }
 
 function coverageMetric(group: HomeGroup, id: string, label: string): HomeMetric {
   const coverage = percent(group.coveredPartCount, group.partCount);
   if (group.coverageSource.source === 'unavailable' || coverage === null) {
-    return unavailableMetric(id, label, group.coverageSource.detail);
+    return unavailableMetric(id, label, group.coverageSource.detail, group);
   }
   return {
     id,
@@ -550,6 +571,12 @@ function coverageMetric(group: HomeGroup, id: string, label: string): HomeMetric
     state: coverage === 0 ? 'gap' : coverage < 100 ? 'attention' : 'nominal',
     statusLabel: coverage === 0 ? 'NO COVERAGE' : coverage < 100 ? 'PARTIAL COVERAGE' : 'COVERED',
     progressPercent: coverage,
+    inspection: {
+      driver: `${group.coveredPartCount} of ${group.partCount} declared AIM parts have certified agent coverage. Coverage changes only when the exact part-to-agent declarations and their evidence pass the current-source checks.`,
+      destinationLabel: `Inspect ${group.label} coverage in AIM`,
+      destinationHref: aimGroupHref(group.id),
+      ownerGroupId: group.id,
+    },
   };
 }
 
@@ -568,7 +595,12 @@ export function metricsForVertical(
   const fleetRatio = percent(group.certifiedAgentCount, group.modeledAgentCount);
   const fleetMetric =
     group.fleetSource.source === 'unavailable' || fleetRatio === null
-      ? unavailableMetric(`fleet:${group.id}`, 'Certified fleet ratio', group.fleetSource.detail)
+      ? unavailableMetric(
+          `fleet:${group.id}`,
+          'Certified fleet ratio',
+          group.fleetSource.detail,
+          group,
+        )
       : {
           id: `fleet:${group.id}`,
           label: 'Certified fleet ratio',
@@ -579,10 +611,21 @@ export function metricsForVertical(
           statusLabel:
             group.certifiedAgentCount === 0 ? 'NO CERTIFIED AGENT' : 'CURRENTLY CERTIFIED',
           progressPercent: fleetRatio,
+          inspection: {
+            driver: `${group.certifiedAgentCount} of ${group.modeledAgentCount} modeled agents owned by ${group.label} are certified. Candidate or missing agents do not contribute to this reading.`,
+            destinationLabel: `Inspect ${group.label} agents in AIM`,
+            destinationHref: aimGroupHref(group.id),
+            ownerGroupId: group.id,
+          },
         };
   const evidenceMetric =
     group.evidenceSource.source === 'unavailable' || group.maximumEvidenceAgeHours === null
-      ? unavailableMetric(`evidence:${group.id}`, 'Evidence freshness', group.evidenceSource.detail)
+      ? unavailableMetric(
+          `evidence:${group.id}`,
+          'Evidence freshness',
+          group.evidenceSource.detail,
+          group,
+        )
       : {
           id: `evidence:${group.id}`,
           label: 'Evidence freshness',
@@ -591,6 +634,12 @@ export function metricsForVertical(
           source: group.evidenceSource.source,
           state: 'nominal' as const,
           statusLabel: 'WITHIN POLICY',
+          inspection: {
+            driver: `The oldest current coverage evidence across ${group.partCount} declared parts is ${Math.ceil(group.maximumEvidenceAgeHours)} hours old. Stale, future-dated, or unreconciled evidence makes the reading unavailable instead of nominal.`,
+            destinationLabel: `Inspect ${group.label} evidence in AIM`,
+            destinationHref: aimGroupHref(group.id),
+            ownerGroupId: group.id,
+          },
         };
 
   return [
@@ -606,6 +655,13 @@ export function metricsForVertical(
       state: 'neutral',
       statusLabel: 'NOT MEASURED',
       scopeLabel: 'NOT CONNECTED',
+      inspection: {
+        driver:
+          'A production outcome binding is specified for transfer, but this machine has no current samples. No value, trend, target progress, or operational verdict is inferred.',
+        destinationLabel: 'Inspect connection boundaries',
+        destinationHref: '/connections',
+        ownerGroupId: group.id,
+      },
     },
   ];
 }

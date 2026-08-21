@@ -236,6 +236,13 @@ function unavailableAgentGovernance(
   return { state: 'unavailable', reason };
 }
 
+const quarantinedLegacyGovernanceSnapshots = new Set([
+  // Inventory Risk Analyst V1 is frozen and digest-valid, but its legacy manifest contains the
+  // Supplier Delay workflow. Keep that audit record immutable and fail closed at projection; the
+  // corrected V2 seed is a separate forward version.
+  'fbcbcd95-15be-49c0-a8a7-a2bc361b7521:1.0.0',
+]);
+
 function toAgentGovernance(record: ResourceDetailRecord): AgentGovernanceDetail | null {
   if (record.family.kind !== DatabaseResourceKind.AGENT) return null;
 
@@ -253,6 +260,9 @@ function toAgentGovernance(record: ResourceDetailRecord): AgentGovernanceDetail 
   const legacyAgent = record.legacyAgent;
   if (legacyAgent === null || legacyAgent.id !== compatibility.agentId) {
     return unavailableAgentGovernance('snapshot_not_found');
+  }
+  if (quarantinedLegacyGovernanceSnapshots.has(`${legacyAgent.id}:${record.version}`)) {
+    return unavailableAgentGovernance('snapshot_semantic_mismatch');
   }
 
   const guardrailsDigest = compatibility.sectionDigests.guardrails;

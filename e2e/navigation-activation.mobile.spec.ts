@@ -190,7 +190,105 @@ test('390px search and Today rows activate through real pointer and keyboard pat
 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
-  await page.getByRole('button', { name: 'Factory operations' }).click();
+  const health = page.getByTestId('home-band-health');
+  const plan = page.getByTestId('home-band-plan');
+  const action = page.getByTestId('home-band-action');
+  const factoryMetric = page.getByRole('button', {
+    name: /Inspect Factory operations: 100%, SYNTHETIC/i,
+  });
+  await factoryMetric.scrollIntoViewIfNeeded();
+  const factoryMetricBox = await factoryMetric.boundingBox();
+  expect(factoryMetricBox).not.toBeNull();
+  if (factoryMetricBox === null) return;
+  expect(factoryMetricBox.x).toBeGreaterThanOrEqual(0);
+  expect(factoryMetricBox.x + factoryMetricBox.width).toBeLessThanOrEqual(390);
+  await page.mouse.click(
+    factoryMetricBox.x + factoryMetricBox.width / 2,
+    factoryMetricBox.y + factoryMetricBox.height / 2,
+  );
+  await expect(page).toHaveURL(
+    /\/?\?vertical=group_factory&metric=vertical-coverage%3Agroup_factory$/,
+  );
+  await expect(page.getByTestId('home-vertical-group_factory')).toBeFocused();
+  await expect(page.getByTestId('home-vertical-group_factory')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByTestId('home-scope-summary')).toHaveText(
+    /Factory operations · 4 metrics · 2 workstreams · 1 next move/,
+  );
+  await expect(health.locator('.today-metric')).toHaveCount(4);
+  await expect(plan.getByTestId('home-gantt-row')).toHaveCount(2);
+  await expect(action.getByTestId('home-task-list').getByRole('listitem')).toHaveCount(1);
+  await expect(action.getByRole('heading', { level: 3, name: 'Needs you' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Agent coverage' })).toContainText(
+    'OBJECTIVE BINDING',
+  );
+  await expect(page.getByRole('region', { name: 'Agent coverage' })).toContainText('Not declared');
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('home-vertical-all')).toHaveAttribute('aria-pressed', 'true');
+  await expect(health.locator('.today-metric')).toHaveCount(8);
+  await expect(plan.getByTestId('home-gantt-row')).toHaveCount(10);
+  await expect(page.getByRole('region', { name: 'Agent coverage' })).toHaveCount(0);
+
+  const structuresMetric = page.getByRole('button', {
+    name: /Inspect Structures: 100%, SYNTHETIC/i,
+  });
+  await structuresMetric.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(
+    /\/?\?vertical=group_structures&metric=vertical-coverage%3Agroup_structures$/,
+  );
+  await expect(page.getByTestId('home-vertical-group_structures')).toBeFocused();
+  await expect(page.getByTestId('home-vertical-group_structures')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByTestId('home-scope-summary')).toHaveText(
+    /Structures · 4 metrics · 2 workstreams · 1 next move/,
+  );
+  await expect(health.locator('.today-metric')).toHaveCount(4);
+  await expect(plan.getByTestId('home-gantt-row')).toHaveCount(2);
+  await expect(action.getByTestId('home-task-list').getByRole('listitem')).toHaveCount(1);
+  await expect(action.getByRole('heading', { level: 3, name: 'Needs you' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Agent coverage' })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('home-vertical-all')).toHaveAttribute('aria-pressed', 'true');
+  await expect(health.locator('.today-metric')).toHaveCount(8);
+  await expect(plan.getByTestId('home-gantt-row')).toHaveCount(10);
+
+  await page.getByTestId('home-vertical-group_factory').click();
+  const outcomeMetric = page.getByRole('button', {
+    name: /Inspect Print first-pass yield/i,
+  });
+  await outcomeMetric.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/?\?vertical=group_factory&metric=outcome%3Agroup_factory$/);
+  await expect(page.getByRole('region', { name: 'Print first-pass yield' })).toContainText(
+    'No governed Objective resource or target is bound',
+  );
+  await page.getByRole('button', { name: /Close Print first-pass yield detail/i }).click();
+
+  const datedList = page.getByRole('button', { name: 'DATED LIST' });
+  await datedList.scrollIntoViewIfNeeded();
+  const datedListBox = await datedList.boundingBox();
+  expect(datedListBox).not.toBeNull();
+  if (datedListBox === null) return;
+  await page.mouse.click(
+    datedListBox.x + datedListBox.width / 2,
+    datedListBox.y + datedListBox.height / 2,
+  );
+  await expect(page).toHaveURL(/\/?\?vertical=group_factory&plan=list$/);
+  await expect(page.getByTestId('home-workstream-list')).toBeVisible();
+  const timeline = page.getByRole('button', { name: 'TIMELINE' });
+  await timeline.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/?\?vertical=group_factory$/);
+
   const workstream = page.getByTestId('home-workstream-workstream_print_cell_qualification');
   await expect(workstream).toHaveAttribute('href', '/aim?group=group_factory&part=stargate');
   await workstream.scrollIntoViewIfNeeded();
