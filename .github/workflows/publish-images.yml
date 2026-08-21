@@ -63,7 +63,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
           tags: |
             type=sha,prefix=sha-
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           build-args: ${{ (matrix.service == 'frontend' || matrix.service == 'backend') && format('REPOSITORY_SOURCE_COMMIT={0}', github.event.workflow_run.head_sha) || '' }}
           context: .
