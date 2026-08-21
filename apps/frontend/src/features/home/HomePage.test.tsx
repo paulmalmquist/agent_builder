@@ -148,6 +148,7 @@ const governedRoadmapProgram = roadmapProgramSchema.parse({
 
 interface HomeResponses {
   attention?: unknown;
+  attentionDelayMs?: number;
   attentionError?: boolean;
   grants?: unknown;
   grantsError?: boolean;
@@ -171,11 +172,12 @@ function unavailableResponse() {
 
 function useHomeResponses(responses: HomeResponses = {}) {
   server.use(
-    http.get('http://localhost/v1/attention', () =>
-      responses.attentionError
+    http.get('http://localhost/v1/attention', async () => {
+      if (responses.attentionDelayMs !== undefined) await delay(responses.attentionDelayMs);
+      return responses.attentionError
         ? unavailableResponse()
-        : HttpResponse.json(responses.attention ?? emptyAttention),
-    ),
+        : HttpResponse.json(responses.attention ?? emptyAttention);
+    }),
     http.get('http://localhost/v1/execution-runs', () =>
       responses.runsError ? unavailableResponse() : HttpResponse.json(responses.runs ?? emptyRuns),
     ),
@@ -524,11 +526,31 @@ describe('HomePage', () => {
 
     const runMetric = screen.getByTestId('home-metric-digest-runs');
     const costMetric = screen.getByTestId('home-metric-digest-cost');
-    expect(await within(runMetric).findByText('UNAVAILABLE')).toBeVisible();
+    await waitFor(() =>
+      expect(within(runMetric).getByTestId('kpi-source')).toHaveTextContent('UNAVAILABLE'),
+    );
     expect(runMetric).toHaveTextContent('—');
+    expect(within(runMetric).getByTestId('kpi-source')).toHaveTextContent('UNAVAILABLE');
+    expect(within(runMetric).getByTestId('kpi-source')).not.toHaveTextContent('LIVE');
     expect(costMetric).toHaveTextContent('—');
+    expect(within(costMetric).getByTestId('kpi-source')).not.toHaveTextContent('LIVE');
     expect(screen.getByTestId('home-metric-coverage:group_factory')).toHaveTextContent('100%');
     expect(screen.queryByText(/all systems nominal|all quiet/i)).not.toBeInTheDocument();
+  });
+
+  it('labels unresolved digest values pending instead of live', async () => {
+    useHomeResponses({ attentionDelayMs: 75 });
+    renderHome();
+
+    const runMetric = screen.getByTestId('home-metric-digest-runs');
+    const costMetric = screen.getByTestId('home-metric-digest-cost');
+    expect(within(runMetric).getByTestId('kpi-source')).toHaveTextContent('PENDING');
+    expect(within(runMetric).getByTestId('kpi-source')).not.toHaveTextContent('LIVE');
+    expect(within(costMetric).getByTestId('kpi-source')).toHaveTextContent('PENDING');
+    expect(within(costMetric).getByTestId('kpi-source')).not.toHaveTextContent('LIVE');
+
+    expect(await within(runMetric).findByText('LIVE')).toBeVisible();
+    expect(within(runMetric).getByTestId('kpi-source')).toHaveTextContent('LIVE');
   });
 
   it('keeps global operating exceptions and Attention visible under a vertical filter', async () => {
@@ -611,6 +633,13 @@ describe('HomePage', () => {
     expect(printCell).toHaveAttribute('href', '/aim?group=group_factory&part=stargate');
     expect(printCell).toHaveAccessibleName(
       /Print cell qualification, Factory operations, Aug 1, 2026 through Aug 15, 2026, COMPLETE, synthetic plan/i,
+    );
+    expect(printCell).toHaveClass('today-gantt-row-link');
+    expect(printCell.closest('li')?.querySelector('.today-gantt-label')).toBeInstanceOf(
+      HTMLElement,
+    );
+    expect(printCell.closest('li')?.querySelector('.today-gantt-track')).toBeInstanceOf(
+      HTMLElement,
     );
     expect(screen.getByText(/Aug 1, 2026 – Aug 15, 2026 · COMPLETE/)).toBeVisible();
     expect(

@@ -7221,6 +7221,541 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
         ],
         "type": "object",
       },
+      "ResourceVersionDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "agentGovernance": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "guardrails": {
+                    "properties": {
+                      "approvalRequirements": {
+                        "items": {
+                          "maxLength": 500,
+                          "minLength": 2,
+                          "type": "string",
+                        },
+                        "maxItems": 30,
+                        "type": "array",
+                      },
+                      "failClosedConditions": {
+                        "items": {
+                          "maxLength": 500,
+                          "minLength": 2,
+                          "type": "string",
+                        },
+                        "maxItems": 30,
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "prohibitedActions": {
+                        "items": {
+                          "maxLength": 500,
+                          "minLength": 2,
+                          "type": "string",
+                        },
+                        "maxItems": 30,
+                        "type": "array",
+                      },
+                      "responseRequirements": {
+                        "properties": {
+                          "citations": {
+                            "type": "boolean",
+                          },
+                          "confidence": {
+                            "type": "boolean",
+                          },
+                          "unresolvedConflicts": {
+                            "type": "boolean",
+                          },
+                        },
+                        "required": [
+                          "citations",
+                          "confidence",
+                          "unresolvedConflicts",
+                        ],
+                        "type": "object",
+                      },
+                      "workflowStages": {
+                        "items": {
+                          "maxLength": 300,
+                          "minLength": 2,
+                          "type": "string",
+                        },
+                        "maxItems": 30,
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                    },
+                    "required": [
+                      "workflowStages",
+                      "prohibitedActions",
+                      "approvalRequirements",
+                      "failClosedConditions",
+                      "responseRequirements",
+                    ],
+                    "type": "object",
+                  },
+                  "source": {
+                    "enum": [
+                      "legacy_spec_snapshot",
+                      "legacy_manifest_snapshot",
+                    ],
+                    "type": "string",
+                  },
+                  "sourceRevision": {
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "nullable": true,
+                    "type": "integer",
+                  },
+                  "state": {
+                    "enum": [
+                      "available",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "state",
+                  "source",
+                  "sourceRevision",
+                  "guardrails",
+                ],
+                "type": "object",
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "governance_not_declared",
+                      "snapshot_not_found",
+                      "snapshot_integrity_failed",
+                    ],
+                    "type": "string",
+                  },
+                  "state": {
+                    "enum": [
+                      "unavailable",
+                    ],
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "state",
+                  "reason",
+                ],
+                "type": "object",
+              },
+              {
+                "nullable": true,
+              },
+            ],
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+          },
+          "definition": {
+            "additionalProperties": false,
+            "properties": {
+              "apiVersion": {
+                "enum": [
+                  "paul-os/v1",
+                ],
+                "type": "string",
+              },
+              "dependencies": {
+                "default": [],
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "familyId": {
+                      "format": "uuid",
+                      "type": "string",
+                    },
+                    "version": {
+                      "maxLength": 80,
+                      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "familyId",
+                    "version",
+                  ],
+                  "type": "object",
+                },
+                "maxItems": 100,
+                "type": "array",
+              },
+              "kind": {
+                "enum": [
+                  "CorePolicy",
+                  "ContextPolicy",
+                  "Skill",
+                  "Project",
+                  "Roadmap",
+                  "Automation",
+                  "Reference",
+                  "BusinessDomain",
+                  "Protocol",
+                  "KnowledgeSource",
+                  "EvaluationSuite",
+                  "MetricDefinition",
+                  "ImprovementCandidate",
+                  "Agent",
+                  "Plugin",
+                  "PluginPack",
+                ],
+                "type": "string",
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "capabilityProfile": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "businessDomain": {
+                        "maxLength": 240,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      "inputs": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 100,
+                        "type": "array",
+                      },
+                      "intendedUsers": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 20,
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "knowledgeClasses": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 100,
+                        "type": "array",
+                      },
+                      "outputs": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 100,
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "potentialActions": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 100,
+                        "type": "array",
+                      },
+                      "riskLevel": {
+                        "enum": [
+                          "low",
+                          "moderate",
+                          "high",
+                          "critical",
+                        ],
+                        "type": "string",
+                      },
+                      "schemaVersion": {
+                        "enum": [
+                          1,
+                        ],
+                        "type": "number",
+                      },
+                      "successCriteria": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 50,
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "tasks": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 100,
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                      "tools": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 100,
+                        "type": "array",
+                      },
+                      "triggers": {
+                        "items": {
+                          "maxLength": 240,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "maxItems": 30,
+                        "minItems": 1,
+                        "type": "array",
+                      },
+                    },
+                    "required": [
+                      "schemaVersion",
+                      "intendedUsers",
+                      "businessDomain",
+                      "triggers",
+                      "tasks",
+                      "inputs",
+                      "outputs",
+                      "knowledgeClasses",
+                      "tools",
+                      "potentialActions",
+                      "successCriteria",
+                      "riskLevel",
+                    ],
+                    "type": "object",
+                  },
+                  "catalogVisibility": {
+                    "enum": [
+                      "private",
+                      "department",
+                      "organization",
+                    ],
+                    "type": "string",
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "type": "string",
+                  },
+                  "lifecycle": {
+                    "enum": [
+                      "experimental",
+                      "candidate",
+                      "evaluating",
+                      "evaluated",
+                      "certified",
+                      "production",
+                      "deprecated",
+                    ],
+                    "type": "string",
+                  },
+                  "name": {
+                    "maxLength": 160,
+                    "minLength": 2,
+                    "type": "string",
+                  },
+                  "owner": {
+                    "maxLength": 200,
+                    "minLength": 2,
+                    "type": "string",
+                  },
+                  "provenance": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string",
+                      },
+                      {
+                        "additionalProperties": true,
+                        "type": "object",
+                      },
+                    ],
+                  },
+                  "purpose": {
+                    "maxLength": 3000,
+                    "minLength": 10,
+                    "type": "string",
+                  },
+                  "slug": {
+                    "maxLength": 160,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "type": "string",
+                  },
+                  "version": {
+                    "maxLength": 80,
+                    "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "id",
+                  "slug",
+                  "version",
+                  "owner",
+                  "purpose",
+                  "lifecycle",
+                  "provenance",
+                ],
+                "type": "object",
+              },
+              "spec": {
+                "additionalProperties": true,
+                "type": "object",
+              },
+            },
+            "required": [
+              "apiVersion",
+              "kind",
+              "metadata",
+              "spec",
+            ],
+            "type": "object",
+          },
+          "dependencyPins": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "familyId": {
+                  "format": "uuid",
+                  "type": "string",
+                },
+                "version": {
+                  "maxLength": 80,
+                  "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "familyId",
+                "version",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string",
+          },
+          "familyId": {
+            "format": "uuid",
+            "type": "string",
+          },
+          "frozenAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string",
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string",
+          },
+          "kind": {
+            "enum": [
+              "CorePolicy",
+              "ContextPolicy",
+              "Skill",
+              "Project",
+              "Roadmap",
+              "Automation",
+              "Reference",
+              "BusinessDomain",
+              "Protocol",
+              "KnowledgeSource",
+              "EvaluationSuite",
+              "MetricDefinition",
+              "ImprovementCandidate",
+              "Agent",
+              "Plugin",
+              "PluginPack",
+            ],
+            "type": "string",
+          },
+          "lifecycle": {
+            "enum": [
+              "experimental",
+              "candidate",
+              "evaluating",
+              "evaluated",
+              "certified",
+              "production",
+              "deprecated",
+            ],
+            "type": "string",
+          },
+          "name": {
+            "type": "string",
+          },
+          "owner": {
+            "type": "string",
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "description": "Arbitrary JSON value.",
+            "type": "object",
+          },
+          "purpose": {
+            "type": "string",
+          },
+          "revision": {
+            "exclusiveMinimum": true,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "slug": {
+            "type": "string",
+          },
+          "sourceCommit": {
+            "type": "string",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+          },
+          "version": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "familyId",
+          "kind",
+          "slug",
+          "name",
+          "version",
+          "owner",
+          "purpose",
+          "lifecycle",
+          "digest",
+          "sourceCommit",
+          "provenance",
+          "dependencyPins",
+          "definition",
+          "revision",
+          "frozenAt",
+          "createdAt",
+          "updatedAt",
+        ],
+        "type": "object",
+      },
       "RoadmapProgram": {
         "additionalProperties": false,
         "properties": {
@@ -50114,7 +50649,139 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": false,
                   "properties": {
+                    "agentGovernance": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "guardrails": {
+                              "properties": {
+                                "approvalRequirements": {
+                                  "items": {
+                                    "maxLength": 500,
+                                    "minLength": 2,
+                                    "type": "string",
+                                  },
+                                  "maxItems": 30,
+                                  "type": "array",
+                                },
+                                "failClosedConditions": {
+                                  "items": {
+                                    "maxLength": 500,
+                                    "minLength": 2,
+                                    "type": "string",
+                                  },
+                                  "maxItems": 30,
+                                  "minItems": 1,
+                                  "type": "array",
+                                },
+                                "prohibitedActions": {
+                                  "items": {
+                                    "maxLength": 500,
+                                    "minLength": 2,
+                                    "type": "string",
+                                  },
+                                  "maxItems": 30,
+                                  "type": "array",
+                                },
+                                "responseRequirements": {
+                                  "properties": {
+                                    "citations": {
+                                      "type": "boolean",
+                                    },
+                                    "confidence": {
+                                      "type": "boolean",
+                                    },
+                                    "unresolvedConflicts": {
+                                      "type": "boolean",
+                                    },
+                                  },
+                                  "required": [
+                                    "citations",
+                                    "confidence",
+                                    "unresolvedConflicts",
+                                  ],
+                                  "type": "object",
+                                },
+                                "workflowStages": {
+                                  "items": {
+                                    "maxLength": 300,
+                                    "minLength": 2,
+                                    "type": "string",
+                                  },
+                                  "maxItems": 30,
+                                  "minItems": 1,
+                                  "type": "array",
+                                },
+                              },
+                              "required": [
+                                "workflowStages",
+                                "prohibitedActions",
+                                "approvalRequirements",
+                                "failClosedConditions",
+                                "responseRequirements",
+                              ],
+                              "type": "object",
+                            },
+                            "source": {
+                              "enum": [
+                                "legacy_spec_snapshot",
+                                "legacy_manifest_snapshot",
+                              ],
+                              "type": "string",
+                            },
+                            "sourceRevision": {
+                              "exclusiveMinimum": true,
+                              "minimum": 0,
+                              "nullable": true,
+                              "type": "integer",
+                            },
+                            "state": {
+                              "enum": [
+                                "available",
+                              ],
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "state",
+                            "source",
+                            "sourceRevision",
+                            "guardrails",
+                          ],
+                          "type": "object",
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reason": {
+                              "enum": [
+                                "governance_not_declared",
+                                "snapshot_not_found",
+                                "snapshot_integrity_failed",
+                              ],
+                              "type": "string",
+                            },
+                            "state": {
+                              "enum": [
+                                "unavailable",
+                              ],
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "state",
+                            "reason",
+                          ],
+                          "type": "object",
+                        },
+                        {
+                          "nullable": true,
+                        },
+                      ],
+                    },
                     "createdAt": {
                       "format": "date-time",
                       "type": "string",
@@ -50518,7 +51185,7 @@ exports[`Agent Builder HTTP API serves database-backed health and generated Open
                 },
               },
             },
-            "description": "Exact scoped resource version",
+            "description": "Exact scoped resource version with digest-verified detail projections",
           },
           "404": {
             "content": {

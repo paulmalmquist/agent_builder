@@ -229,6 +229,9 @@ describe('AttentionPage', () => {
       expect(within(card!).getByText('Daily Briefing')).toBeInTheDocument();
       expect(within(card!).getByText('agent')).toBeInTheDocument();
       expect(within(card!).getByText('1.0.0')).toBeInTheDocument();
+      expect(within(card!).getByText('RECORDED SOURCE')).toBeInTheDocument();
+      expect(within(card!).getByText('Grouped authority requests')).toBeInTheDocument();
+      expect(within(card!).queryByText('ApprovalRequestGroup')).not.toBeInTheDocument();
       const groupedRequests = within(card!).getByRole('button', {
         name: 'Inspect 4 exact matching requests',
       });
@@ -404,11 +407,16 @@ describe('AttentionPage', () => {
       expect(card).not.toHaveTextContent(coldReadDigest);
       expect(card).not.toHaveTextContent('worker-test');
       expect(card).not.toHaveTextContent('Candidate 3f8bdaf6');
+      expect(within(card).getByText('RECORDED SOURCE')).toBeInTheDocument();
+      expect(within(card).getByText('Governed record')).toBeInTheDocument();
+      expect(card).not.toHaveTextContent('ColdReadFixture');
       expect(
         within(card).queryAllByText(/Opens|Moves|Keeps|Stores|Discards|Starts|Closes|Shows|Removes/)
           .length,
       ).toBeGreaterThan(0);
     }
+    expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+    expect(screen.queryByText('SYNTHETIC')).not.toBeInTheDocument();
   });
 
   it('records a rationale before clearing a resolved degraded item', async () => {

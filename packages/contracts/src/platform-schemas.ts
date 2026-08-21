@@ -8,7 +8,13 @@ import {
 } from './plugin-schemas.js';
 import { capabilityProfileSchema, catalogVisibilitySchema } from './reuse-schemas.js';
 import { plannedPluginCallsRequestSchema } from './plugin-execution-plan.js';
-import { isoDateTimeSchema, jsonObjectSchema, jsonValueSchema, uuidSchema } from './schemas.js';
+import {
+  guardrailsSectionSchema,
+  isoDateTimeSchema,
+  jsonObjectSchema,
+  jsonValueSchema,
+  uuidSchema,
+} from './schemas.js';
 
 export const resourceKindSchema = z.enum([
   'CorePolicy',
@@ -401,6 +407,33 @@ export const resourceVersionSchema = z.object({
   updatedAt: isoDateTimeSchema,
 });
 
+export const agentGovernanceDetailSchema = z.discriminatedUnion('state', [
+  z
+    .object({
+      state: z.literal('available'),
+      source: z.enum(['legacy_spec_snapshot', 'legacy_manifest_snapshot']),
+      sourceRevision: z.number().int().positive().nullable(),
+      guardrails: guardrailsSectionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal('unavailable'),
+      reason: z.enum([
+        'governance_not_declared',
+        'snapshot_not_found',
+        'snapshot_integrity_failed',
+      ]),
+    })
+    .strict(),
+]);
+
+export const resourceVersionDetailSchema = resourceVersionSchema
+  .extend({
+    agentGovernance: agentGovernanceDetailSchema.nullable().default(null),
+  })
+  .strict();
+
 export const repositoryImportSchema = z.object({
   id: uuidSchema,
   resourceVersionId: uuidSchema,
@@ -748,6 +781,8 @@ export const metricListResponseSchema = z.object({ items: z.array(metricSampleSc
 
 export type ResourceManifest = z.infer<typeof resourceManifestSchema>;
 export type ResourceVersion = z.infer<typeof resourceVersionSchema>;
+export type AgentGovernanceDetail = z.infer<typeof agentGovernanceDetailSchema>;
+export type ResourceVersionDetail = z.infer<typeof resourceVersionDetailSchema>;
 export type ReleaseBundle = z.infer<typeof releaseBundleSchema>;
 export type AuthorityGrant = z.infer<typeof authorityGrantSchema>;
 export type ExecutionRun = z.infer<typeof executionRunSchema>;

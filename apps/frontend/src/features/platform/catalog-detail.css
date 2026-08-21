@@ -104,6 +104,85 @@
   margin-top: 18px;
 }
 
+.catalog-governance-source {
+  margin: 0;
+  color: #8f96a3;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.catalog-governance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.catalog-governance-grid article {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(188, 195, 208, 0.15);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.catalog-governance-grid h4 {
+  margin: 0 0 10px;
+  color: #bfc4cd;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.catalog-governance-grid ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.catalog-governance-grid li,
+.catalog-governance-grid p,
+.catalog-response-requirements dd {
+  color: #aeb4bf;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.catalog-governance-grid p {
+  margin: 0;
+}
+
+.catalog-governance-grid .catalog-governance-withheld {
+  margin-top: 10px;
+  color: #c1a76e;
+  font-size: 10px;
+}
+
+.catalog-response-requirements {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.catalog-response-requirements div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) 1fr;
+  gap: 10px;
+}
+
+.catalog-response-requirements dt,
+.catalog-response-requirements dd {
+  margin: 0;
+}
+
+.catalog-response-requirements dt {
+  color: #858c98;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .catalog-detail-callout {
   display: grid;
   gap: 8px;
@@ -419,7 +498,8 @@
 }
 
 .catalog-disabled-action {
-  display: inline-flex;
+  display: inline-grid;
+  gap: 4px;
   min-height: 42px;
   align-items: center;
   padding: 0 13px;
@@ -429,6 +509,19 @@
   font-family: var(--font-display);
   font-size: 9px;
   letter-spacing: 0.07em;
+}
+
+.catalog-disabled-action strong,
+.catalog-disabled-action small {
+  font: inherit;
+}
+
+.catalog-disabled-action small {
+  max-width: 340px;
+  color: #8f96a3;
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  line-height: 1.4;
 }
 
 .catalog-provenance-detail {
@@ -531,6 +624,7 @@
 @media (max-width: 720px) {
   .catalog-detail-facts,
   .catalog-detail-columns,
+  .catalog-governance-grid,
   .catalog-evidence-card dl {
     grid-template-columns: 1fr;
   }

@@ -3,20 +3,7 @@ import { useAttentionItem } from '../../api/hooks';
 import { getErrorMessage } from '../../api/client';
 import { Modal } from '../../components/Modal';
 import { Notice } from '../../components/Notice';
-
-const sourceLabels: Record<string, string> = {
-  ApprovalRequest: 'Authority request',
-  ApprovalRequestGroup: 'Grouped authority requests',
-  ExecutionRun: 'Execution run',
-  ImprovementCandidate: 'Improvement proposal',
-  MemoryCandidate: 'Durable memory proposal',
-  PluginInstallation: 'Plugin health record',
-  ReleaseEvaluation: 'Release evaluation',
-};
-
-function sourceLabel(value: string): string {
-  return sourceLabels[value] ?? 'Governed record';
-}
+import { recordedAttentionSourceLabel } from './attention-provenance';
 
 function phaseLabel(value: string): string {
   const normalized = value.replaceAll('_', ' ').replaceAll('-', ' ').trim().toLowerCase();
@@ -120,7 +107,7 @@ export function AttentionDetailDialog({
           <dl className="attention-provenance">
             <div>
               <dt>Source</dt>
-              <dd>{sourceLabel(item.provenance.sourceType)}</dd>
+              <dd>{recordedAttentionSourceLabel(item.provenance.sourceType)}</dd>
             </div>
             <div>
               <dt>Occurred</dt>

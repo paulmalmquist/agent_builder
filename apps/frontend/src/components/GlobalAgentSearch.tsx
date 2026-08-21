@@ -4,7 +4,7 @@ import {
   roadmapResourceSpecSchema,
   type ResourceVersion,
 } from '@agent-builder/contracts';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAgentSearch, usePlatformResources } from '../api/hooks';
 import type { AgentSearchItem } from '../api/client';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
@@ -16,7 +16,14 @@ interface GlobalAgentSearchProps {
   onSelectAgent: (agentId: string) => void;
 }
 
-type KnowledgeType = 'systems' | 'decisions' | 'datasets' | 'runbooks' | 'metrics' | 'agents';
+type KnowledgeType =
+  | 'systems'
+  | 'decisions'
+  | 'datasets'
+  | 'runbooks'
+  | 'metrics'
+  | 'agents'
+  | 'projects';
 
 type PaletteItem =
   | { key: string; type: 'agent'; value: AgentSearchItem }
@@ -29,6 +36,7 @@ const knowledgeTypeByKind: Partial<Record<ResourceVersion['kind'], KnowledgeType
   MetricDefinition: 'metrics',
   Plugin: 'systems',
   PluginPack: 'systems',
+  Project: 'projects',
   Protocol: 'decisions',
   Reference: 'runbooks',
   Skill: 'agents',
@@ -162,9 +170,9 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
   }
 
   function selectItem(item: PaletteItem) {
+    collapse(false);
     if (item.type === 'agent') onSelectAgent(item.value.id);
     else void navigate(resourceRoute(item.value));
-    collapse(false);
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -263,21 +271,16 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                       GOVERNED AGENTS · {governedAgents.length}
                     </span>
                     {governedAgents.map((resource, index) => (
-                      <button
+                      <Link
                         aria-selected={index === activeIndex}
                         className="global-search-option"
                         id={`${listboxId}-option-resource-${resource.id}`}
                         key={resource.id}
-                        onClick={() =>
-                          selectItem({
-                            key: `resource-${resource.id}`,
-                            type: 'resource',
-                            value: resource,
-                          })
-                        }
-                        onMouseEnter={() => setActiveIndex(index)}
+                        onClick={() => collapse(false)}
+                        onPointerMove={() => setActiveIndex(index)}
                         role="option"
-                        type="button"
+                        tabIndex={-1}
+                        to={resourceRoute(resource)}
                       >
                         <span>
                           <strong>{highlightedText(resource.name, debouncedQuery)}</strong>
@@ -286,7 +289,7 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                           </small>
                         </span>
                         <span className="global-search-kind">{resource.lifecycle} definition</span>
-                      </button>
+                      </Link>
                     ))}
                   </div>
                 ) : null}
@@ -306,8 +309,9 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                           onClick={() =>
                             selectItem({ key: `agent-${agent.id}`, type: 'agent', value: agent })
                           }
-                          onMouseEnter={() => setActiveIndex(index)}
+                          onPointerMove={() => setActiveIndex(index)}
                           role="option"
+                          tabIndex={-1}
                           type="button"
                         >
                           <span>
@@ -330,21 +334,16 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                     {otherResources.map((resource, resourceIndex) => {
                       const index = governedAgents.length + agents.length + resourceIndex;
                       return (
-                        <button
+                        <Link
                           aria-selected={index === activeIndex}
                           className="global-search-option"
                           id={`${listboxId}-option-resource-${resource.id}`}
                           key={resource.id}
-                          onClick={() =>
-                            selectItem({
-                              key: `resource-${resource.id}`,
-                              type: 'resource',
-                              value: resource,
-                            })
-                          }
-                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => collapse(false)}
+                          onPointerMove={() => setActiveIndex(index)}
                           role="option"
-                          type="button"
+                          tabIndex={-1}
+                          to={resourceRoute(resource)}
                         >
                           <span>
                             <strong>{highlightedText(resource.name, debouncedQuery)}</strong>
@@ -355,7 +354,7 @@ export function GlobalAgentSearch({ onSelectAgent }: GlobalAgentSearchProps) {
                           <span className="global-search-kind">
                             {resource.lifecycle} definition
                           </span>
-                        </button>
+                        </Link>
                       );
                     })}
                   </div>

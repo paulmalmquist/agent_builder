@@ -3337,6 +3337,27 @@ a:focus-visible {
   font-weight: 620;
   letter-spacing: 0.02em;
 }
+.attention-source-stamp {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(149, 120, 255, 0.38);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.attention-source-stamp span {
+  color: #747c88;
+}
+.attention-source-stamp strong {
+  color: #b6bdc7;
+  font-size: inherit;
+  font-weight: 650;
+}
 .attention-request-count {
   margin-left: auto;
   padding: 4px 7px;
@@ -4361,7 +4382,11 @@ a:focus-visible {
   color: inherit;
   background: transparent;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
+}
+.global-search-option > * {
+  pointer-events: none;
 }
 .global-search-option[aria-selected='true'],
 .global-search-option:hover {

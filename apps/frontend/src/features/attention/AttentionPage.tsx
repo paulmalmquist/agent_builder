@@ -23,6 +23,7 @@ import { Notice } from '../../components/Notice';
 import { ApprovalDialog } from '../platform/ApprovalDialog';
 import { AttentionDetailDialog } from './AttentionDetailDialog';
 import { DecisionDialog } from './DecisionDialog';
+import { recordedAttentionSourceLabel } from './attention-provenance';
 
 interface PendingDecision {
   item: AttentionItem;
@@ -75,6 +76,7 @@ function AttentionCard({
   onDetail: () => void;
   onFocus: () => void;
 }) {
+  const recordedSource = recordedAttentionSourceLabel(item.provenance.sourceType);
   return (
     <article
       aria-label={item.headline}
@@ -127,6 +129,10 @@ function AttentionCard({
             ) : null}
           </div>
         ) : null}
+        <div aria-label={`Recorded source: ${recordedSource}`} className="attention-source-stamp">
+          <span>RECORDED SOURCE</span>
+          <strong>{recordedSource}</strong>
+        </div>
         {item.primaryAction ? (
           <dl aria-label="Decision effects" className="attention-card-effects">
             <div>

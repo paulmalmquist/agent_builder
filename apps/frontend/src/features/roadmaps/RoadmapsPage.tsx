@@ -172,6 +172,53 @@ function ForkSummary({ fork }: { fork: RoadmapFork }) {
 }
 
 type RoadmapRelationshipTarget = RoadmapFork['relationships'][number]['target'];
+type RoadmapDefinitionTarget = RoadmapFork['definitionDependencies'][number]['target'];
+
+function governedDefinitionRoute(target: RoadmapDefinitionTarget): string | null {
+  const query = new URLSearchParams({ entity: target.resourceVersionId });
+  switch (target.kind) {
+    case 'Agent':
+      return `/catalog?${new URLSearchParams({ resource: target.resourceVersionId }).toString()}`;
+    case 'Project':
+      query.set('type', 'projects');
+      break;
+    case 'Protocol':
+      query.set('type', 'decisions');
+      break;
+    case 'KnowledgeSource':
+      query.set('type', 'datasets');
+      break;
+    case 'Reference':
+      query.set('type', 'runbooks');
+      break;
+    case 'MetricDefinition':
+      query.set('type', 'metrics');
+      break;
+    case 'Plugin':
+    case 'PluginPack':
+      query.set('type', 'systems');
+      break;
+    case 'Skill':
+      query.set('type', 'agents');
+      break;
+    default:
+      return null;
+  }
+  return `/knowledge?${query.toString()}`;
+}
+
+function DefinitionDependencyTarget({ target }: { target: RoadmapDefinitionTarget }) {
+  const route = governedDefinitionRoute(target);
+  const label = `${target.name} · ${target.version}`;
+  return route ? (
+    <Link to={route}>{label} ↗</Link>
+  ) : (
+    <>
+      <strong>{label}</strong>
+      <em>NO DETAIL ROUTE</em>
+    </>
+  );
+}
 
 function relationshipTarget(target: RoadmapRelationshipTarget): ReactNode {
   if (target.kind === 'vertical') {
@@ -303,7 +350,7 @@ function RoadmapConnections({ fork }: { fork: RoadmapFork }) {
           <ol>
             {fork.definitionDependencies.map((dependency) => (
               <li key={dependency.id}>
-                <strong>{`${dependency.target.name} · ${dependency.target.version}`}</strong>
+                <DefinitionDependencyTarget target={dependency.target} />
                 <span>{`${dependency.role.replaceAll('_', ' ').toUpperCase()} · ${dependency.provenance.toUpperCase()}`}</span>
                 <small>{`${dependency.target.familyId}@${dependency.target.version} · ${dependency.target.resourceVersionId}`}</small>
               </li>
@@ -553,6 +600,9 @@ export function RoadmapsPage() {
                 </div>
                 <h3>{action.label}</h3>
                 <p>{action.consequence}</p>
+                <span className="roadmap-action-destination">
+                  READ ONLY · NO GOVERNED DESTINATION
+                </span>
                 <footer>
                   <span>{action.owner}</span>
                   <time dateTime={action.dueAt ?? undefined}>

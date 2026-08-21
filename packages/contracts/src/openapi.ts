@@ -114,6 +114,7 @@ import {
   repositoryImportResponseSchema,
   resourceListQuerySchema,
   resourceListResponseSchema,
+  resourceVersionDetailSchema,
   resourceVersionSchema,
   rejectExecutionRunGroupResponseSchema,
 } from './platform-schemas.js';
@@ -192,6 +193,7 @@ registry.register('CertificationRun', certificationRunDetailSchema);
 registry.register('CertificationGateConfig', certificationGateConfigSchema);
 registry.register('EvalCase', evalCaseSchema);
 registry.register('ResourceVersion', resourceVersionSchema);
+registry.register('ResourceVersionDetail', resourceVersionDetailSchema);
 registry.register('RoadmapProgram', roadmapProgramSchema);
 registry.register('ReleaseBundle', releaseBundleSchema);
 registry.register('AuthorityGrant', authorityGrantSchema);
@@ -605,7 +607,10 @@ registry.registerPath({
   operationId: 'getResource',
   request: { params: platformIdParam('resourceVersionId') },
   responses: {
-    200: { description: 'Exact scoped resource version', content: json(resourceVersionSchema) },
+    200: {
+      description: 'Exact scoped resource version with digest-verified detail projections',
+      content: json(resourceVersionDetailSchema),
+    },
     404: errorResponse,
   },
 });

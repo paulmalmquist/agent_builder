@@ -122,6 +122,49 @@ const roadmapResource: ResourceVersion = {
   updatedAt: '2026-08-20T12:00:00.000Z',
 };
 
+const projectResourceId = '87878787-8787-4787-8787-878787878787';
+const projectFamilyId = '88888888-8888-4888-8888-888888888888';
+const projectResource: ResourceVersion = {
+  id: projectResourceId,
+  familyId: projectFamilyId,
+  kind: 'Project',
+  slug: 'personal-operations',
+  name: 'Personal operations',
+  version: '1.1.0',
+  owner: 'Personal Operations',
+  purpose: 'Bound governed resources for the personal operating system.',
+  lifecycle: 'candidate',
+  digest: '9'.repeat(64),
+  sourceCommit: 'project-search-test',
+  provenance: { source: 'synthetic-test' },
+  dependencyPins: [],
+  definition: {
+    apiVersion: 'paul-os/v1',
+    kind: 'Project',
+    metadata: {
+      id: projectFamilyId,
+      slug: 'personal-operations',
+      version: '1.1.0',
+      name: 'Personal operations',
+      owner: 'Personal Operations',
+      purpose: 'Bound governed resources for the personal operating system.',
+      lifecycle: 'candidate',
+      provenance: { source: 'synthetic-test' },
+    },
+    dependencies: [],
+    spec: {
+      businessDomain: 'personal-operations@1.0.0',
+      resourcePins: {},
+      overlays: {},
+      mayWeakenMandatoryRules: false,
+    },
+  },
+  revision: 1,
+  frozenAt: '2026-08-20T12:00:00.000Z',
+  createdAt: '2026-08-20T12:00:00.000Z',
+  updatedAt: '2026-08-20T12:00:00.000Z',
+};
+
 function installRoadmapSearchResult(resource: ResourceVersion = roadmapResource) {
   server.use(
     http.get('http://localhost/agents', () =>
@@ -145,6 +188,29 @@ function installRoadmapSearchResult(resource: ResourceVersion = roadmapResource)
   );
 }
 
+function installProjectSearchResult() {
+  server.use(
+    http.get('http://localhost/agents', () =>
+      HttpResponse.json({ mode: 'catalog', query: 'project', nextCursor: null, items: [] }),
+    ),
+    http.get('http://localhost/v1/resources', () =>
+      HttpResponse.json({
+        items: [projectResource],
+        total: 1,
+        countsByLifecycle: {
+          experimental: 0,
+          candidate: 1,
+          evaluating: 0,
+          evaluated: 0,
+          certified: 0,
+          production: 0,
+          deprecated: 0,
+        },
+      }),
+    ),
+  );
+}
+
 describe('global entity search', () => {
   it('opens a typed Roadmap fork with a mouse selection', async () => {
     installRoadmapSearchResult();
@@ -153,7 +219,10 @@ describe('global entity search', () => {
 
     await user.click(screen.getByRole('button', { name: 'Search governed entities' }));
     await user.type(screen.getByRole('combobox'), 'roadmap');
-    await user.click(await screen.findByRole('option', { name: /Roadmap fork 01/i }));
+    const result = await screen.findByRole('option', { name: /Roadmap fork 01/i });
+    expect(result).toHaveAttribute('href', '/roadmaps?fork=fork_primary');
+    expect(result).toHaveAttribute('tabindex', '-1');
+    await user.pointer({ target: result, keys: '[MouseLeft]' });
 
     expect(screen.getByLabelText('Current route')).toHaveTextContent('/roadmaps?fork=fork_primary');
   });
@@ -169,6 +238,67 @@ describe('global entity search', () => {
     await user.keyboard('{Enter}');
 
     expect(screen.getByLabelText('Current route')).toHaveTextContent('/roadmaps?fork=fork_primary');
+  });
+
+  it('owns ArrowDown, ArrowUp, and Enter while DOM focus stays on the combobox', async () => {
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.keyboard('{Control>}k{/Control}');
+    const input = screen.getByRole('combobox', { name: 'Search governed entities' });
+    await user.type(input, 'daily');
+    const options = await screen.findAllByRole('option');
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(input).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(options[0]).toHaveAttribute('aria-selected', 'false');
+    expect(options[1]).toHaveAttribute('aria-selected', 'true');
+    expect(input).toHaveAttribute('aria-activedescendant', options[1]?.id);
+    expect(input).toHaveFocus();
+
+    await user.keyboard('{ArrowUp}');
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(options[1]).toHaveAttribute('aria-selected', 'false');
+    expect(input).toHaveAttribute('aria-activedescendant', options[0]?.id);
+    expect(input).toHaveFocus();
+
+    await user.keyboard('{ArrowUp}{Enter}');
+    expect(screen.getByLabelText('Current route')).toHaveTextContent(
+      '/knowledge?type=agents&entity=12121212-1212-4121-8121-121212121212',
+    );
+  });
+
+  it('opens an exact Project version in the Projects facet by pointer', async () => {
+    installProjectSearchResult();
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole('button', { name: 'Search governed entities' }));
+    await user.type(screen.getByRole('combobox'), 'project');
+    const result = await screen.findByRole('option', { name: /Personal operations/i });
+    expect(result).toHaveAttribute('href', `/knowledge?type=projects&entity=${projectResourceId}`);
+    await user.pointer({ target: result, keys: '[MouseLeft]' });
+
+    expect(screen.getByLabelText('Current route')).toHaveTextContent(
+      `/knowledge?type=projects&entity=${projectResourceId}`,
+    );
+  });
+
+  it('opens an exact Project version in the Projects facet by keyboard', async () => {
+    installProjectSearchResult();
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.keyboard('{Control>}k{/Control}');
+    await user.type(screen.getByRole('combobox'), 'project');
+    await screen.findByRole('option', { name: /Personal operations/i });
+    await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
+
+    expect(screen.getByLabelText('Current route')).toHaveTextContent(
+      `/knowledge?type=projects&entity=${projectResourceId}`,
+    );
   });
 
   it('does not guess a fork route from an invalid Roadmap definition', async () => {

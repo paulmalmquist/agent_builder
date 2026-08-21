@@ -57,6 +57,28 @@ describe('RoadmapsPage', () => {
     expect(screen.getAllByText('Execution runs')).toHaveLength(2);
     expect(screen.getAllByText(/No governed relationship edge is declared/)).toHaveLength(2);
     expect(screen.getAllByText('DEFINITION PINS · 3')).toHaveLength(2);
+    expect(screen.getAllByText('READ ONLY · NO GOVERNED DESTINATION')).toHaveLength(4);
+  });
+
+  it('routes every supported exact definition pin without using a slug fallback', async () => {
+    renderRoadmaps('/roadmaps?fork=fork_primary');
+
+    const pins = await screen.findByText('DEFINITION PINS · 3');
+    await userEvent.setup().click(pins);
+
+    expect(screen.getByRole('link', { name: /Personal operations · 1.1.0/ })).toHaveAttribute(
+      'href',
+      '/knowledge?entity=32000000-0000-4000-8000-000000000011&type=projects',
+    );
+    expect(screen.getByRole('link', { name: /Console grammar · 1.3.0/ })).toHaveAttribute(
+      'href',
+      '/knowledge?entity=32000000-0000-4000-8000-000000000012&type=decisions',
+    );
+    expect(screen.getByRole('link', { name: /Planning fixture · 1.1.0/ })).toHaveAttribute(
+      'href',
+      '/knowledge?entity=32000000-0000-4000-8000-000000000013&type=datasets',
+    );
+    expect(screen.queryByText('NO DETAIL ROUTE')).not.toBeInTheDocument();
   });
 
   it('uses one URL-backed fork selection across state, plan, and action bands', async () => {
@@ -275,7 +297,10 @@ describe('RoadmapsPage', () => {
     const factoryLinks = await screen.findAllByRole('link', { name: /factory/i });
     expect(factoryLinks[0]).toHaveAttribute('href', '/?vertical=group_factory');
     expect(factoryLinks[1]).toHaveAttribute('href', '/aim?group=group_factory');
-    expect(screen.getByRole('link', { name: /Workflow agent/ })).toHaveAttribute(
+    const relationshipList = screen.getByRole('list', {
+      name: 'Roadmap fork 01 governed relationships',
+    });
+    expect(within(relationshipList).getByRole('link', { name: /Workflow agent/ })).toHaveAttribute(
       'href',
       '/catalog?resource=41000000-0000-4000-8000-000000000001',
     );

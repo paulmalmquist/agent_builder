@@ -2327,6 +2327,498 @@
           "updatedAt"
         ]
       },
+      "ResourceVersionDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "familyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "CorePolicy",
+              "ContextPolicy",
+              "Skill",
+              "Project",
+              "Roadmap",
+              "Automation",
+              "Reference",
+              "BusinessDomain",
+              "Protocol",
+              "KnowledgeSource",
+              "EvaluationSuite",
+              "MetricDefinition",
+              "ImprovementCandidate",
+              "Agent",
+              "Plugin",
+              "PluginPack"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "experimental",
+              "candidate",
+              "evaluating",
+              "evaluated",
+              "certified",
+              "production",
+              "deprecated"
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "sourceCommit": {
+            "type": "string"
+          },
+          "provenance": {
+            "type": "object",
+            "description": "Arbitrary JSON value.",
+            "additionalProperties": true
+          },
+          "dependencyPins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "familyId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+                }
+              },
+              "required": ["familyId", "version"],
+              "additionalProperties": false
+            }
+          },
+          "definition": {
+            "type": "object",
+            "properties": {
+              "apiVersion": {
+                "type": "string",
+                "enum": ["paul-os/v1"]
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "CorePolicy",
+                  "ContextPolicy",
+                  "Skill",
+                  "Project",
+                  "Roadmap",
+                  "Automation",
+                  "Reference",
+                  "BusinessDomain",
+                  "Protocol",
+                  "KnowledgeSource",
+                  "EvaluationSuite",
+                  "MetricDefinition",
+                  "ImprovementCandidate",
+                  "Agent",
+                  "Plugin",
+                  "PluginPack"
+                ]
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "maxLength": 160,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
+                  "version": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 160
+                  },
+                  "owner": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 3000
+                  },
+                  "lifecycle": {
+                    "type": "string",
+                    "enum": [
+                      "experimental",
+                      "candidate",
+                      "evaluating",
+                      "evaluated",
+                      "certified",
+                      "production",
+                      "deprecated"
+                    ]
+                  },
+                  "provenance": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "catalogVisibility": {
+                    "type": "string",
+                    "enum": ["private", "department", "organization"]
+                  },
+                  "capabilityProfile": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "intendedUsers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "minItems": 1,
+                        "maxItems": 20
+                      },
+                      "businessDomain": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      "triggers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "minItems": 1,
+                        "maxItems": 30
+                      },
+                      "tasks": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                      },
+                      "inputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "maxItems": 100
+                      },
+                      "outputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                      },
+                      "knowledgeClasses": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "maxItems": 100
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "maxItems": 100
+                      },
+                      "potentialActions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "maxItems": 100
+                      },
+                      "successCriteria": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                      },
+                      "riskLevel": {
+                        "type": "string",
+                        "enum": ["low", "moderate", "high", "critical"]
+                      }
+                    },
+                    "required": [
+                      "schemaVersion",
+                      "intendedUsers",
+                      "businessDomain",
+                      "triggers",
+                      "tasks",
+                      "inputs",
+                      "outputs",
+                      "knowledgeClasses",
+                      "tools",
+                      "potentialActions",
+                      "successCriteria",
+                      "riskLevel"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "slug",
+                  "version",
+                  "owner",
+                  "purpose",
+                  "lifecycle",
+                  "provenance"
+                ],
+                "additionalProperties": false
+              },
+              "dependencies": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "familyId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "version": {
+                      "type": "string",
+                      "maxLength": 80,
+                      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+                    }
+                  },
+                  "required": ["familyId", "version"],
+                  "additionalProperties": false
+                },
+                "maxItems": 100,
+                "default": []
+              },
+              "spec": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": ["apiVersion", "kind", "metadata", "spec"],
+            "additionalProperties": false
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "frozenAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "agentGovernance": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": ["available"]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["legacy_spec_snapshot", "legacy_manifest_snapshot"]
+                  },
+                  "sourceRevision": {
+                    "type": "integer",
+                    "nullable": true,
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "guardrails": {
+                    "type": "object",
+                    "properties": {
+                      "workflowStages": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 300
+                        },
+                        "minItems": 1,
+                        "maxItems": 30
+                      },
+                      "prohibitedActions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 500
+                        },
+                        "maxItems": 30
+                      },
+                      "approvalRequirements": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 500
+                        },
+                        "maxItems": 30
+                      },
+                      "failClosedConditions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 500
+                        },
+                        "minItems": 1,
+                        "maxItems": 30
+                      },
+                      "responseRequirements": {
+                        "type": "object",
+                        "properties": {
+                          "citations": {
+                            "type": "boolean"
+                          },
+                          "confidence": {
+                            "type": "boolean"
+                          },
+                          "unresolvedConflicts": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["citations", "confidence", "unresolvedConflicts"]
+                      }
+                    },
+                    "required": [
+                      "workflowStages",
+                      "prohibitedActions",
+                      "approvalRequirements",
+                      "failClosedConditions",
+                      "responseRequirements"
+                    ]
+                  }
+                },
+                "required": ["state", "source", "sourceRevision", "guardrails"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": ["unavailable"]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "governance_not_declared",
+                      "snapshot_not_found",
+                      "snapshot_integrity_failed"
+                    ]
+                  }
+                },
+                "required": ["state", "reason"],
+                "additionalProperties": false
+              },
+              {
+                "nullable": true
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "familyId",
+          "kind",
+          "slug",
+          "name",
+          "version",
+          "owner",
+          "purpose",
+          "lifecycle",
+          "digest",
+          "sourceCommit",
+          "provenance",
+          "dependencyPins",
+          "definition",
+          "revision",
+          "frozenAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "RoadmapProgram": {
         "type": "object",
         "properties": {

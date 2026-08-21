@@ -489,6 +489,26 @@
   text-transform: none;
 }
 
+.roadmap-definition-pins li > a {
+  width: fit-content;
+  color: #d9d1ff;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  text-decoration: none;
+  text-transform: none;
+}
+
+.roadmap-definition-pins li > a:hover {
+  text-decoration: underline;
+}
+
+.roadmap-definition-pins li > em {
+  color: #d7ad61;
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+}
+
 .roadmap-jira-state {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -720,6 +740,15 @@
   color: #959da8;
   font-size: 11px;
   line-height: 1.55;
+}
+
+.roadmap-action-destination {
+  display: block;
+  margin: -7px 0 16px;
+  color: #777f8b;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.07em;
 }
 
 .roadmap-action-list footer {

@@ -1,5 +1,6 @@
 import {
   agentResourceSpecSchema,
+  type AgentGovernanceDetail,
   type AuthorityGrant,
   type CatalogPublication,
   type ResourceVersion,
@@ -27,6 +28,192 @@ interface CatalogAgentDetailDrawerProps {
 }
 
 const indexLimit = 100;
+const opaqueGovernanceCopyPattern =
+  /(?:\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b|\b[0-9a-f]{32,}\b|\b(?:https?:\/\/|urn:)|\b[^\s@]+@[^\s@]+\b|[A-Za-z]:\\|\\\\)/iu;
+
+const governanceUnavailableCopy: Record<
+  Extract<AgentGovernanceDetail, { state: 'unavailable' }>['reason'],
+  string
+> = {
+  governance_not_declared:
+    'This exact Agent version does not declare a digest-verified safeguards snapshot. No detailed boundary is inferred from its name or protocol references.',
+  snapshot_not_found:
+    'The safeguards snapshot linked to this exact Agent version is unavailable. Prohibitions, approvals, stop conditions, and response requirements remain unknown.',
+  snapshot_integrity_failed:
+    'The linked safeguards snapshot did not match the digest and revision pinned by this exact Agent version. Every detailed safeguard remains unavailable.',
+};
+
+const unavailableGovernanceFields = [
+  {
+    heading: 'Prohibited actions',
+    copy: 'Unavailable. Do not infer that no actions are prohibited.',
+  },
+  {
+    heading: 'Approval requirements',
+    copy: 'Unavailable. Runtime and tool approval controls still apply.',
+  },
+  {
+    heading: 'Fail-closed conditions',
+    copy: 'Unavailable. Treat detailed stop conditions as unknown.',
+  },
+  {
+    heading: 'Response requirements',
+    copy: 'Unavailable. Do not infer citation, confidence, or conflict-reporting requirements.',
+  },
+] as const;
+
+interface VisibleGovernanceStatements {
+  hiddenCount: number;
+  items: string[];
+}
+
+function withoutControlCharacters(value: string): string {
+  return Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127 ? ' ' : character;
+  }).join('');
+}
+
+function visibleGovernanceStatements(values: readonly string[]): VisibleGovernanceStatements {
+  const items: string[] = [];
+  let hiddenCount = 0;
+  for (const value of values) {
+    const normalized = withoutControlCharacters(value).replaceAll(/\s+/gu, ' ').trim();
+    if (!normalized || opaqueGovernanceCopyPattern.test(normalized)) {
+      hiddenCount += 1;
+      continue;
+    }
+    if (!items.includes(normalized)) items.push(normalized);
+  }
+  return { hiddenCount, items };
+}
+
+function GovernanceStatementList({
+  emptyCopy,
+  noun,
+  values,
+}: {
+  emptyCopy: string;
+  noun: string;
+  values: readonly string[];
+}) {
+  const visible = visibleGovernanceStatements(values);
+  return (
+    <>
+      {visible.items.length > 0 ? (
+        <ul>
+          {visible.items.map((value) => (
+            <li key={value}>{value}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>{emptyCopy}</p>
+      )}
+      {visible.hiddenCount > 0 ? (
+        <p className="catalog-governance-withheld">
+          {visible.hiddenCount} declared {noun}
+          {visible.hiddenCount === 1 ? '' : 's'} withheld because the copy is identifier-shaped.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function UnavailableAgentGovernancePanel({ reason }: { reason: string }) {
+  return (
+    <div className="catalog-detail-body">
+      <Notice tone="error">{reason}</Notice>
+      <div className="catalog-governance-grid">
+        {unavailableGovernanceFields.map((field) => (
+          <article key={field.heading}>
+            <h4>{field.heading}</h4>
+            <p>{field.copy}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AgentGovernancePanel({ governance }: { governance: AgentGovernanceDetail | null }) {
+  if (governance === null) {
+    return (
+      <UnavailableAgentGovernancePanel reason="Detailed safeguards are unavailable for this exact Agent version. No prohibited action, approval requirement, stop condition, or response requirement is inferred." />
+    );
+  }
+  if (governance.state === 'unavailable') {
+    return (
+      <UnavailableAgentGovernancePanel reason={governanceUnavailableCopy[governance.reason]} />
+    );
+  }
+
+  const { guardrails } = governance;
+  return (
+    <div className="catalog-detail-body">
+      <p className="catalog-governance-source">
+        VERIFIED AGAINST THIS EXACT AGENT VERSION ·{' '}
+        {governance.source === 'legacy_spec_snapshot'
+          ? `BUILDER SPECIFICATION REVISION ${governance.sourceRevision}`
+          : 'DIGEST-MATCHED BUILDER MANIFEST'}
+      </p>
+      <div className="catalog-governance-grid">
+        <article>
+          <h4>Prohibited actions</h4>
+          <GovernanceStatementList
+            emptyCopy="No prohibited actions are listed in this verified snapshot. This does not grant authority."
+            noun="prohibited action"
+            values={guardrails.prohibitedActions}
+          />
+        </article>
+        <article>
+          <h4>Approval requirements</h4>
+          <GovernanceStatementList
+            emptyCopy="No approval requirements are listed in this verified snapshot. Runtime and tool approval controls still apply."
+            noun="approval requirement"
+            values={guardrails.approvalRequirements}
+          />
+        </article>
+        <article>
+          <h4>Fail-closed conditions</h4>
+          <GovernanceStatementList
+            emptyCopy="No readable stop condition is available. Treat this detailed boundary as unknown."
+            noun="fail-closed condition"
+            values={guardrails.failClosedConditions}
+          />
+        </article>
+        <article>
+          <h4>Response requirements</h4>
+          <dl className="catalog-response-requirements">
+            <div>
+              <dt>Citations</dt>
+              <dd>
+                {guardrails.responseRequirements.citations
+                  ? 'Required'
+                  : 'Not declared as required'}
+              </dd>
+            </div>
+            <div>
+              <dt>Confidence</dt>
+              <dd>
+                {guardrails.responseRequirements.confidence
+                  ? 'Required'
+                  : 'Not declared as required'}
+              </dd>
+            </div>
+            <div>
+              <dt>Unresolved conflicts</dt>
+              <dd>
+                {guardrails.responseRequirements.unresolvedConflicts
+                  ? 'Must be reported'
+                  : 'Not declared as required'}
+              </dd>
+            </div>
+          </dl>
+        </article>
+      </div>
+    </div>
+  );
+}
 
 function shortDigest(digest: string): string {
   return `${digest.slice(0, 12)}…${digest.slice(-8)}`;
@@ -422,6 +609,20 @@ export function CatalogAgentDetailDrawer({
               <header>
                 <span>02</span>
                 <div>
+                  <h3>Safeguards and response</h3>
+                  <p>
+                    Digest-verified prohibitions, approval requirements, stop conditions, and
+                    response obligations for this exact version.
+                  </p>
+                </div>
+              </header>
+              <AgentGovernancePanel governance={resource.agentGovernance} />
+            </section>
+
+            <section className="drawer-section catalog-detail-section">
+              <header>
+                <span>03</span>
+                <div>
                   <h3>What it knows</h3>
                   <p>Exact knowledge-source references declared by this version.</p>
                 </div>
@@ -473,7 +674,7 @@ export function CatalogAgentDetailDrawer({
 
             <section className="drawer-section catalog-detail-section">
               <header>
-                <span>03</span>
+                <span>04</span>
                 <div>
                   <h3>Systems and authority</h3>
                   <p>Declared Plugin tools, connector state, and exact matching grants.</p>
@@ -598,7 +799,7 @@ export function CatalogAgentDetailDrawer({
 
             <section className="drawer-section catalog-detail-section">
               <header>
-                <span>04</span>
+                <span>05</span>
                 <div>
                   <h3>Evidence and operational record</h3>
                   <p>Certification summary and runs bound to this exact ResourceVersion.</p>
@@ -686,7 +887,7 @@ export function CatalogAgentDetailDrawer({
 
             <section className="drawer-section catalog-detail-section">
               <header>
-                <span>05</span>
+                <span>06</span>
                 <div>
                   <h3>Version history</h3>
                   <p>
@@ -766,10 +967,12 @@ export function CatalogAgentDetailDrawer({
                   </Link>
                 ) : (
                   <span className="catalog-disabled-action">
-                    INSPECT ASSEMBLY ·{' '}
-                    {featureFlags.visualSurfacesEnabled
-                      ? 'NO EXACT BUILDER RECORD LINK'
-                      : 'NOT ENABLED'}
+                    <strong>INSPECT ASSEMBLY · UNAVAILABLE</strong>
+                    <small>
+                      {featureFlags.visualSurfacesEnabled
+                        ? 'This exact Agent version has no linked Builder record for the legacy Assembly route.'
+                        : 'The Assembly route is disabled for this deployment.'}
+                    </small>
                   </span>
                 )}
               </div>

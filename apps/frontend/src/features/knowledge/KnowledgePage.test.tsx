@@ -109,6 +109,7 @@ describe('KnowledgePage', () => {
     for (const label of [
       'People',
       'Systems',
+      'Projects',
       'Decisions',
       'Datasets',
       'Runbooks',
@@ -242,6 +243,48 @@ describe('KnowledgePage', () => {
       screen.getByText(/Knowledge relationship index is partial: 0 of 127/i),
     ).toBeInTheDocument();
     expect(screen.queryByText('No metrics are imported.')).not.toBeInTheDocument();
+  });
+
+  it('resolves an exact Project deep link through its own semantic facet', async () => {
+    const project = resource({
+      id: '30303030-3030-4030-8030-303030303030',
+      familyId: '31313131-3131-4131-8131-313131313131',
+      kind: 'Project',
+      name: 'Synthetic Roadmap Boundary',
+      slug: 'synthetic-roadmap-boundary',
+    });
+    server.use(
+      http.get('http://localhost/v1/resources', () =>
+        HttpResponse.json({
+          ...resourceResponse([]),
+          total: 12,
+          countsByLifecycle: {
+            experimental: 12,
+            candidate: 0,
+            evaluating: 0,
+            evaluated: 0,
+            certified: 0,
+            production: 0,
+            deprecated: 0,
+          },
+        }),
+      ),
+      http.get('http://localhost/v1/resources/:resourceVersionId', ({ params }) =>
+        params.resourceVersionId === project.id
+          ? HttpResponse.json(project)
+          : HttpResponse.json({}, { status: 404 }),
+      ),
+    );
+
+    renderWithClient(<KnowledgePage />, [`/knowledge?entity=${project.id}&type=projects`]);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Synthetic Roadmap Boundary' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Knowledge relationship index is partial: 0 of 12/i),
+    ).toBeInTheDocument();
   });
 
   it('does not let an exact deep link reintroduce an audit-only fixture', async () => {

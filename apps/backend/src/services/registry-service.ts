@@ -7,8 +7,11 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import {
+  agentManifestSchema,
+  agentResourceSpecSchema,
   capabilityProfileSchema,
   createReleaseRequestSchema,
+  guardrailsSectionSchema,
   jsonValueSchema,
   releaseBundleSchema,
   repositoryImportRequestSchema,
@@ -16,9 +19,12 @@ import {
   resourceDependencySchema,
   resourceListResponseSchema,
   resourceManifestSchema,
+  resourceVersionDetailSchema,
   resourceVersionSchema,
+  type AgentGovernanceDetail,
   type ReleaseBundle,
   type ResourceVersion,
+  type ResourceVersionDetail,
 } from '@agent-builder/contracts';
 import {
   assertPluginReferencesValid,
@@ -78,6 +84,9 @@ const catalogVisibilityToDatabase = {
 } as const;
 
 type ResourceRecord = Prisma.ResourceVersionGetPayload<{ include: { family: true } }>;
+type ResourceDetailRecord = Prisma.ResourceVersionGetPayload<{
+  include: { family: true; legacyAgent: { include: { spec: true } } };
+}>;
 type ReleaseRecord = Prisma.ReleaseBundleGetPayload<{ include: { resources: true } }>;
 
 async function prepareCatalogPublications(
@@ -218,6 +227,79 @@ function toResource(record: ResourceRecord): ResourceVersion {
     frozenAt: record.frozenAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  });
+}
+
+function unavailableAgentGovernance(
+  reason: Extract<AgentGovernanceDetail, { state: 'unavailable' }>['reason'],
+): AgentGovernanceDetail {
+  return { state: 'unavailable', reason };
+}
+
+function toAgentGovernance(record: ResourceDetailRecord): AgentGovernanceDetail | null {
+  if (record.family.kind !== DatabaseResourceKind.AGENT) return null;
+
+  const manifest = resourceManifestSchema.safeParse(record.definition);
+  if (!manifest.success || manifest.data.kind !== 'Agent') {
+    return unavailableAgentGovernance('snapshot_integrity_failed');
+  }
+  const agentSpec = agentResourceSpecSchema.safeParse(manifest.data.spec);
+  if (!agentSpec.success) return unavailableAgentGovernance('snapshot_integrity_failed');
+
+  const compatibility = agentSpec.data.legacyCompatibility;
+  if (compatibility === undefined) {
+    return unavailableAgentGovernance('governance_not_declared');
+  }
+  const legacyAgent = record.legacyAgent;
+  if (legacyAgent === null || legacyAgent.id !== compatibility.agentId) {
+    return unavailableAgentGovernance('snapshot_not_found');
+  }
+
+  const guardrailsDigest = compatibility.sectionDigests.guardrails;
+  if (compatibility.specificationRevision !== null && guardrailsDigest !== null) {
+    if (
+      legacyAgent.spec === null ||
+      legacyAgent.spec.revision !== compatibility.specificationRevision
+    ) {
+      return unavailableAgentGovernance('snapshot_integrity_failed');
+    }
+    const guardrails = guardrailsSectionSchema.safeParse(legacyAgent.spec.guardrails);
+    if (!guardrails.success || sha256(canonicalJson(guardrails.data)) !== guardrailsDigest) {
+      return unavailableAgentGovernance('snapshot_integrity_failed');
+    }
+    return {
+      state: 'available',
+      source: 'legacy_spec_snapshot',
+      sourceRevision: legacyAgent.spec.revision,
+      guardrails: guardrails.data,
+    };
+  }
+
+  if (compatibility.manifestDigest === null || legacyAgent.manifest === null) {
+    return unavailableAgentGovernance(
+      compatibility.manifestDigest === null ? 'governance_not_declared' : 'snapshot_not_found',
+    );
+  }
+  const legacyManifest = agentManifestSchema.safeParse(legacyAgent.manifest);
+  if (
+    !legacyManifest.success ||
+    legacyManifest.data.agentId !== compatibility.agentId ||
+    sha256(canonicalJson(legacyManifest.data)) !== compatibility.manifestDigest
+  ) {
+    return unavailableAgentGovernance('snapshot_integrity_failed');
+  }
+  return {
+    state: 'available',
+    source: 'legacy_manifest_snapshot',
+    sourceRevision: null,
+    guardrails: legacyManifest.data.guardrails,
+  };
+}
+
+function toResourceDetail(record: ResourceDetailRecord): ResourceVersionDetail {
+  return resourceVersionDetailSchema.parse({
+    ...toResource(record),
+    agentGovernance: toAgentGovernance(record),
   });
 }
 
@@ -641,7 +723,7 @@ export class RegistryService {
     });
   }
 
-  async getResource(resourceVersionId: string): Promise<ResourceVersion> {
+  async getResource(resourceVersionId: string): Promise<ResourceVersionDetail> {
     const record = await this.prisma.resourceVersion.findFirst({
       where: {
         AND: [
@@ -649,14 +731,14 @@ export class RegistryService {
           { id: resourceVersionId, family: aggregateScopeWhere() },
         ],
       },
-      include: { family: true },
+      include: { family: true, legacyAgent: { include: { spec: true } } },
     });
     if (record === null) {
       throw new AppError(404, 'RESOURCE_NOT_FOUND', 'Resource version was not found', {
         resourceVersionId,
       });
     }
-    return toResource(record);
+    return toResourceDetail(record);
   }
 
   async createRelease(input: z.input<typeof createReleaseRequestSchema>): Promise<ReleaseBundle> {

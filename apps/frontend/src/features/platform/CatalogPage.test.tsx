@@ -1,7 +1,12 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { AuthorityGrant, CatalogPublication, ResourceVersion } from '@agent-builder/contracts';
+import type {
+  AgentGovernanceDetail,
+  AuthorityGrant,
+  CatalogPublication,
+  ResourceVersion,
+} from '@agent-builder/contracts';
 import { useLocation } from 'react-router-dom';
 import { CatalogPage } from './CatalogPage';
 import { renderWithClient } from '../../test/render';
@@ -144,6 +149,19 @@ const canonicalAgent: ResourceVersion = {
   updatedAt: '2026-08-17T12:00:00.000Z',
 };
 
+const verifiedAgentGovernance: AgentGovernanceDetail = {
+  state: 'available',
+  source: 'legacy_manifest_snapshot',
+  sourceRevision: null,
+  guardrails: {
+    workflowStages: ['Read governed warehouse cost evidence'],
+    prohibitedActions: ['Change warehouse cost records', '51515151-5151-4151-8151-515151515151'],
+    approvalRequirements: [],
+    failClosedConditions: ['Stop when governed cost evidence is unavailable'],
+    responseRequirements: { citations: true, confidence: false, unresolvedConflicts: true },
+  },
+};
+
 const publication: CatalogPublication = {
   id: '71717171-7171-4171-8171-717171717171',
   revision: 1,
@@ -232,7 +250,12 @@ function LocationProbe() {
   return <output aria-label="Current route">{`${location.pathname}${location.search}`}</output>;
 }
 
-function installDetailedCatalogHandlers(agent: ResourceVersion = canonicalAgent) {
+function installDetailedCatalogHandlers(
+  agent: ResourceVersion = canonicalAgent,
+  agentGovernance: AgentGovernanceDetail | null = agent.id === canonicalAgent.id
+    ? verifiedAgentGovernance
+    : null,
+) {
   const run = {
     ...platformRunFixture(),
     entryResourceVersionId: agent.id,
@@ -249,7 +272,7 @@ function installDetailedCatalogHandlers(agent: ResourceVersion = canonicalAgent)
     }),
     http.get('http://localhost/v1/resources/:resourceVersionId', ({ params }) =>
       params.resourceVersionId === agent.id
-        ? HttpResponse.json(agent)
+        ? HttpResponse.json({ ...agent, agentGovernance })
         : HttpResponse.json(
             { error: { code: 'RESOURCE_NOT_FOUND', message: 'Resource version was not found.' } },
             { status: 404 },
@@ -317,6 +340,40 @@ describe('CatalogPage', () => {
     expect(within(dialog).getByText('EFFECT · read')).toBeInTheDocument();
     expect(within(dialog).getByText('ACTIVE MATCHING GRANT')).toBeInTheDocument();
     expect(within(dialog).getByText(/12\/12 gates · corpus 240/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('heading', { name: 'Safeguards and response' })).toBeVisible();
+    expect(within(dialog).getByText('Change warehouse cost records')).toBeVisible();
+    expect(
+      within(dialog).getByText(/VERIFIED AGAINST THIS EXACT AGENT VERSION/i),
+    ).toHaveTextContent('DIGEST-MATCHED BUILDER MANIFEST');
+    expect(
+      within(dialog).getByText('Stop when governed cost evidence is unavailable'),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        'No approval requirements are listed in this verified snapshot. Runtime and tool approval controls still apply.',
+      ),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        '1 declared prohibited action withheld because the copy is identifier-shaped.',
+      ),
+    ).toBeVisible();
+    expect(
+      within(dialog).queryByText('51515151-5151-4151-8151-515151515151'),
+    ).not.toBeInTheDocument();
+    const responseRequirements = within(dialog)
+      .getByRole('heading', { name: 'Response requirements' })
+      .closest('article');
+    expect(responseRequirements).not.toBeNull();
+    expect(
+      within(responseRequirements as HTMLElement).getByText('Citations').parentElement,
+    ).toHaveTextContent('CitationsRequired');
+    expect(
+      within(responseRequirements as HTMLElement).getByText('Confidence').parentElement,
+    ).toHaveTextContent('ConfidenceNot declared as required');
+    expect(
+      within(responseRequirements as HTMLElement).getByText('Unresolved conflicts').parentElement,
+    ).toHaveTextContent('Unresolved conflictsMust be reported');
     const currentVersion = within(dialog).getByText('CURRENT VERSION').closest('[aria-current]');
     expect(currentVersion).toHaveAttribute('aria-current', 'page');
     expect(currentVersion?.tagName).toBe('DIV');
@@ -330,13 +387,44 @@ describe('CatalogPage', () => {
     expect(
       within(dialog).getByRole('link', { name: /CHECK CERTIFIED FIT IN BUILD/i }),
     ).toHaveAttribute('href', `/build?source=${canonicalAgent.id}`);
-    expect(within(dialog).getByText('INSPECT ASSEMBLY · NOT ENABLED')).toBeInTheDocument();
+    expect(within(dialog).getByText('INSPECT ASSEMBLY · UNAVAILABLE')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('The Assembly route is disabled for this deployment.'),
+    ).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole('link', { name: /CHECK CERTIFIED FIT IN BUILD/i }));
     expect(screen.getByLabelText('Current route')).toHaveTextContent(
       `/build?source=${canonicalAgent.id}`,
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps every safeguards field explicitly unavailable when snapshot integrity fails', async () => {
+    installDetailedCatalogHandlers(canonicalAgent, {
+      state: 'unavailable',
+      reason: 'snapshot_integrity_failed',
+    });
+    renderWithClient(<CatalogPage />, [`/catalog?resource=${canonicalAgent.id}`]);
+
+    const dialog = await screen.findByRole('dialog', { name: canonicalAgent.name });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'The linked safeguards snapshot did not match the digest and revision pinned by this exact Agent version.',
+    );
+    expect(within(dialog).queryByText('Change warehouse cost records')).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('heading', { name: 'Prohibited actions' }).parentElement,
+    ).toHaveTextContent('Unavailable. Do not infer that no actions are prohibited.');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Approval requirements' }).parentElement,
+    ).toHaveTextContent('Unavailable. Runtime and tool approval controls still apply.');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Fail-closed conditions' }).parentElement,
+    ).toHaveTextContent('Unavailable. Treat detailed stop conditions as unknown.');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Response requirements' }).parentElement,
+    ).toHaveTextContent(
+      'Unavailable. Do not infer citation, confidence, or conflict-reporting requirements.',
+    );
   });
 
   it('shows a deliberate empty state without claiming a global agent total', async () => {

@@ -8,7 +8,7 @@ import {
   ResourceLifecycle,
   type PrismaClient,
 } from '@prisma/client';
-import { compileResourceYaml } from '@paul-os/runtime';
+import { canonicalJson, compileResourceYaml, sha256 } from '@paul-os/runtime';
 import { stringify } from 'yaml';
 import { requestContextMiddleware } from '../src/request-context.js';
 import { RegistryService } from '../src/services/registry-service.js';
@@ -27,6 +27,7 @@ const EVALUATION_ID = '80000000-0000-4000-8000-000000000008';
 const DECISION_ID = '90000000-0000-4000-8000-000000000009';
 const CANDIDATE_ID = 'a0000000-0000-4000-8000-000000000010';
 const OTHER_CANDIDATE_ID = 'b0000000-0000-4000-8000-000000000011';
+const LEGACY_AGENT_ID = 'c0000000-0000-4000-8000-000000000012';
 const now = new Date('2026-08-16T12:00:00.000Z');
 const VISIBLE_SCOPE = {
   workspaceId: LOCAL_WORKSPACE_ID,
@@ -151,6 +152,75 @@ function databaseVersion(input: {
       createdAt: now,
       updatedAt: now,
     },
+  };
+}
+
+const governedGuardrails = {
+  workflowStages: ['Read governed evidence'],
+  prohibitedActions: ['Change a source record'],
+  approvalRequirements: ['An owner approves every external write'],
+  failClosedConditions: ['Stop when governed evidence is unavailable'],
+  responseRequirements: { citations: true, confidence: true, unresolvedConflicts: true },
+};
+
+function agentDatabaseVersion(input: {
+  guardrailsDigest?: string | null;
+  manifestDigest?: string | null;
+  specificationRevision?: number | null;
+  legacyAgent?: object | null;
+}) {
+  const definition = {
+    apiVersion: 'paul-os/v1',
+    kind: 'Agent',
+    metadata: {
+      id: FAMILY_ID,
+      slug: 'branch-agent',
+      version: '1.0.0',
+      name: 'Branch Agent',
+      owner: 'Operations',
+      purpose: 'Exercise digest-verified governance detail projection branches.',
+      lifecycle: 'candidate',
+      provenance: { source: 'branch-test' },
+    },
+    dependencies: [],
+    spec: {
+      objective: 'Exercise digest-verified governance detail projection branches.',
+      skills: ['branch-skill@1.0.0'],
+      protocols: ['safe-execution@1.0.0'],
+      contextPolicy: 'default-context@1.0.0',
+      knowledgeSources: [],
+      tools: [],
+      triggers: [],
+      executionLoop: {
+        maximumSteps: 4,
+        onUnresolved: 'fail_closed',
+        outputContract: 'branch-output@1.0.0',
+      },
+      memoryPolicy: { reads: 'accepted_only', writes: 'disabled' },
+      production: { requiresImmutableRelease: true, authorityClass: 'read-only' },
+      legacyCompatibility: {
+        agentId: LEGACY_AGENT_ID,
+        department: 'Operations',
+        specificationRevision: input.specificationRevision ?? null,
+        sectionDigests: {
+          outcomes: null,
+          knowledge: null,
+          guardrails: input.guardrailsDigest ?? null,
+          outputs: null,
+        },
+        capabilitiesDigest: 'd'.repeat(64),
+        manifestDigest: input.manifestDigest ?? null,
+      },
+    },
+  };
+  return {
+    ...databaseVersion({
+      kind: ResourceKind.AGENT,
+      slug: 'branch-agent',
+      definition,
+    }),
+    legacyAgentId: LEGACY_AGENT_ID,
+    legacyAgent: input.legacyAgent ?? null,
   };
 }
 
@@ -717,7 +787,7 @@ describe('RegistryService release and import guard branches', () => {
       where: {
         AND: [userFacingResourceVersionWhere, { id: first.id, family: VISIBLE_SCOPE }],
       },
-      include: { family: true },
+      include: { family: true, legacyAgent: { include: { spec: true } } },
     });
     await expect(queryService.getResource(SECOND_VERSION_ID)).rejects.toMatchObject({
       code: 'RESOURCE_NOT_FOUND',
@@ -725,6 +795,87 @@ describe('RegistryService release and import guard branches', () => {
     expect((await queryService.getRelease(RELEASE_ID)).id).toBe(RELEASE_ID);
     await expect(queryService.getRelease(SECOND_RELEASE_ID)).rejects.toMatchObject({
       code: 'RELEASE_NOT_FOUND',
+    });
+  });
+
+  it('projects only digest-verified Agent governance snapshots on exact resource detail', async () => {
+    const guardrailsDigest = sha256(canonicalJson(governedGuardrails));
+    const legacyManifest = {
+      agentId: LEGACY_AGENT_ID,
+      name: 'Branch Agent',
+      department: 'Operations',
+      purpose: 'Exercise digest-verified governance detail projection branches.',
+      version: '1.0.0',
+      specRevision: 4,
+      generatorVersion: '0.2.0',
+      workflow: governedGuardrails.workflowStages,
+      knowledgeSourceIds: [],
+      guardrails: governedGuardrails,
+      outputType: 'structured_record',
+      outputSchema: { type: 'object' },
+      evaluations: [],
+      generatedAt: now.toISOString(),
+    };
+    const manifestDigest = sha256(canonicalJson(legacyManifest));
+    const fromSpec = agentDatabaseVersion({
+      guardrailsDigest,
+      specificationRevision: 4,
+      legacyAgent: {
+        id: LEGACY_AGENT_ID,
+        manifest: legacyManifest,
+        spec: { revision: 4, guardrails: governedGuardrails },
+      },
+    });
+    const fromManifest = agentDatabaseVersion({
+      manifestDigest,
+      legacyAgent: { id: LEGACY_AGENT_ID, manifest: legacyManifest, spec: null },
+    });
+    const digestMismatch = agentDatabaseVersion({
+      guardrailsDigest: 'e'.repeat(64),
+      specificationRevision: 4,
+      legacyAgent: {
+        id: LEGACY_AGENT_ID,
+        manifest: legacyManifest,
+        spec: { revision: 4, guardrails: governedGuardrails },
+      },
+    });
+    const missingSnapshot = agentDatabaseVersion({
+      manifestDigest,
+      legacyAgent: null,
+    });
+    const prisma = {
+      resourceVersion: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce(fromSpec)
+          .mockResolvedValueOnce(fromManifest)
+          .mockResolvedValueOnce(digestMismatch)
+          .mockResolvedValueOnce(missingSnapshot),
+      },
+    } as unknown as PrismaClient;
+    const service = new RegistryService(prisma, 'a'.repeat(40));
+
+    await expect(service.getResource(VERSION_ID)).resolves.toMatchObject({
+      agentGovernance: {
+        state: 'available',
+        source: 'legacy_spec_snapshot',
+        sourceRevision: 4,
+        guardrails: governedGuardrails,
+      },
+    });
+    await expect(service.getResource(VERSION_ID)).resolves.toMatchObject({
+      agentGovernance: {
+        state: 'available',
+        source: 'legacy_manifest_snapshot',
+        sourceRevision: null,
+        guardrails: governedGuardrails,
+      },
+    });
+    await expect(service.getResource(VERSION_ID)).resolves.toMatchObject({
+      agentGovernance: { state: 'unavailable', reason: 'snapshot_integrity_failed' },
+    });
+    await expect(service.getResource(VERSION_ID)).resolves.toMatchObject({
+      agentGovernance: { state: 'unavailable', reason: 'snapshot_not_found' },
     });
   });
 

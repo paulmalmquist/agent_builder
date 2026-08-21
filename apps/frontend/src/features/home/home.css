@@ -109,7 +109,7 @@
 
 .today-vertical-filter button:focus-visible,
 .today-gantt-viewport:focus-visible,
-.today-gantt-bar:focus-visible,
+.today-gantt-row-link:focus-visible,
 .today-roadmap-strip a:focus-visible,
 .today-task-list a:focus-visible,
 .today-attention-link:focus-visible {
@@ -373,6 +373,11 @@
   color: #dfb06a;
 }
 
+.today-source-badge[data-source='pending'] {
+  border-color: rgba(188, 195, 208, 0.24);
+  color: #9aa1ac;
+}
+
 .today-metric-value {
   display: flex;
   align-items: baseline;
@@ -498,7 +503,8 @@
 }
 
 .today-gantt-months,
-.today-gantt-rows > li {
+.today-gantt-row-link,
+.today-gantt-row-static {
   display: grid;
   grid-template-columns: 260px repeat(var(--month-count), minmax(68px, 1fr));
 }
@@ -534,6 +540,13 @@
 .today-gantt-rows > li {
   min-height: 68px;
   border-bottom: 1px solid rgba(188, 195, 208, 0.08);
+}
+
+.today-gantt-row-link,
+.today-gantt-row-static {
+  min-height: 68px;
+  color: inherit;
+  text-decoration: none;
 }
 
 .today-gantt-rows > li:last-child {
@@ -641,7 +654,7 @@
   background: rgba(226, 167, 80, 0.08);
 }
 
-.today-gantt-bar:hover {
+.today-gantt-row-link:hover .today-gantt-bar {
   filter: brightness(1.16);
 }
 
@@ -687,6 +700,7 @@
   height: 10px;
   border: 1px solid #d7a55c;
   background: #0a0c11;
+  pointer-events: none;
   transform: translate(-50%, -50%) rotate(45deg);
 }
 

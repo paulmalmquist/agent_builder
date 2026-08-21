@@ -68,7 +68,7 @@ import {
   roadmapProgramSchema,
   resourceListQuerySchema,
   resourceListResponseSchema,
-  resourceVersionSchema,
+  resourceVersionDetailSchema,
   reviewImprovementCandidateRequestSchema,
   reviewMemoryCandidateRequestSchema,
   scheduleDueAutomationsRequestSchema,
@@ -481,7 +481,7 @@ export function registerPlatformRoutes(router: Router, services: PlatformService
       send(
         response,
         200,
-        resourceVersionSchema,
+        resourceVersionDetailSchema,
         await services.registry.getResource(request.params['resourceVersionId'] as string),
       );
     }),

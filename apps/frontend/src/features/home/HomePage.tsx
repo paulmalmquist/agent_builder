@@ -91,11 +91,14 @@ const costFormatter = new Intl.NumberFormat('en-US', {
 
 const integerFormatter = new Intl.NumberFormat('en-US');
 
-const sourceLabels: Record<HomeMetricSource, string> = {
+type DisplayedMetricSource = HomeMetricSource | 'pending';
+
+const sourceLabels: Record<DisplayedMetricSource, string> = {
   live: 'LIVE',
   synthetic: 'SYNTHETIC',
   unavailable: 'UNAVAILABLE',
   awaiting_transfer: 'AWAITING TRANSFER',
+  pending: 'PENDING',
 };
 
 const workstreamStateLabels: Record<NonNullable<HomeWorkstream['state']>, string> = {
@@ -112,7 +115,7 @@ const roadmapStatusLabels: Record<RoadmapFork['status'], string> = {
   unavailable: 'UNAVAILABLE',
 };
 
-function SourceBadge({ source }: { source: HomeMetricSource }) {
+function SourceBadge({ source }: { source: DisplayedMetricSource }) {
   return (
     <span className="today-source-badge" data-source={source} data-testid="kpi-source">
       {sourceLabels[source]}
@@ -137,17 +140,24 @@ function SourcePending({ children }: { children: string }) {
 }
 
 function MetricCard({ metric }: { metric: HomeMetric }) {
+  const displayedSource: DisplayedMetricSource =
+    metric.state === 'pending'
+      ? 'pending'
+      : metric.state === 'unavailable'
+        ? 'unavailable'
+        : metric.source;
+
   return (
     <article
-      aria-label={`${metric.label}: ${metric.value}, ${sourceLabels[metric.source]}`}
+      aria-label={`${metric.label}: ${metric.value}, ${sourceLabels[displayedSource]}`}
       className="today-metric"
-      data-source={metric.source}
+      data-source={displayedSource}
       data-state={metric.state}
       data-testid={`home-metric-${metric.id}`}
     >
       <header>
         <span>{metric.label}</span>
-        <SourceBadge source={metric.source} />
+        <SourceBadge source={displayedSource} />
       </header>
       <div className="today-metric-value">
         <strong>{metric.value}</strong>
@@ -395,12 +405,9 @@ function Gantt({
               : 'SOURCE UNAVAILABLE';
             const destinationLabel =
               workstream.affectedPartIds.length > 1 ? 'RELATED AIM PART' : 'AIM PART';
-            return (
-              <li
-                aria-label={`${workstream.label}, ${workstream.ownerGroupLabel}, ${stateLabel}, ${workstream.source}`}
-                data-testid="home-gantt-row"
-                key={workstream.id}
-              >
+            const rowLabel = `${workstream.label}, ${workstream.ownerGroupLabel}, ${formatPlanDate(workstream.startAt)} through ${formatPlanDate(workstream.endAt)}, ${stateLabel}, ${workstream.source} plan. Open ${destinationLabel.toLowerCase()}.`;
+            const rowContent = (
+              <>
                 <div className="today-gantt-label">
                   <strong>{workstream.label}</strong>
                   <span>{workstream.ownerGroupLabel}</span>
@@ -418,39 +425,19 @@ function Gantt({
                       style={{ left: `${todayPosition}%` }}
                     />
                   ) : null}
-                  {workstream.available && workstream.state ? (
-                    <Link
-                      aria-label={`${workstream.label}, ${workstream.ownerGroupLabel}, ${formatPlanDate(workstream.startAt)} through ${formatPlanDate(workstream.endAt)}, ${stateLabel}, ${workstream.source} plan. Open ${destinationLabel.toLowerCase()}.`}
-                      className="today-gantt-bar"
-                      data-state={workstream.state}
-                      data-testid={`home-workstream-${workstream.id}`}
-                      style={
-                        {
-                          '--bar-start': `${start}%`,
-                          '--bar-width': `${Math.max(1.5, end - start)}%`,
-                        } as CSSProperties
-                      }
-                      to={workstreamHref(workstream)}
-                    >
-                      <span>{stateLabel}</span>
-                    </Link>
-                  ) : (
-                    <span
-                      aria-label={`${workstream.label} source unavailable. ${workstream.sourceDetail}`}
-                      className="today-gantt-bar"
-                      data-state="unavailable"
-                      data-testid={`home-workstream-${workstream.id}`}
-                      role="status"
-                      style={
-                        {
-                          '--bar-start': `${start}%`,
-                          '--bar-width': `${Math.max(1.5, end - start)}%`,
-                        } as CSSProperties
-                      }
-                    >
-                      <span>UNAVAILABLE</span>
-                    </span>
-                  )}
+                  <span
+                    aria-hidden="true"
+                    className="today-gantt-bar"
+                    data-state={workstream.state ?? 'unavailable'}
+                    style={
+                      {
+                        '--bar-start': `${start}%`,
+                        '--bar-width': `${Math.max(1.5, end - start)}%`,
+                      } as CSSProperties
+                    }
+                  >
+                    <span>{workstream.available ? stateLabel : 'UNAVAILABLE'}</span>
+                  </span>
                   {milestones.map((milestone) => (
                     <span
                       aria-label={`${milestone.label}, ${formatPlanDate(milestone.date)}, ${milestone.state}`}
@@ -465,6 +452,33 @@ function Gantt({
                     />
                   ))}
                 </div>
+              </>
+            );
+            return (
+              <li
+                aria-label={`${workstream.label}, ${workstream.ownerGroupLabel}, ${stateLabel}, ${workstream.source}`}
+                data-testid="home-gantt-row"
+                key={workstream.id}
+              >
+                {workstream.available && workstream.state ? (
+                  <Link
+                    aria-label={rowLabel}
+                    className="today-gantt-row-link"
+                    data-testid={`home-workstream-${workstream.id}`}
+                    to={workstreamHref(workstream)}
+                  >
+                    {rowContent}
+                  </Link>
+                ) : (
+                  <div
+                    aria-label={`${workstream.label} source unavailable. ${workstream.sourceDetail}`}
+                    className="today-gantt-row-static"
+                    data-testid={`home-workstream-${workstream.id}`}
+                    role="status"
+                  >
+                    {rowContent}
+                  </div>
+                )}
               </li>
             );
           })}

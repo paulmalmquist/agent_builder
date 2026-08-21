@@ -54,7 +54,7 @@ import {
   releaseDeclineResponseSchema,
   releaseEvaluationSchema,
   resourceListResponseSchema,
-  resourceVersionSchema,
+  resourceVersionDetailSchema,
   roadmapProgramSchema,
   sessionResponseSchema,
   type AgentCatalogQuery,
@@ -739,7 +739,7 @@ export const platformApi = {
   },
 
   getResource(resourceVersionId: string) {
-    return request(platformApiRoutes.resource(resourceVersionId), resourceVersionSchema);
+    return request(platformApiRoutes.resource(resourceVersionId), resourceVersionDetailSchema);
   },
 
   getRoadmaps() {

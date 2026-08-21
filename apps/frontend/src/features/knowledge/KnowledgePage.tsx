@@ -26,6 +26,7 @@ import './knowledge.css';
 type KnowledgeType =
   | 'people'
   | 'systems'
+  | 'projects'
   | 'decisions'
   | 'datasets'
   | 'runbooks'
@@ -93,38 +94,44 @@ const knowledgeTypes: Record<KnowledgeType, KnowledgeTypeDefinition> = {
     description: 'Governed Plugin and Plugin Pack definitions.',
     kinds: ['Plugin', 'PluginPack'],
   },
-  decisions: {
+  projects: {
     number: '03',
+    label: 'Projects',
+    description: 'Governed project boundaries and their exact dependency edges.',
+    kinds: ['Project'],
+  },
+  decisions: {
+    number: '04',
     label: 'Decisions',
     description: 'Protocols and references that explain why the system behaves as it does.',
     kinds: ['Protocol'],
   },
   datasets: {
-    number: '04',
+    number: '05',
     label: 'Datasets',
     description: 'Versioned knowledge sources and their exact dependants.',
     kinds: ['KnowledgeSource'],
   },
   runbooks: {
-    number: '05',
+    number: '06',
     label: 'Runbooks',
     description: 'Reference procedures imported from the governed repository.',
     kinds: ['Reference'],
   },
   incidents: {
-    number: '06',
+    number: '07',
     label: 'Incidents',
     description: 'Observed operational signals. Incident-system linkage arrives after transfer.',
     kinds: [],
   },
   metrics: {
-    number: '07',
+    number: '08',
     label: 'Metrics',
     description: 'Definitions that give every reported number one governed meaning.',
     kinds: ['MetricDefinition'],
   },
   agents: {
-    number: '08',
+    number: '09',
     label: 'Agents & Skills',
     description: 'Reusable capability and the skills it closes over.',
     kinds: ['Agent', 'Skill'],
